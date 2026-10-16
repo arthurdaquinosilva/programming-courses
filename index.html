@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Programming Material</title>
+<meta name="description" content="Twenty-one courses that take you from your first program to shipping and running production systems.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;450;500;550;600;650;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"] {
+  --bg: #0f1013;
+  --bg-elevated: #16181c;
+  --bg-code: #14161a;
+  --bg-subtle: #1b1e23;
+  --border: #262a31;
+  --border-soft: #1e2127;
+  --text: #e4e6ea;
+  --text-dim: #9ba1ab;
+  --text-faint: #6b7280;
+  --accent: #9aa2f2;
+  --accent-hover: #b0b6f6;
+  --accent-soft: rgba(154, 162, 242, 0.13);
+  --accent-contrast: #0f1013;
+  --shadow: 0 16px 48px rgba(0,0,0,0.55);
+  --shadow-soft: 0 1px 3px rgba(0,0,0,0.35);
+}
+:root[data-theme="light"] {
+  --bg: #fbfbfa;
+  --bg-elevated: #ffffff;
+  --bg-code: #f6f6f3;
+  --bg-subtle: #f2f2ef;
+  --border: #e3e3de;
+  --border-soft: #ecece7;
+  --text: #1c1d20;
+  --text-dim: #5b6068;
+  --text-faint: #8a8f98;
+  --accent: #4f4bab;
+  --accent-hover: #3d3a93;
+  --accent-soft: rgba(79, 75, 171, 0.08);
+  --accent-contrast: #ffffff;
+  --shadow: 0 16px 48px rgba(20,20,25,0.10);
+  --shadow-soft: 0 1px 3px rgba(20,20,25,0.05);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Source Serif 4', Charter, Georgia, serif;
+  line-height: 1.7; min-height: 100vh;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  font-variant-ligatures: common-ligatures;
+}
+h1, h2, h3, .ui { font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+
+/* ---------- Top bar ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-soft);
+}
+.topbar-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+.mark {
+  font-family: 'Inter Tight', sans-serif; font-size: 15px; font-weight: 600;
+  letter-spacing: -0.01em; color: var(--text);
+}
+.mark span { color: var(--text-faint); font-weight: 400; }
+.theme-toggle {
+  background: var(--bg-code); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text-dim); cursor: pointer; padding: 6px 11px;
+  font-family: 'Inter Tight', sans-serif; font-size: 12.5px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.theme-toggle:hover { border-color: var(--text-faint); color: var(--text); }
+
+/* ---------- Hero ---------- */
+.hero { padding: 84px 0 56px; border-bottom: 1px solid var(--border-soft); }
+.eyebrow {
+  font-family: 'Inter Tight', sans-serif; font-size: 12px; font-weight: 550;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent);
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-size: clamp(2.4rem, 5.5vw, 3.6rem); font-weight: 650;
+  letter-spacing: -0.035em; line-height: 1.08; margin-bottom: 26px;
+}
+.hero p { font-size: 1.16rem; color: var(--text-dim); max-width: 60ch; }
+.hero p + p { margin-top: 16px; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 40px; margin-top: 40px; }
+.stat-num {
+  font-family: 'Inter Tight', sans-serif; font-size: 1.85rem; font-weight: 600;
+  letter-spacing: -0.02em; line-height: 1.1;
+}
+.stat-label {
+  font-family: 'Inter Tight', sans-serif; font-size: 12px; color: var(--text-faint);
+  letter-spacing: 0.04em; text-transform: uppercase; margin-top: 5px;
+}
+
+/* ---------- Section headings ---------- */
+.band { padding: 72px 0 8px; }
+.band h2 {
+  font-size: 1.75rem; font-weight: 600; letter-spacing: -0.025em; margin-bottom: 12px;
+}
+.band .lede { color: var(--text-dim); max-width: 62ch; margin-bottom: 40px; }
+
+/* ---------- Path diagram ---------- */
+.path { position: relative; padding-left: 44px; }
+.path::before {
+  content: ""; position: absolute; left: 13px; top: 10px; bottom: 34px;
+  width: 2px; background: linear-gradient(to bottom, var(--accent-soft), var(--border), var(--accent-soft));
+}
+.stage { position: relative; padding-bottom: 40px; }
+.stage::before {
+  content: ""; position: absolute; left: -37px; top: 7px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--bg); border: 2px solid var(--accent);
+  box-shadow: 0 0 0 5px var(--bg);
+}
+.stage-num {
+  font-family: 'Inter Tight', sans-serif; font-size: 11.5px; font-weight: 600;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent);
+}
+.stage h3 {
+  font-size: 1.22rem; font-weight: 600; letter-spacing: -0.02em; margin: 3px 0 5px;
+}
+.stage-note { color: var(--text-dim); font-size: 0.97rem; margin-bottom: 16px; max-width: 62ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 9px; }
+.chip {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  font-family: 'Inter Tight', sans-serif; font-size: 13.5px; font-weight: 500;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 7px; padding: 7px 13px; color: var(--text);
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.chip:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+.chip em { font-style: normal; color: var(--text-faint); font-size: 11.5px; }
+span.chip { opacity: 0.42; border-style: dashed; cursor: default; }
+span.chip:hover { border-color: var(--border); transform: none; }
+
+/* ---------- Filter ---------- */
+.filter-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 28px; }
+.filter {
+  flex: 1 1 260px; max-width: 340px;
+  background: var(--bg-code); border: 1px solid var(--border); border-radius: 7px;
+  padding: 9px 13px; color: var(--text);
+  font-family: 'Inter Tight', sans-serif; font-size: 13.5px;
+}
+.filter::placeholder { color: var(--text-faint); }
+.filter:focus { outline: none; border-color: var(--accent); }
+.count { font-family: 'Inter Tight', sans-serif; font-size: 12.5px; color: var(--text-faint); }
+
+/* ---------- Course cards ---------- */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 18px; }
+.card {
+  display: flex; flex-direction: column;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 10px; padding: 22px 22px 18px;
+  transition: border-color 0.16s, transform 0.16s, box-shadow 0.16s;
+}
+.card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-soft); }
+.card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.card h3 {
+  font-size: 1.09rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text);
+}
+.stage-tag {
+  font-family: 'Inter Tight', sans-serif; font-size: 10.5px; font-weight: 550;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint);
+  white-space: nowrap;
+}
+.card p { font-size: 0.945rem; color: var(--text-dim); margin: 10px 0 16px; flex: 1; }
+.card-meta {
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  font-family: 'Inter Tight', sans-serif; font-size: 12px; color: var(--text-faint);
+  padding-top: 13px; border-top: 1px solid var(--border-soft);
+}
+.card-meta b { color: var(--text-dim); font-weight: 500; }
+.prereq {
+  font-family: 'Inter Tight', sans-serif; font-size: 12px; color: var(--text-faint);
+  margin-bottom: 12px;
+}
+.prereq b { color: var(--text-dim); font-weight: 500; }
+.bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 13px; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
+.bar-label {
+  font-family: 'Inter Tight', sans-serif; font-size: 11.5px; color: var(--text-faint); margin-top: 6px;
+}
+.card[hidden] { display: none; }
+
+/* ---------- Notes ---------- */
+.note {
+  border-left: 2px solid var(--accent); background: var(--accent-soft);
+  padding: 16px 20px; border-radius: 0 8px 8px 0; margin-top: 30px;
+  color: var(--text-dim); font-size: 0.96rem;
+}
+footer {
+  margin-top: 84px; padding: 30px 0 60px; border-top: 1px solid var(--border-soft);
+  font-family: 'Inter Tight', sans-serif; font-size: 12.5px; color: var(--text-faint);
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .wrap { padding: 0 20px; }
+  .hero { padding: 56px 0 40px; }
+  .stats { gap: 26px; }
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="mark">Programming Material <span>· 20 courses</span></div>
+    <button class="theme-toggle ui" id="theme-toggle" aria-label="Toggle light and dark theme">theme</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow ui">The collection</div>
+    <h1>From your first program to running it in production.</h1>
+    <p>Each course is a single page you can read start to finish. They are written to one
+    standard: when you finish a course, you should be able to work professionally with that
+    technology without going elsewhere to fill in the gaps. Every example is executed and its
+    output checked against what the course claims.</p>
+    <p><strong>The collection is being rebuilt to that standard.</strong> Twenty courses
+    meet it today; four more are being written from scratch, one at a time. The reading path below
+    is settled and will not change as they land. Every course keeps your place as you go, so you
+    can leave and come back.</p>
+    <div class="stats">
+      <div><div class="stat-num">20</div><div class="stat-label">courses</div></div>
+      <div><div class="stat-num">370</div><div class="stat-label">sections</div></div>
+      <div><div class="stat-num">3.14m</div><div class="stat-label">words</div></div>
+      <div><div class="stat-num">4</div><div class="stat-label">still to write</div></div>
+    </div>
+  </header>
+
+  <section class="band">
+    <h2>The path</h2>
+    <p class="lede">You can read any course on its own, but they were built to stack. This is the
+    order they were designed to be read in, and it does not change as the collection is rebuilt —
+    finished courses are linked, the rest appear here as they land.</p>
+
+    <div class="path">
+
+      <div class="stage">
+        <div class="stage-num ui">Stage 1</div>
+        <h3>Fundamentals</h3>
+        <p class="stage-note">How to write a program, drive the machine it runs on, and keep a
+        history of what you changed. Everything after this assumes all three.</p>
+        <div class="chips">
+          <a class="chip" href="foundations_mastery.html">Foundations <em>16 sections</em></a>
+          <a class="chip" href="linux_and_command_line_mastery.html">Linux &amp; the Command Line <em>16 sections</em></a>
+          <a class="chip" href="git_mastery.html">Git <em>16 sections</em></a>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-num ui">Stage 2</div>
+        <h3>The web front end</h3>
+        <p class="stage-note">Documents, then presentation, then behaviour, then types, then a
+        framework — in that order, because each one is only sensible once the last is understood.</p>
+        <div class="chips">
+          <a class="chip" href="html_mastery.html">HTML <em>16 sections</em></a>
+          <a class="chip" href="css_mastery.html">CSS <em>17 sections</em></a>
+          <a class="chip" href="js_mastery.html">JavaScript <em>18 sections</em></a>
+          <a class="chip" href="typescript_mastery.html">TypeScript <em>18 sections</em></a>
+          <a class="chip" href="react_mastery.html">React <em>19 sections</em></a>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-num ui">Stage 3</div>
+        <h3>Data &amp; quality</h3>
+        <p class="stage-note">Where the data lives, how you prove the code is right, and what the
+        operations you choose actually cost.</p>
+        <div class="chips">
+          <a class="chip" href="sql_mastery.html">SQL <em>21 sections</em></a>
+          <a class="chip" href="testing_mastery.html">Testing <em>21 sections</em></a>
+          <a class="chip" href="data_structures_and_algorithms_mastery.html">Data Structures &amp; Algorithms <em>24 sections</em></a>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-num ui">Stage 4</div>
+        <h3>Shipping &amp; operations</h3>
+        <p class="stage-note">Getting software off your machine and keeping it running — and not
+        getting compromised while you do it.</p>
+        <div class="chips">
+          <a class="chip" href="advanced_shell_scripting_mastery.html">Advanced Shell Scripting <em>22 sections</em></a>
+          <span class="chip">DevOps &amp; Deployment <em>soon</em></span>
+          <span class="chip">Web Security <em>soon</em></span>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-num ui">Stage 5</div>
+        <h3>Depth</h3>
+        <p class="stage-note">The specialist courses. Python goes far past Foundations; Networking
+        sits underneath Backend and can be read either side of it; System Design assumes both.
+        Interview Preparation is the last one deliberately — it revisits everything above.</p>
+        <div class="chips">
+          <a class="chip" href="python_mastery.html">Python <em>14 sections</em></a>
+          <a class="chip" href="networking_and_http_mastery.html">Networking &amp; HTTP <em>16 sections</em></a>
+          <a class="chip" href="backend_and_api_design_mastery.html">Backend &amp; API Design <em>16 sections</em></a>
+          <a class="chip" href="django_mastery.html">Django <em>24 sections</em></a>
+          <a class="chip" href="drf_mastery.html">Django REST Framework <em>22 sections</em></a>
+          <a class="chip" href="system_mastery.html">System Design <em>20 sections</em></a>
+          <a class="chip" href="ai_mastery.html">AI Engineering <em>16 sections</em></a>
+          <a class="chip" href="claude_code_course.html">Building with Claude <em>18 sections</em></a>
+          <span class="chip">Interview Preparation <em>soon</em></span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="band">
+    <h2>All courses</h2>
+    <p class="lede">Sorted by where they sit in the path. Prerequisites are advisory — they say
+    what a course assumes you already know, not what you are forbidden to read.</p>
+
+    <div class="filter-row">
+      <input class="filter ui" id="filter" type="text" placeholder="Filter by name or topic…" autocomplete="off" aria-label="Filter courses">
+      <span class="count ui" id="count">10 courses</span>
+    </div>
+
+    <div class="grid" id="grid">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      <a class="card" href="foundations_mastery.html" data-key="foundations_mastery_progress" data-total="16"
+         data-tags="foundations beginner python variables types control flow functions strings lists tuples dictionaries sets iteration generators exceptions files json csv classes dataclass modules packages venv pip standard library argparse regex logging debugging pdb unittest doctest type hints mypy ruff big-o complexity recursion">
+        <div class="card-top"><h3>Foundations</h3><span class="stage-tag ui">Stage 1</span></div>
+        <p>From "I have never written a line of code" to a tested command-line application. Running
+        Python, values and types, control flow, functions and scope, text, the containers you will
+        use every day, iteration and generators, exceptions and context managers, files and data
+        formats, classes, modules and environments, the standard library, then debugging, testing,
+        type checking and the cost of the operations you choose.</p>
+        <div class="prereq"><b>Assumes:</b> nothing</div>
+        <div class="card-meta"><span><b>16</b> sections</span><span><b>70k</b> words</span><span>Python</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="linux_and_command_line_mastery.html" data-key="linux_mastery_progress" data-total="16"
+         data-tags="linux command line shell bash kernel syscall strace proc sys udev kernel modules sysctl permissions chmod umask setuid acl users groups sudo pam processes signals job control tmux systemd unit target timer cron boot grub initramfs storage partition lvm filesystem ext4 xfs btrfs mount fstab journalctl rsyslog logrotate chrony locale apt dpkg rpm dnf shared library ldd networking ip ss dns nftables ssh rsync gpg namespaces cgroups capabilities seccomp apparmor bubblewrap container">
+        <div class="card-top"><h3>Linux &amp; the Command Line</h3><span class="stage-tag ui">Stage 1</span></div>
+        <p>The machine your software runs on. The kernel boundary and what a syscall costs, the file
+        abstraction and why a deleted file can still fill a disk, quoting and the eight expansion
+        stages, streams and exit status, the text toolkit and vi, permissions and identity, processes
+        and signals, <code>/proc</code> and <code>/sys</code>, boot and systemd, storage and LVM,
+        logging and time, packages and shared libraries, networking from the host's side, SSH — and
+        then namespaces, cgroups, capabilities and seccomp, which is what a container is made of.</p>
+        <div class="prereq"><b>Assumes:</b> a terminal and a little Python</div>
+        <div class="card-meta"><span><b>16</b> sections</span><span><b>76k</b> words</span><span>Linux · systemd · bwrap</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="git_mastery.html" data-key="git_mastery_progress" data-total="16"
+         data-tags="git version control commit branch merge rebase conflict zdiff3 rerere reset revert restore stash reflog cherry-pick bisect blame grep log range-diff filter-repo remote refspec fetch push pull upstream tracking clone shallow partial sparse-checkout worktree submodule subtree tag signing ssh signing gpg hooks gitattributes gitignore lfs packfile delta gc maintenance commit-graph fsck reftable sha256 protocol pkt-line upload-pack receive-pack pull request forge github">
+        <div class="card-top"><h3>Git</h3><span class="stage-tag ui">Stage 1</span></div>
+        <p>What Git is underneath, and why everything follows from it. Four object types named by
+        the hash of their own bytes, refs and the reflog, branching and the merge base, conflicts as
+        three blobs in the index, undoing and rewriting, the revision language with
+        <code>bisect</code> and <code>blame</code>, remotes and refspecs, the wire protocol read with
+        <code>curl</code>, signing, collaboration workflows, configuration and hooks, submodules and
+        worktrees — and the packfile layer that turns three megabytes into seventy kilobytes.</p>
+        <div class="prereq"><b>Assumes:</b> a terminal and a little Python</div>
+        <div class="card-meta"><span><b>16</b> sections</span><span><b>81k</b> words</span><span>Git 2.53</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="html_mastery.html" data-key="html_mastery_progress" data-total="16"
+         data-tags="html markup parser dom doctype quirks mode content model phrasing flow transparent attributes boolean enumerated global data-* dataset character reference entity whitespace head meta charset viewport title base link canonical hreflang open graph json-ld schema.org structured data preload preconnect prefetch subresource integrity csp semantics em strong abbr dfn time pre bidi ruby lists ol ul dl blockquote del ins headings landmarks nav main aside section article search skip link links href url fragment target noopener download rel images alt srcset sizes picture art direction lazy loading layout shift core web vitals svg canvas video audio track webvtt captions transcript iframe sandbox permissions policy clickjacking frame-ancestors tables caption scope colspan rowspan forms labels input types constraint validation validitystate formdata accessibility tree aria roles states properties wcag focus tabindex dialog popover inert templates custom elements shadow dom slots validator xss escaping sanitizer trusted types">
+        <div class="card-top"><h3>HTML</h3><span class="stage-tag ui">Stage 2</span></div>
+        <p>The document layer, from the parser up. Tags are not elements and there are no parse
+        errors, so the tree you get is not always the one you wrote; content models decide which;
+        and a second tree — the accessibility tree — is what a screen reader actually receives.
+        The head and the resource graph, text and list semantics, document structure and landmarks,
+        links, responsive images, media and captions, tables, forms and constraint validation,
+        focus and the keyboard, web components, and the four audit passes that catch four disjoint
+        sets of defects. Every tree, DOM and focus order in it was measured in a real browser.</p>
+        <div class="prereq"><b>Assumes:</b> you have written some HTML</div>
+        <div class="card-meta"><span><b>16</b> sections</span><span><b>100k</b> words</span><span>Chrome DevTools</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="css_mastery.html" data-key="css_mastery_progress" data-total="17"
+         data-tags="css cascade specificity layers scope proximity inheritance selectors combinators has is where not nth-child pseudo-elements nesting attribute selectors values units calc clamp min max round mod trig custom properties var property registered token design tokens light-dark box model box-sizing margin collapsing flow-root intrinsic sizing aspect-ratio overflow clip scroll container flow display formatting context float shape-outside multi-column fragmentation flexbox flex-basis grow shrink gap order grid subgrid minmax auto-fill auto-fit dense named lines grid-template-areas positioning stacking context z-index anchor positioning position-area top layer backdrop scroll snap colour oklch oklab color-mix relative colour gradients backgrounds borders corner-shape shadows filters blend modes clip-path mask typography font-face variable fonts opentype tabular-nums text-wrap text-box-trim counters list markers media queries container queries style queries scroll-state supports print page transitions transforms keyframes easing linear starting-style allow-discrete scroll-driven animation view transitions writing-mode logical properties direction bidi visually hidden focus-visible outline target size forced colors contrast reduced motion architecture bem itcss utilities reset shadow dom part slotted containment content-visibility stylelint devtools">
+        <div class="card-top"><h3>CSS</h3><span class="stage-tag ui">Stage 2</span></div>
+        <p>The presentation layer, from the algorithm up. The cascade is a six-criterion sort with
+        specificity fourth, and two of the three criteria above it — layers and scope proximity —
+        are recent enough that most published advice predates them. Selectors including
+        <code>:has()</code>, the value and unit system with its maths functions, custom properties
+        and <code>@property</code>, the box model, flow, flexbox, grid and subgrid, positioning and
+        anchor positioning, colour in the spaces browsers now compute in, typography, container
+        queries, motion and view transitions, logical properties and accessibility, then
+        architecture. Every number in it was measured in a real browser, and several contradict
+        the widely published answer.</p>
+        <div class="prereq"><b>Assumes:</b> you have written some CSS</div>
+        <div class="card-meta"><span><b>17</b> sections</span><span><b>93k</b> words</span><span>Chrome DevTools</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="js_mastery.html" data-key="js_mastery_progress" data-total="18"
+         data-tags="javascript js ecmascript tc39 engine v8 jit asi strict mode module script defer async types coercion typeof nan bigint floating point ieee754 truthy falsy equality object.is json structuredclone var let const tdz hoisting scope closure iife garbage collection weakref memory leak using symbol.dispose operators precedence nullish optional chaining destructuring spread rest bitwise switch loops labels functions arrow this call apply bind currying composition memoization debounce throttle objects descriptors getter setter freeze seal proxy reflect metaprogramming symbols prototype class extends super private fields static mixin prototype pollution arrays map set weakmap typed arrays dataview endianness strings unicode grapheme intl.segmenter normalize collator regex lookahead lookbehind redos math date temporal timezone intl numberformat datetimeformat pluralrules iterators generators yield async iterator event loop microtask promise async await abortcontroller race condition errors cause aggregateerror debugger breakpoint source maps modules esm import export live bindings cjs package.json semver lockfile npm bundler vite tree shaking eslint prettier testing node:test vitest playwright ci dom queryselector attributes dataset classList getcomputedstyle layout thrashing mutationobserver intersectionobserver events delegation capture bubbling formdata constraint validation focus trap fetch cors cookies url localstorage indexeddb postmessage web worker service worker websocket custom elements shadow dom canvas csp">
+        <div class="card-top"><h3>JavaScript</h3><span class="stage-tag ui">Stage 2</span></div>
+        <p>The behaviour layer, from the value model up. The coercion rules that make
+        <code>[] == false</code> true, scope and closures and the four shapes a memory leak takes,
+        the five <code>this</code> rules in order, prototypes underneath the <code>class</code>
+        keyword, the collections and when each is the right one, text as UTF-16 rather than
+        characters, regular expressions including the backtracking that turns one into a denial of
+        service, the event loop with its two queues, the DOM and the rendering path where
+        interleaving reads with writes measured 17.6&times; slower, events and forms, then the
+        browser platform, modules and the tooling that ships it. Every claim was executed, and
+        several contradict the widely published answer.</p>
+        <div class="prereq"><b>Assumes:</b> HTML, and some programming experience</div>
+        <div class="card-meta"><span><b>18</b> sections</span><span><b>103k</b> words</span><span>Node &amp; DevTools</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="typescript_mastery.html" data-key="typescript_mastery_progress" data-total="18"
+         data-tags="typescript ts tsc type erasure structural typing nominal branded type inference annotation gradual typing strict strictnullchecks noimplicitany union intersection literal widening as const satisfies narrowing typeof instanceof in operator type predicate assertion function discriminated union exhaustiveness never unknown any void object function overload this parameter noinfer rest tuple readonly index signature excess property weak type exactoptionalpropertytypes nouncheckedindexedaccess nopropertyaccessfromindexsignature class abstract mixin parameter property override usedefineforclassfields private field generics constraint variance covariance contravariance invariance const type parameter phantom keyof indexed access conditional infer distributive mapped type key remapping template literal recursive tail-recursive instantiation depth utility types partial required readonly record pick omit exclude extract nonnullable awaited parameters returntype instancetype thistype assignability bivariance strictfunctiontypes double assertion ts-expect-error ts-ignore useunknownincatchvariables modules esm cjs interop verbatimmodulesyntax isolatedmodules moduleresolution nodenext bundler paths subpath imports exports conditions import defer dual publish declaration file d.ts ambient declare global augmentation merging namespace triple-slash types package skiplibcheck declarationmap isolateddeclarations jsdoc checkjs allowjs tsconfig compileroptions extends configdir target lib jsx outdir rootdir incremental composite project references noemit erasablesyntaxonly enum const enum reverse mapping decorators standard decorator experimentaldecorators emitdecoratormetadata fetch json dom queryselector addeventlistener react props generic component runtime validator parse do not validate zod migration strictness ratchet extendeddiagnostics generatetrace type test expect-type typescript-eslint">
+        <div class="card-top"><h3>TypeScript</h3><span class="stage-tag ui">Stage 2</span></div>
+        <p>The type layer, from erasure upward. What a compile-time guarantee actually promises and
+        the three places the checker is unsound on purpose, narrowing built on the runtime checks you
+        already write, discriminated unions that make illegal states unrepresentable, generics and
+        the variance that explains half of their errors, the type-level language — conditionals,
+        <code>infer</code>, mapped types, template literals — with a measured budget of 999
+        tail-recursive instantiations, the module and declaration machinery that decides what your
+        package hands a consumer, and the boundaries where <code>any</code> gets in. Written against
+        TypeScript 7, where <code>baseUrl</code>, <code>outFile</code> and
+        <code>target: es5</code> no longer exist. Every claim was compiled or run.</p>
+        <div class="prereq"><b>Assumes:</b> JavaScript</div>
+        <div class="card-meta"><span><b>18</b> sections</span><span><b>133k</b> words</span><span>tsc 7 &amp; Node</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="react_mastery.html" data-key="react_mastery_progress" data-total="19"
+         data-tags="react viewtransition addtransitiontype fragment refs fragmentinstance browser onbrowserbailout jsx element createelement jsx-runtime jsximportsource props children key fragment reconciliation diffing virtual dom fiber render commit batching flushsync strictmode snapshot usestate updater lifting state up controlled uncontrolled immer usereducer reducer dispatch action createcontext usecontext provider prop drilling rules of react purity idempotent immutability rules of hooks eslint-plugin-react-hooks exhaustive-deps useeffect setup cleanup dependency array race condition useeffectevent useref ref callback forwardref useimperativehandle usesyncexternalstore uselayouteffect useinsertioneffect custom hook useid usedebugvalue synthetic event delegation portal createportal dangerouslysetinnerhtml style prop memo usememo usecallback referential equality profiler devtools react compiler use memo use no memo compilationmode panicthreshold gating target transition usetransition starttransition action usedeferredvalue activity viewtransition suspense lazy code splitting use promise error boundary getderivedstatefromerror componentdidcatch onuncaughterror oncaughterror onrecoverableerror captureownerstack useactionstate useformstatus useoptimistic requestformreset progressive enhancement server rendering hydration hydrateroot rendertopipeablestream rendertoreadablestream prerender resume streaming shell selective hydration document metadata stylesheet precedence preload preinit preconnect prefetchdns server components use client use server server functions rsc payload cache cachesignal tainting typescript componentprops reactnode testing act react testing library class components migration next.js react router expo vite">
+        <div class="card-top"><h3>React</h3><span class="stage-tag ui">Stage 2</span></div>
+        <p>The component model from the element up: what JSX compiles to, why state belongs to a
+        position in the tree rather than to your component, and reconciliation measured rather than
+        described. Effects as synchronization — and the longer list of Effects you should not write.
+        The Rules of React as the preconditions of React's optimisations, checked against all
+        seventeen lint rules the installed plugin actually enables. Then the parts most courses stop
+        before: the React Compiler's real output, transitions and Suspense as one scheduling story,
+        streaming server rendering read marker by marker, and Server Components with their payload
+        printed. Written against React 19.3.0, with every example executed — view transitions
+        cross-checked in a real browser, and each 19.3 change measured against 19.2.8.</p>
+        <div class="prereq"><b>Assumes:</b> JavaScript, TypeScript</div>
+        <div class="card-meta"><span><b>19</b> sections</span><span><b>93k</b> words</span><span>React 19.3</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="sql_mastery.html" data-key="sql_mastery_progress" data-total="21"
+         data-tags="sql postgresql postgres relational model relational algebra declarative psql meta-command pg_catalog information_schema regclass oid data types numeric timestamptz interval uuidv7 enum domain composite range multirange toast create table constraint check not null unique primary key foreign key referential action deferrable exclusion constraint without overlaps not valid not enforced generated column virtual stored identity sequence alter table schema search_path normalization functional dependency 1nf 2nf 3nf bcnf denormalization surrogate key natural key junction table null three-valued logic is distinct from select join inner join left outer join anti-join semi-join lateral cross join using natural join self-join generate_series tablesample group by having aggregate filter grouping sets rollup cube percentile_cont ordered-set aggregate pivot union intersect except order by nulls first limit offset fetch with ties keyset pagination values subquery scalar subquery correlated exists not exists not in trap any all row constructor cte with recursive materialized optimization fence data-modifying cte cycle search window function over partition by frame rows range groups exclude row_number rank dense_rank lag lead first_value last_value running total moving average gaps and islands top-n insert on conflict upsert excluded returning old new update delete truncate merge merge_action copy on_error reject_limit bulk load hot update fillfactor idempotent index b-tree hash gist sp-gist gin brin partial index expression index covering include index-only scan visibility map operator class text_pattern_ops skip scan concurrently reindex bloat cluster query planner explain analyze buffers seq scan index scan bitmap heap scan nested loop hash join merge join memoize incremental sort hashaggregate gather work_mem random_page_cost statistics pg_stats n_distinct correlation extended statistics create statistics parallel query generic plan custom plan auto_explain pg_stat_statements transaction acid mvcc snapshot xmin xmax ctid savepoint subtransaction transactional ddl isolation level read committed repeatable read serializable dirty read non-repeatable read phantom write skew lost update ssi serialization failure 40001 retry loop idle in transaction lock mode access exclusive row exclusive for update for no key update for share nowait skip locked queue deadlock 40p01 pg_locks pg_blocking_pids advisory lock lock_timeout statement_timeout vacuum autovacuum dead tuple vacuum full freezing wraparound relfrozenxid write-ahead log wal lsn checkpoint synchronous_commit fsync full page writes data checksums pg_dump pg_basebackup pitr wal archiving streaming replication replication slot logical replication publication subscription json jsonb containment jsonpath json_table gin index array unnest range operator full-text search tsvector tsquery websearch_to_tsquery stemming ts_rank ts_headline pg_trgm trigram similarity collation citext casefold view updatable view with check option security_barrier security_invoker materialized view refresh concurrently create function plpgsql volatility immutable stable parallel safe inlining returns table procedure call cursor dynamic sql format quote_ident trigger before after instead of transition table event trigger declarative partitioning partition pruning attach detach partitionwise sharding connection pooling pgbouncer transaction pooling schema migration expand and contract zero-downtime role grant revoke default privileges row-level security create policy security definer search_path attack sql injection parameterized query least privilege extension pg_stat_activity pg_stat_io pg_aios monitoring">
+        <div class="card-top"><h3>SQL</h3><span class="stage-tag ui">Stage 3</span></div>
+        <p>The relational model, the query language, and then the system underneath it: how the
+        planner turns a declarative query into a plan and how to read the plan back, what an index
+        actually costs, and why MVCC makes a rollback cheap and a commit the expensive one. The
+        concurrency half is measured rather than described — every isolation anomaly in it was
+        produced by two real sessions, including the write skew that <code>REPEATABLE READ</code>
+        permits and <code>SERIALIZABLE</code> refuses. Then the operational material most courses
+        omit: vacuum and bloat, wraparound, WAL and durability, partitioning, row-level security
+        and the migrations you can run while the site is up. Written against PostgreSQL 18, with
+        every example executed against a real server — including a dozen places where what the
+        documentation says and what the installed server does are not the same thing.</p>
+        <div class="prereq"><b>Assumes:</b> Foundations</div>
+        <div class="card-meta"><span><b>21</b> sections</span><span><b>109k</b> words</span><span>PostgreSQL 18</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="testing_mastery.html" data-key="testing_mastery_progress" data-total="21"
+         data-tags="testing test automation pytest node:test vitest playwright hypothesis fast-check assertion assertion rewriting pytest.approx pytest.raises RaisesGroup expect toEqual toStrictEqual toMatchObject deepStrictEqual soft assertion asymmetric matcher custom matcher test double dummy stub spy mock fake unittest.mock autospec create_autospec monkeypatch patch where to patch side_effect AsyncMock vi.fn vi.spyOn vi.mock mock.module state verification behaviour verification classical mockist london school chicago school tell don't ask role interface over-specified test refactoring resistance equivalence class boundary value analysis decision table pairwise testing test oracle happy path sad path negative test risk-based testing parametrize pytest.param HIDDEN_PARAM subtests test.each test.for fixture yield fixture fixture scope autouse factory fixture indirect parametrization conftest tmp_path capsys caplog free_tcp_port object mother test data builder teardown seam dependency injection service locator global state singleton humble object functional core imperative shell hexagonal ports and adapters clock wrapper freezegun fake timers seeded random legacy code sprout wrap characterisation test back door subcutaneous test test-driven development red green refactor triangulation transformation priority premise kata spike specification by example BDD gherkin acceptance test double-loop tdd test cancer test pyramid ice-cream cone testing trophy honeycomb solitary sociable unit test integration test component test contract test smoke test integration testing postgresql transaction rollback truncation savepoint migrations testcontainers ephemeral environment dialect drift repository fake http api test client ASGI transport schema validation jsonschema idempotency pagination responses record and replay cassette consumer-driven contract pact provider verification provider state can-i-deploy openapi breaking change expand and contract testing library getByRole query priority user-event fireEvent jest-dom waitFor act jsdom happy-dom renderHook snapshot testing snapshot rot visual regression toHaveScreenshot locator auto-waiting web-first assertion strict mode violation browser context storageState page.route page.clock trace viewer page object property-based testing invariant strategy shrinking minimal counterexample stateful testing model-based metamorphic round-trip idempotence coverage line coverage branch coverage coverage.py pragma no cover mutation testing mutant mutation score mutmut stryker equivalent mutant test impact analysis flaky test erratic test quarantine order dependence pytest-randomly PYTHONHASHSEED sleep antipattern deterministic waiting resource leak port collision retry policy flake rate test smell obscure test mystery guest eager test assertion roulette fragile test DAMP not DRY test refactoring deleting a test continuous integration deployment pipeline commit stage ten-minute build merge queue quarantine lane nightly suite canary feature flag dark launch testing in production synthetic monitoring semantic monitoring error budget chaos testing load testing soak test exploratory testing definition of done">
+        <div class="card-top"><h3>Testing</h3><span class="stage-tag ui">Stage 3</span></div>
+        <p>What a test is worth, rather than how to write one. The five kinds of test double and the
+        two distinctions that actually decide anything; state versus behaviour verification, and why
+        asserting that a query was called breaks on the next correct refactor; boundary analysis,
+        decision tables and pairwise selection; design for testability, which is mostly the code
+        reporting on itself. Then the levels: a real PostgreSQL started by the suite, HTTP APIs
+        through a test client, contract tests that close the hole every double leaves, Testing
+        Library against a DOM and Playwright against a real Chromium. Property-based testing,
+        coverage and mutation testing — where 100% branch coverage still let ten of eighteen
+        mutants live — flaky tests, the smell catalogue and the pipeline. <b>Genuinely dual:</b>
+        every idea is taught in pytest <em>and</em> in a JavaScript runner, and every claimed
+        output in the course was produced by running the tool, twice, and compared.</p>
+        <div class="prereq"><b>Assumes:</b> Python, JavaScript</div>
+        <div class="card-meta"><span><b>21</b> sections</span><span><b>139k</b> words</span><span>pytest 9 &middot; Vitest 5 &middot; Playwright 1.62</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="data_structures_and_algorithms_mastery.html" data-key="dsa_mastery_progress" data-total="24"
+         data-tags="algorithms data structures asymptotics big-O big-Omega big-Theta master theorem recurrence recursion tree amortised analysis aggregate accounting potential dynamic array array cache line pointer chasing row-major typed array linked list sentinel doubly linked stack queue deque ring buffer monotonic deque LRU cache hash table chaining open addressing linear probing cuckoo hashing load factor hash randomisation compact dict merge sort quicksort Lomuto Hoare partition timsort powersort comparison lower bound decision tree counting sort radix sort bucket sort quickselect median of medians heap binary heap heapq sift down build-heap d-ary heap indexed priority queue binary search bisect galloping search predicate formulation binary search on the answer BST treap AVL red-black tree B-tree B+ tree skip list order-statistic tree interval tree segment tree Fenwick augmentation union-find disjoint set path compression union by rank inverse Ackermann graph BFS DFS finish time topological sort Kahn strongly connected components Tarjan bridges articulation points Dijkstra Bellman-Ford Floyd-Warshall Johnson A* search 0-1 BFS relaxation negative cycle minimum spanning tree Kruskal Prim Boruvka cut property greedy exchange argument Huffman coding matroid divide and conquer Karatsuba Strassen closest pair FFT convolution work span parallelism dynamic programming memoisation tabulation SRTBOT knapsack subset sum pseudopolynomial edit distance LCS LIS Held-Karp bitmask DP interval DP tree DP strings Rabin-Karp rolling hash KMP prefix function Z-algorithm Boyer-Moore Aho-Corasick trie suffix array LCP array Manacher regular expression backtracking flow network Ford-Fulkerson Edmonds-Karp max-flow min-cut bipartite matching Hopcroft-Karp Konig Hungarian Gale-Shapley stable matching linear programming simplex duality complementary slackness LP relaxation number theory Euclid extended Euclidean Bezout modular arithmetic modular inverse Chinese remainder theorem repeated squaring Fermat Euler totient sieve of Eratosthenes Miller-Rabin Carmichael primality certificate RSA Pollard's rho BigInt P versus NP NP-complete Cook-Levin reduction 3-SAT approximation ratio FPTAS branch and bound local search SAT solver parameterised complexity randomised algorithm Las Vegas Monte Carlo Freivalds indicator variable linearity of expectation Fisher-Yates reservoir sampling Bloom filter Count-Min sketch HyperLogLog streaming Boyer-Moore majority Misra-Gries competitive analysis ski rental paging Belady's anomaly hash flooding Mersenne Twister model-based testing differential testing shrinking invariant checking cProfile k-means Lloyd k-means++ silhouette hierarchical clustering single linkage curse of dimensionality k-d tree locality-sensitive hashing MinHash gradient descent learning rate convexity stochastic gradient descent linear regression weighted majority multiplicative weights perceptron regret inverted index postings list tf-idf cosine similarity BM25 varint delta encoding BK-tree sharding">
+        <div class="card-top"><h3>Data Structures &amp; Algorithms</h3><span class="stage-tag ui">Stage 3</span></div>
+        <p>What an operation costs, why, and how the cost is proved. The analysis first — asymptotics,
+        recurrences, the master theorem, amortised analysis — then every structure built, measured and
+        broken on the input it was not designed for: arrays and the cache line, hash tables under
+        adversarial keys, six ways to keep a tree balanced, union-find, graphs, shortest paths, spanning
+        trees. Then the three design techniques, flows and linear programming, number theory from Euclid
+        to RSA, and what to do when a problem is intractable. Closes with randomisation and sketches,
+        the algorithms underneath machine learning, and a capstone that builds a search engine from a
+        dozen of them and prices every structure against the scan it replaces. <b>Genuinely dual:</b>
+        every structure is given in Python 3.14 and in Node 24, and every measured claim in the course
+        was produced by running the code, twice, and compared.</p>
+        <div class="prereq"><b>Assumes:</b> Python, JavaScript</div>
+        <div class="card-meta"><span><b>24</b> sections</span><span><b>337k</b> words</span><span>Python 3.14 &middot; Node 24 &middot; CLRS 4e &middot; MIT 6.006</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="advanced_shell_scripting_mastery.html" data-key="advanced_shell_scripting_mastery_progress" data-total="22"
+         data-tags="shell bash scripting posix sh dash ksh shebang env bash 5.3 tokenisation quoting word splitting ifs expansion brace tilde parameter expansion command substitution arithmetic process substitution globbing extglob nullglob arrays associative arrays namerefs mapfile readarray read printf echo here document here string redirection file descriptor noclobber exec redirection fd exit status errexit set -e pipefail nounset PIPESTATUS inherit_errexit trap signal SIGINT SIGTERM EXIT ERR DEBUG cleanup subshell fork exec pipeline lastpipe job control wait background flock lockf mkdir lock mktemp coproc fifo named pipe timeout nohup disown xargs getopts getopt completion compgen complete case if while for select functions local return main guard source library sysexits usage help version stdin stdout stderr buffering stdbuf tee grep sed awk cut sort uniq tr injection eval printf %q ${var@Q} PATH umask setuid rbash TOCTOU traversal allowlist portability bashism checkbashisms shellcheck shfmt bats shunit2 mocking stub xtrace PS4 bashdb debugging logging dry run idempotent hyperfine time EPOCHREALTIME performance fork cost loop subprocess strace memory rss ARG_MAX ulimit style guide google naming readonly declare refactoring golden capstone logsum makefile editorconfig">
+        <div class="card-top"><h3>Advanced Shell Scripting</h3><span class="stage-tag ui">Stage 4</span></div>
+        <p>What a script does, as opposed to what it looks like. How bash reads a line — tokens before
+        meaning, quoting, word splitting, and the seven expansions in their fixed order — then the
+        language in full: parameter expansion, arrays, arithmetic, control flow, functions and
+        scope. Redirection and file descriptors, exit status and the ways <code>set -e</code> does not
+        do what its users believe, traps and cleanup, a command-line interface, text and processes,
+        concurrency and locks. Then hostile input, POSIX portability, ShellCheck and bats, a
+        performance section that counts processes instead of timing them, and a capstone built to the
+        Google Shell Style Guide and checked by five tools. Every example was run under bash 5.3 on
+        macOS and 5.2 on Debian, twice, and the two compared.</p>
+        <div class="prereq"><b>Assumes:</b> a terminal and a few scripts written</div>
+        <div class="card-meta"><span><b>22</b> sections</span><span><b>310k</b> words</span><span>bash 5.3 &middot; ShellCheck &middot; bats</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="python_mastery.html" data-key="python_mastery_progress" data-total="14"
+         data-tags="python asyncio typing concurrency generators decorators metaclass packaging pytest pydantic fastapi numpy pandas sqlite performance profiling uv">
+        <div class="card-top"><h3>Python</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>The object model that explains the language's behaviour, special methods, descriptors and
+        metaclasses, decorators and generators, the type system professionals run in CI, errors and
+        logging, concurrency in all four of its flavours and asyncio in depth, profiling, then
+        imports and packaging, testing with <code>pytest</code> and Hypothesis, and the ecosystem —
+        <code>pydantic</code>, FastAPI, NumPy, pandas, SQLite.</p>
+        <div class="prereq"><b>Assumes:</b> Foundations</div>
+        <div class="card-meta"><span><b>14</b> sections</span><span><b>59k</b> words</span><span>Python</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="backend_and_api_design_mastery.html" data-key="backend_mastery_progress" data-total="16"
+         data-tags="backend api rest http rfc9110 openapi resource design status codes idempotency etag caching pagination cursor oauth pkce jwt authorization bola bfla multi-tenancy rate limiting retry circuit breaker outbox webhook queue sse websocket versioning deprecation problem details fastapi observability tracing">
+        <div class="card-top"><h3>Backend &amp; API Design</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>HTTP as a contract — methods, status codes, negotiation — then resource modelling, payload
+        and error design, the trust boundary, pagination that does not lose records, authentication
+        and authorization, caching and optimistic concurrency, idempotency and rate limits,
+        transactions and the outbox, streaming, OpenAPI and versioning, and the observability that
+        makes a service diagnosable at 3am.</p>
+        <div class="prereq"><b>Assumes:</b> Python, SQL, Testing</div>
+        <div class="card-meta"><span><b>16</b> sections</span><span><b>63k</b> words</span><span>Python · FastAPI</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="django_mastery.html" data-key="django_mastery_progress" data-total="24"
+         data-tags="django python web framework orm queryset select_related prefetch_related n+1 aggregation window transactions atomic select_for_update race constraints migrations zero-downtime views class-based views templates forms authentication permissions admin csrf xss security caching redis async asgi tasks celery signals email static media testing pytest logging pagination i18n deployment gunicorn uvicorn nginx pgbouncer replica interview">
+        <div class="card-top"><h3>Django</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>The request lifecycle and the project, then the ORM in depth — QuerySets, query counts,
+        aggregation, transactions and races, constraints and zero-downtime migrations — then views,
+        templates, forms, auth, the admin and security, caching, async and background work, testing,
+        and deployment behind real Gunicorn, nginx and PgBouncer. Ends with a ticket box office built
+        under concurrency and a bank of 386 senior interview questions.</p>
+        <div class="prereq"><b>Assumes:</b> Python, SQL, Networking &amp; HTTP</div>
+        <div class="card-meta"><span><b>24</b> sections</span><span><b>520k</b> words</span><span>Python · Django 6.1 · PostgreSQL</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="drf_mastery.html" data-key="drf_mastery_progress" data-total="22"
+         data-tags="drf django rest framework api rest http status codes idempotency serializers modelserializer validation nested relations viewsets routers generic views n+1 prefetch authentication token jwt simplejwt oauth permissions object level tenant throttling rate limit filtering django-filter search ordering pagination cursor problem details errors transactions versioning openapi drf-spectacular schema etag if-match caching idempotency-key async adrf tasks webhooks testing apiclient schemathesis owasp api security cors production interview">
+        <div class="card-top"><h3>Django REST Framework</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>HTTP API design and the request lifecycle, then serializers, validation and the race
+        behind it, generic views and viewsets, query counts, authentication, permissions and
+        throttling, filtering, pagination, one error format, versioning and OpenAPI schemas,
+        caching with ETags and idempotency keys, async work and webhooks, testing, and the OWASP
+        API Top 10 attacked and fixed. Ends with an issue tracker API built under concurrency and a
+        bank of 263 senior interview questions.</p>
+        <div class="prereq"><b>Assumes:</b> Django</div>
+        <div class="card-meta"><span><b>22</b> sections</span><span><b>416k</b> words</span><span>Python · DRF 3.18 · PostgreSQL</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="networking_and_http_mastery.html" data-key="networking_mastery_progress" data-total="16"
+         data-tags="networking http tcp udp ip dns tls quic http2 http3 socket congestion control cubic bbr cwnd mtu nat bgp anycast cdn proxy load balancer alpn sni certificate handshake latency rtt bufferbloat tcpdump mtr ss curl dig openssl wireshark packet capture retry timeout backoff">
+        <div class="card-top"><h3>Networking &amp; HTTP</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>What happens between <code>curl</code> and the first byte back. Encapsulation and the MTU,
+        IP addressing and routing, TCP from handshake to <code>TIME_WAIT</code>, loss recovery and
+        congestion control, the socket API, DNS delegation, the TLS handshake, HTTP/1.1 framing,
+        HTTP/2 multiplexing and HTTP/3 over QUIC, proxies and CDNs, latency budgets, the failure
+        modes that page you, and the tools that prove which layer is lying.</p>
+        <div class="prereq"><b>Assumes:</b> Python, the command line</div>
+        <div class="card-meta"><span><b>16</b> sections</span><span><b>73k</b> words</span><span>Python · curl · dig</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="system_mastery.html" data-key="system_mastery_progress" data-total="20"
+         data-tags="system design scalability availability slo error budget consistency cap linearizable consensus raft quorum replication partitioning sharding consistent hashing caching stampede eviction queue kafka back pressure event sourcing cqrs outbox saga idempotency two-phase commit microservices bounded context api gateway service mesh grpc websocket rate limiting circuit breaker bulkhead retry jitter timeout graceful shutdown observability tracing canary feature flag multi-region capacity estimation mapreduce stream processing event time watermark windowing exactly-once lambda architecture count-min sketch hyperloglog top-k bloom filter oauth pkce openid connect jwt c4 model architecture decision record">
+        <div class="card-top"><h3>System Design</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>Sizing a system before you build it, then every decision that follows. Scalability and
+        the nines, consistency models and CAP, quorums and Raft, choosing a data store from access
+        patterns, replication and partitioning, caching without serving lies, queues and back
+        pressure, event sourcing, CQRS, the outbox and sagas, service boundaries and the distributed
+        monolith, deadlines, retry budgets, circuit breakers and bulkheads, observability and
+        canaries, stream processing with event time and watermarks, sketches for counting and top-K, OAuth 2.0 and OpenID Connect between users and services, and how to document a design — and a ride-hailing platform designed end to end.</p>
+        <div class="prereq"><b>Assumes:</b> Python, Networking &amp; HTTP, Backend &amp; API Design</div>
+        <div class="card-meta"><span><b>20</b> sections</span><span><b>154k</b> words</span><span>Python · arithmetic</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="ai_mastery.html" data-key="ai_mastery_progress" data-total="16"
+         data-tags="ai engineering llm claude api anthropic token tokeniser context window messages api streaming stop reason prompt engineering xml tags few-shot structured outputs json schema strict tool use thinking effort tool use agent loop tool_result parallel tool use tool search programmatic tool calling mcp agent skills web search web fetch code execution vision pdf files api citations prompt caching cache breakpoint context editing compaction memory rag retrieval embeddings bm25 hybrid search reranking chunking agents harness budgets human gates managed agents sessions evaluation eval llm-as-judge rubric cohen kappa guardrails prompt injection jailbreak refusal fallback batch processing rate limits observability cost latency">
+        <div class="card-top"><h3>AI Engineering</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>Building software whose most important component is non-deterministic. The Messages API
+        end to end, prompting that is technical writing rather than superstition, structured outputs
+        and thinking, tool use and the agent loop, server tools, MCP and Skills, vision and PDFs,
+        context engineering — caching, clearing, compaction — retrieval that finds the right passage,
+        agents that stop, evaluation with judges you have validated, prompt injection and the layers
+        that hold when the model is convinced, and the cost and latency arithmetic that decides the
+        rest. Ends with one production support agent built end to end.</p>
+        <div class="prereq"><b>Assumes:</b> Foundations, Python, Networking &amp; HTTP</div>
+        <div class="card-meta"><span><b>16</b> sections</span><span><b>85k</b> words</span><span>Python · Claude API</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+      <a class="card" href="claude_code_course.html" data-key="claude_code_course_progress" data-total="18"
+         data-tags="claude code agentic coding agentic harness agentic loop tools bash glob grep task tool subagent context window compaction prompt caching cache invalidation claude.md memory auto memory rules path-scoped permissions allow deny ask permission mode plan mode auto mode sandbox sandboxing workspace trust settings.json settings precedence managed settings hooks pretooluse posttooluse stop hook skills skill.md slash command progressive disclosure mcp model context protocol tool search stdio http transport oauth subagents forks agent teams worktrees dynamic workflows plugins marketplace lsp headless agent sdk canusetool structured output github actions code review ultrareview routines channels deep links slack artifacts cost otel telemetry gateway zero data retention verification goal checkpointing rewind spec interview plan mode thin slice adversarial review characterization test git bisect legacy code debugging session recovery pull request">
+        <div class="card-top"><h3>Building with Claude</h3><span class="stage-tag ui">Stage 5</span></div>
+        <p>Shipping real software with an agent that reads your codebase, runs your terminal and
+        changes anything you can change. The agentic loop and what the harness decides rather than
+        the model, driving a session and knowing when to throw it away, the context window as the
+        one constraint that never goes away, permission rules and sandboxing that bind every
+        process, the check that lets the loop close on its own, then skills, hooks, MCP, subagents
+        and plugins — and running it without you at all: headless, the Agent SDK, CI, cost and
+        policy. Then working a real task: a change from idea to merged pull request, inherited code, debugging and recovering a broken session. Ends with one repository taken from cold start to a production setup.</p>
+        <div class="prereq"><b>Assumes:</b> Foundations, Git, a terminal</div>
+        <div class="card-meta"><span><b>18</b> sections</span><span><b>98k</b> words</span><span>Claude Code · CLI</span></div>
+        <div class="bar"><i></i></div><div class="bar-label ui"></div>
+      </a>
+
+
+
+
+
+    </div>
+  </section>
+
+  <footer>
+    <span>Each course is a single self-contained page. Nothing is tracked; your progress lives in your browser.</span>
+    <span><a href="#top">Back to top</a></span>
+  </footer>
+
+</div>
+
+<script>
+// Legacy-browser safe: no async/await, no optional chaining, safe localStorage.
+var THEME_KEY = 'pm_index_theme';
+
+function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* ignore */ } }
+
+var savedTheme = safeGet(THEME_KEY) || 'dark';
+document.documentElement.setAttribute('data-theme', savedTheme);
+
+document.getElementById('theme-toggle').addEventListener('click', function () {
+  var cur = document.documentElement.getAttribute('data-theme');
+  var next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  safeSet(THEME_KEY, next);
+});
+
+// Each course records the sections you have completed under its own storage key.
+// Read those back so the index can show where you left off.
+var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+cards.forEach(function (card) {
+  var total = parseInt(card.getAttribute('data-total'), 10) || 0;
+  var done = 0;
+  try {
+    var raw = safeGet(card.getAttribute('data-key'));
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (Object.prototype.toString.call(parsed) === '[object Array]') done = parsed.length;
+    }
+  } catch (e) { done = 0; }
+  if (done > total) done = total;
+  var pct = total ? Math.round((done / total) * 100) : 0;
+  var fill = card.querySelector('.bar > i');
+  var label = card.querySelector('.bar-label');
+  fill.style.width = pct + '%';
+  if (done === 0) {
+    label.textContent = 'Not started';
+  } else if (done >= total) {
+    label.textContent = 'Complete';
+  } else {
+    label.textContent = done + ' of ' + total + ' sections · ' + pct + '%';
+  }
+});
+
+var filter = document.getElementById('filter');
+var count = document.getElementById('count');
+filter.addEventListener('input', function () {
+  var q = filter.value.trim().toLowerCase();
+  var shown = 0;
+  cards.forEach(function (card) {
+    var hay = (card.textContent + ' ' + card.getAttribute('data-tags')).toLowerCase();
+    var match = q === '' || hay.indexOf(q) !== -1;
+    card.hidden = !match;
+    if (match) shown++;
+  });
+  count.textContent = shown === 1 ? '1 course' : shown + ' courses';
+});
+</script>
+
+</body>
+</html>
