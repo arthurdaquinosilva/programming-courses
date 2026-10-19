@@ -536,32 +536,113 @@ body {
 <p>By the end you should be able to build a Django service that stays correct under load, explain why it does, deploy it, and answer the questions a senior interview will ask about it.</p>
 <div class="section-footer"><button class="btn-next" data-next="section-0">Start: The Request Lifecycle →</button></div>
 </section>
-<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">The Request Lifecycle</h1><p>A browser asks for <code>https://shop.example.com/shop/green-tea/</code>, and a moment later it receives a page. Between those two moments, Django code runs in a fixed order. Some of it is yours: the view that builds the page, the URL patterns that chose that view. Most of it is not: a web server, a protocol adapter, a handler object, a chain of middleware, a URL resolver, and a set of signals.</p>
-<p>A beginner can build a working site without knowing any of this. A senior developer cannot do their job without it, because nearly every hard problem in a Django application sits somewhere in that order:</p>
+<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">The Request Lifecycle</h1><p>Start with the smallest view in this section. It looks up a tea by its short name and returns a sentence about it:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">product_detail</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">slug</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">slug</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">PRODUCTS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">Http404</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no product </span><span class="si">{</span><span class="n">slug</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">HttpResponse</span><span class="p">(</span><span class="n">PRODUCTS</span><span class="p">[</span><span class="n">slug</span><span class="p">],</span> <span class="n">content_type</span><span class="o">=</span><span class="s2">"text/plain"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>This function writes one header, <code>Content-Type</code>. Yet when a browser asks for <code>/shop/green-tea/</code>, the response it gets back carries <strong>six</strong> headers. §1.1 prints them:</p>
 <ul>
-<li>A header is missing from some responses but not others. Which layer added it, and which responses never reached that layer?</li>
+<li><code>Content-Type</code>, the one the view wrote.</li>
+<li><code>X-Frame-Options</code>, <code>Content-Length</code>, <code>X-Content-Type-Options</code>, <code>Referrer-Policy</code> and <code>Cross-Origin-Opener-Policy</code>, which the view never mentions.</li>
+</ul>
+<p>So something between the browser and this function added five headers. Something also chose this function out of all the views in the project, and turned <code>green-tea</code> into its <code>slug</code> argument. And if the function had crashed, something would have turned the crash into an error page. None of that code is in the view.</p>
+<p>This section is about that code. It is the <strong>request lifecycle</strong>: the fixed list of steps that every request goes through, in order, on its way to a view and back.</p>
+<p>Here is a picture to keep in mind for the whole section: a large company's post room.</p>
+<ul>
+<li>A <strong>courier</strong> delivers a letter to the building. Couriers do not care what the company does; they only need a standard envelope and a door to deliver to.</li>
+<li>The <strong>post-room clerk</strong> opens the envelope and copies the letter onto an internal form that every department understands.</li>
+<li>The form travels down a <strong>corridor of desks</strong>. Each desk has one job: one checks the visitor's badge, one attaches the customer's file, one stamps "confidential". A desk can also refuse the letter and write a reply itself.</li>
+<li>At the end of the corridor, the <strong>company directory</strong> says which department handles this kind of letter.</li>
+<li>The <strong>department</strong> writes the reply.</li>
+<li>The reply travels back up the <strong>same corridor</strong>, past the same desks in reverse order. Each desk may add a stamp to the reply on its way out.</li>
+<li>The courier takes the reply away.</li>
+</ul>
+<p>Django's request lifecycle has exactly those parts:</p>
+<table>
+<thead>
+<tr>
+<th>In the post room</th>
+<th>In Django</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The courier</td>
+<td>the web server, such as Gunicorn or Uvicorn</td>
+<td>§1.3</td>
+</tr>
+<tr>
+<td>The standard envelope</td>
+<td><strong>WSGI</strong> or <strong>ASGI</strong>, the agreed interface between a server and Django</td>
+<td>§1.3, §1.4</td>
+</tr>
+<tr>
+<td>The post-room clerk</td>
+<td>the <strong>handler</strong>, which builds the request object and sends the <strong>request signals</strong></td>
+<td>§1.5</td>
+</tr>
+<tr>
+<td>The company directory</td>
+<td><strong>URL resolution</strong>, which turns a path into a view and its arguments</td>
+<td>§1.6 to §1.8</td>
+</tr>
+<tr>
+<td>The corridor of desks</td>
+<td><strong>middleware</strong>, the layers that wrap every view, in the order of the <code>MIDDLEWARE</code> setting</td>
+<td>§1.9 to §1.12</td>
+</tr>
+<tr>
+<td>The department</td>
+<td>the view</td>
+<td>§10</td>
+</tr>
+<tr>
+<td>A reply written when a letter goes wrong</td>
+<td><strong>error handling</strong>: an exception becomes a 404, 403, 400 or 500 response</td>
+<td>§1.13</td>
+</tr>
+</tbody>
+</table>
+<p>The five extra headers on the green-tea response are stamps added by desks in the corridor, on the reply's way out.</p>
+<p>You can build a working site without knowing any of this. You cannot debug one. Nearly every hard problem in a Django application is a question about this order:</p>
+<ul>
+<li>A header is missing from some responses but not others. Which desk added it, and which replies never passed that desk?</li>
 <li>A view raises an exception, and the error page has no CSS, or the log shows nothing. Which part turned the exception into a response?</li>
 <li>Logged-in users are suddenly anonymous on one path. Did the authentication step run before the view, or after?</li>
 <li>A URL goes to the wrong view. Which pattern matched first, and why?</li>
 <li>An async view is slower under ASGI than the sync one was. Where are the thread switches?</li>
 </ul>
-<p>This section follows one request from the moment the server hands it to Django to the moment the last byte of the response leaves. It is the <strong>request lifecycle</strong>: the ordered list of things that happen to every request. Every stage below is shown running, not described from memory:</p>
+<p>This section follows one request from the moment the server hands it to Django to the moment the last byte of the response leaves. Every stage is shown running, not described from memory:</p>
 <ol>
-<li>The <strong>server interface</strong>, WSGI or ASGI, which is the contract between a web server such as Gunicorn or Uvicorn and Django.</li>
-<li>The <strong>handler</strong>, the object Django gives the server, and the <strong>request signals</strong> it sends.</li>
-<li><strong>URL resolution</strong>, which turns a path into a view and its arguments.</li>
-<li><strong>Middleware</strong>, the layers that wrap every view, in the order the <code>MIDDLEWARE</code> setting gives them.</li>
-<li><strong>Error handling</strong>: how an exception anywhere in the chain becomes a 404, a 403, a 400 or a 500 response.</li>
+<li>A small project to experiment on (§1.1), and the whole path in one picture (§1.2).</li>
+<li>The <strong>server interface</strong>, WSGI or ASGI, which is the contract between a web server and Django (§1.3, §1.4).</li>
+<li>The <strong>handler</strong>, the object Django gives the server, and the <strong>request signals</strong> it sends (§1.5).</li>
+<li><strong>URL resolution</strong>, which turns a path into a view and its arguments, and its reverse, which turns a view's name back into a URL (§1.6 to §1.8).</li>
+<li><strong>Middleware</strong>, the layers that wrap every view: how to write one (§1.9, §1.10), Django's own (§1.11, §1.12), and middleware under ASGI (§1.14).</li>
+<li><strong>Error handling</strong>: how an exception anywhere in the chain becomes a 404, a 403, a 400 or a 500 response (§1.13).</li>
+<li>One request traced through every stage at once (§1.15).</li>
 </ol>
 <p>Every output below was produced by running the example with Django 6.1.2 on Python 3.14. §10 (Views and URLs) builds on the URL material here and covers views in depth; §16 (Security) explains the security middleware's protections in depth; §18 (Async Django) goes further into ASGI.</p>
 <h2 id="section-0-11-the-project-for-this-section">1.1 The Project for This Section</h2>
-<p>This section builds its own project, a small tea shop with no database models of its own, so the code stays about requests rather than data. It still needs a database: the session and authentication middleware store their data in tables that <code>migrate</code> creates.</p>
+<p>To watch a request travel, we need a small site to send requests to. This section builds its own: a tea shop with seven products and no database models, so the code stays about requests rather than data.</p>
+<p>It still needs a database. Two of the desks in the corridor, the session and authentication middleware, keep their data in tables, and <code>migrate</code> creates those tables at the end of this subsection.</p>
+<p>Three commands create the project:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">django-admin</span><span class="w"> </span>startproject<span class="w"> </span>config<span class="w"> </span>.
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>startapp<span class="w"> </span>shop
 <span class="cmd">createdb</span><span class="w"> </span>shop
 </code></pre></div>
 
-<p>The settings are written by hand and kept short. The <code>MIDDLEWARE</code> list is the one <code>startproject</code> generates, minus the messages framework, which this project does not install. §1.11 explains each entry and why the order matters.</p>
+<p>Line by line:</p>
+<ul>
+<li><code>django-admin startproject config .</code> creates the project: <code>manage.py</code> in the current directory (that is what the final <code>.</code> means), and a <code>config</code> package holding the settings, the root URL patterns, and the two files a server loads, <code>wsgi.py</code> and <code>asgi.py</code>.</li>
+<li><code>python manage.py startapp shop</code> creates an app called <code>shop</code>, a package for our views and URL patterns.</li>
+<li><code>createdb shop</code> creates an empty PostgreSQL database called <code>shop</code>.</li>
+</ul>
+<p>The settings are written by hand and kept short. The <code>MIDDLEWARE</code> list is the one <code>startproject</code> generates, minus the messages framework, which this project does not install. For now, read it as the list of desks in the corridor, from the door inwards. §1.11 explains each entry and why the order matters.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/settings.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
@@ -596,13 +677,18 @@ body {
 <span class="n">DATABASES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"default"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"ENGINE"</span><span class="p">:</span> <span class="s2">"django.db.backends.postgresql"</span><span class="p">,</span> <span class="s2">"NAME"</span><span class="p">:</span> <span class="s2">"shop"</span><span class="p">}}</span>
 </code></pre></div>
 
-<p>Three settings in this file belong to the lifecycle:</p>
+<p>Most of this file is ordinary set-up: the apps that are installed, where templates live, which database to use. Three settings belong to the lifecycle, and each one is a question the post room has to answer about every letter:</p>
 <ul>
-<li><strong><code>ALLOWED_HOSTS</code></strong> lists the host names this site answers to. A leading dot means "this domain and every subdomain", so <code>.testserver</code> accepts <code>testserver</code> (the name Django's test client sends) and <code>api.testserver</code>, which §1.10 uses. A request for any other host is refused with a 400 response, as §1.13 shows.</li>
-<li><strong><code>ROOT_URLCONF</code></strong> names the Python module whose <code>urlpatterns</code> list is the start of URL resolution (§1.6).</li>
-<li><strong><code>WSGI_APPLICATION</code></strong> names the object that Django's development server, <code>runserver</code>, should serve. §1.3 explains why production servers ignore it.</li>
+<li><strong><code>ALLOWED_HOSTS</code></strong> answers "is this letter addressed to us?" It lists the host names this site answers to. A leading dot means "this domain and every subdomain", so <code>.testserver</code> accepts <code>testserver</code> (the name Django's test client sends) and <code>api.testserver</code>, which §1.10 uses. A request for any other host is refused with a 400 response, as §1.13 shows.</li>
+<li><strong><code>ROOT_URLCONF</code></strong> answers "where is the company directory?" It names the Python module whose <code>urlpatterns</code> list is the start of URL resolution (§1.6).</li>
+<li><strong><code>WSGI_APPLICATION</code></strong> answers "which door does the courier use?", but only for one courier. It names the object that Django's development server, <code>runserver</code>, should serve. §1.3 explains why production servers ignore it.</li>
 </ul>
-<p>The views are deliberately small. Each one exists to show one stage of the lifecycle, and the comment on it says which:</p>
+<p>Next come the views. They are deliberately small, almost toys. Each one exists to show one stage of the lifecycle, and the comment beside it says which subsection uses it. You do not need to understand them all now:</p>
+<ul>
+<li>Most of them return a line of text, or a small piece of JSON, so their output fits in one line.</li>
+<li>A few are broken on purpose. <code>checkout</code> raises an exception, <code>staff_only</code> refuses the visitor, and <code>forgot</code> forgets its <code>return</code> statement. Each failure shows how Django turns a crash into a response.</li>
+<li><code>PRODUCTS</code> is a plain dictionary standing in for a database table.</li>
+</ul>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/views.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 
@@ -703,7 +789,8 @@ body {
 <span class="x">&lt;p&gt;</span><span class="cp">{{</span> <span class="nv">banner</span><span class="o">|</span><span class="nf">default</span><span class="s2">:"No banner"</span> <span class="cp">}}</span><span class="x">&lt;/p&gt;</span>
 </code></pre></div>
 
-<p>The app's URL patterns come next. They contain a deliberate mistake, which §1.6 finds and fixes:</p>
+<p>The template holds a heading and a banner line. <code>default:"No banner"</code> means "show <code>No banner</code> if there is no <code>banner</code> value", which §1.10 changes from a middleware.</p>
+<p>The app's URL patterns come next. They are the company directory: each line pairs a path with the view that handles it. They contain a deliberate mistake, which §1.6 finds and fixes. See if you can spot it now:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
 
@@ -735,6 +822,7 @@ body {
 <span class="p">]</span>
 </code></pre></div>
 
+<p>The project's root URL patterns hand everything under <code>shop/</code> to the app's list, and add one more page, <code>where/</code>, which §1.4 uses.</p>
 <p><code>migrate</code> creates the tables for the three contrib apps. The project has no models of its own, so there is nothing to <code>makemigrations</code>.</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>migrate
 </code></pre></div>
@@ -759,7 +847,8 @@ Running migrations:
   Applying sessions.0001_initial... OK
 </code></pre></div>
 
-<p>A first request proves the project works. It is made with <strong>Django's test client</strong>, <code>django.test.Client</code>, which builds a request and passes it through the whole lifecycle without a network or a server. Every request in this section is made this way, because it runs the same handler, middleware and URL resolution a real server would. §1.3 shows what the test client saves you from, by calling Django the way a real server does.</p>
+<p>A first request proves the project works. It is made with <strong>Django's test client</strong>, <code>django.test.Client</code>. The test client is a pretend browser: it builds a request and passes it through the whole lifecycle, without a network and without a server. Every request in this section is made this way, because it runs the same handler, middleware and URL resolution a real server would. §1.3 shows what the test client saves you from, by calling Django the way a real server does.</p>
+<p>The first line of the block, <code># python manage.py shell</code>, says where to run it: in Django's interactive shell, which loads the project's settings first.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
 
@@ -782,9 +871,35 @@ teapot: Glass teapot with infuser, 1 l
 kettle: Gooseneck kettle, 0.8 l
 </code></pre></div>
 
-<p>The rest of this section takes that request apart, stage by stage.</p>
+<p>Line by line:</p>
+<ul>
+<li><code>client.get("/shop/green-tea/")</code> sent a GET request for that path, and got back a response object.</li>
+<li><code>response.status_code</code> is <code>200</code>, which means "OK", and <code>response.content</code> is the body as bytes. <code>.decode()</code> turns those bytes into text.</li>
+<li><code>/shop/</code> is the list page, so its body is all seven products, one per line.</li>
+</ul>
+<p>Now the puzzle from the start of this section. Ask the same response for its headers:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
+
+<span class="n">response</span> <span class="o">=</span> <span class="n">Client</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/shop/green-tea/"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">),</span> <span class="s2">"headers:"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>6 headers:
+  Content-Type: text/plain
+  X-Frame-Options: DENY
+  Content-Length: 35
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin
+  Cross-Origin-Opener-Policy: same-origin
+</code></pre></div>
+
+<p>The view wrote the first one. The other five were added after the view returned, by the desks in the corridor. The rest of this section takes that request apart, stage by stage, and §1.11 names the desk behind each header.</p>
 <h2 id="section-0-12-the-request-lifecycle-at-a-glance">1.2 The Request Lifecycle at a Glance</h2>
-<p>Before any detail, here is the whole path. A request passes these stages in this order, and the response passes back through some of them in reverse:</p>
+<p>Before any detail, here is the whole path, once, from the door to the department and back. Do not try to remember every name in it. Each step gets its own subsection, and this list is the map you come back to.</p>
+<p>A request passes these stages in this order, and the response passes back through some of them in reverse:</p>
 <ol>
 <li><strong>The web server</strong> accepts the network connection and parses the HTTP request. In production this is a program such as Gunicorn or Uvicorn, usually behind a proxy such as nginx. Django is not a web server.</li>
 <li><strong>The server interface.</strong> The server calls Django's application object through a standard Python interface: <strong>WSGI</strong> for synchronous servers, <strong>ASGI</strong> for asynchronous ones. It passes the request as plain data: a dictionary of strings for WSGI, a <code>scope</code> dictionary and a message channel for ASGI.</li>
@@ -800,15 +915,17 @@ kettle: Gooseneck kettle, 0.8 l
 <figure id="fig-dj-lifecycle" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 760 680" role="img" aria-labelledby="t-dj-lifecycle d-dj-lifecycle" style="display:block;width:100%;min-width:540px;height:auto;max-width:760px;margin:0 auto"><title id="t-dj-lifecycle">The request lifecycle: in through every layer, out through the same layers in reverse</title><desc id="d-dj-lifecycle">On the left, the request goes down: the web server parses HTTP and calls the WSGI or ASGI application; the handler sends request_started and builds an HttpRequest; the middleware runs from the top of the MIDDLEWARE list to the bottom; the URL resolver turns path_info into a view and its arguments. At the bottom, the process_view hooks run and then the view. On the right, the response goes up: the process_exception or process_template_response hooks if they apply, the middleware from the bottom of the list to the top, the handler turning the response into WSGI or ASGI output, and the server sending it and closing it, which sends request_finished.</desc><defs><marker id="ah-dj-lifecycle" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="190" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">REQUEST, INWARD</text><text x="570" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">RESPONSE, OUTWARD</text><rect x="40" y="70" width="300" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="190" y="96.9125" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Web server</text><text x="190" y="116.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">parses HTTP · Gunicorn, Uvicorn</text><path d="M190,139 L190,159" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="40" y="164" width="300" height="64" rx="10" style="fill:#7c8cff;fill-opacity:0.13;stroke:#7c8cff;stroke-width:1.6"/><text x="190" y="190.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">WSGI or ASGI</text><text x="190" y="210.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">application(environ, start_response)</text><path d="M190,233 L190,253" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="40" y="258" width="300" height="64" rx="10" style="fill:#7c8cff;fill-opacity:0.13;stroke:#7c8cff;stroke-width:1.6"/><text x="190" y="284.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Handler</text><text x="190" y="304.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">request_started · builds HttpRequest</text><path d="M190,327 L190,347" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="40" y="352" width="300" height="64" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="190" y="378.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Middleware, top → bottom</text><text x="190" y="398.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">each one wraps everything below it</text><path d="M190,421 L190,441" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="40" y="446" width="300" height="64" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="190" y="472.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">URL resolver</text><text x="190" y="492.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">path_info → view and kwargs</text><rect x="420" y="70" width="300" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="570" y="96.9125" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Server sends the bytes</text><text x="570" y="116.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">close() → request_finished</text><path d="M570,159 L570,139" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="420" y="164" width="300" height="64" rx="10" style="fill:#7c8cff;fill-opacity:0.13;stroke:#7c8cff;stroke-width:1.6"/><text x="570" y="190.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">WSGI or ASGI</text><text x="570" y="210.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">status, headers, body</text><path d="M570,253 L570,233" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="420" y="258" width="300" height="64" rx="10" style="fill:#7c8cff;fill-opacity:0.13;stroke:#7c8cff;stroke-width:1.6"/><text x="570" y="284.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Handler</text><text x="570" y="304.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">logs a status of 400 or more</text><path d="M570,347 L570,327" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="420" y="352" width="300" height="64" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="570" y="378.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Middleware, bottom → top</text><text x="570" y="398.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">each may change or replace it</text><path d="M570,441 L570,421" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><rect x="420" y="446" width="300" height="64" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="570" y="472.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Exception / template hooks</text><text x="570" y="492.512" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">only if the view raised or is lazy</text><rect x="40" y="558" width="680" height="64" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="380" y="584.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">process_view hooks, then the view</text><text x="380" y="605" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">returns an HttpResponse, or raises</text><path d="M190,515 L190,553" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><path d="M570,553 L570,515" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lifecycle)"/><text x="380" y="656" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">any middleware may answer early: the layers below it, and the view, then never run</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Every request takes this path. A middleware sees the request on the way down and the response on the way up; §1.15 prints the whole path for real requests.</figcaption></figure>
 <!-- /fig:dj-lifecycle -->
 
+<p>In the post room's terms: steps 1 and 2 are the courier and the envelope, step 3 is the clerk, step 5 is the directory, and step 7 is the department. Steps 4, 6 and 8 are all the corridor: walked inwards, then a second look by the desks once the directory has chosen a department, then walked outwards. Step 9 hands the reply back to the courier.</p>
 <p>Two properties of this path explain most surprises:</p>
 <ul>
-<li><strong>Middleware is an onion, not a list of filters.</strong> A middleware does not run "before" or "after" the view. It <em>wraps</em> everything below it, so it runs both before and after, and it can also decide that the layers below never run. §1.9 shows the order printed.</li>
-<li><strong>Every layer is built once, not per request.</strong> The handler, the middleware instances and the URL resolver are created once per process and reused for every request that process serves. Anything stored on them is shared between requests. §1.3 and §1.9 measure when this happens.</li>
+<li><strong>Middleware is an onion, not a list of filters.</strong> A middleware does not run "before" or "after" the view. It <em>wraps</em> everything below it, so it runs both before and after, and it can also decide that the layers below never run. In the post room, every desk sees the letter going in <em>and</em> the reply coming out, and a desk that writes its own reply stops the letter there. §1.9 shows the order printed.</li>
+<li><strong>Every layer is built once, not per request.</strong> The handler, the middleware instances and the URL resolver are created once per process and reused for every request that process serves. Anything stored on them is shared between requests. The desks are set up in the morning, not once per letter, so a note left lying on a desk is still there for the next letter. §1.3 and §1.9 measure when this happens.</li>
 </ul>
-<p>The subsections that follow take the stages in order.</p>
+<p>The subsections that follow take the stages in order, starting at the door.</p>
 <h2 id="section-0-13-wsgi-the-contract-between-a-server-and-django">1.3 WSGI: The Contract Between a Server and Django</h2>
-<p>Django does not open sockets or parse HTTP. A separate program, the web server, does that, and then hands each request to Django. For that hand-off to work with any server, both sides must agree on one interface. For synchronous Python web applications that interface is <strong>WSGI</strong>, the Web Server Gateway Interface, defined in PEP 3333.</p>
-<p>WSGI is small enough to write by hand. A <strong>WSGI application</strong> is any callable that takes two arguments:</p>
+<p>Django does not open network connections, and it does not read raw HTTP. A separate program, the web server, does that, and then hands each request to Django. That is the courier's job in the post room.</p>
+<p>There are many couriers: Gunicorn, uWSGI, mod_wsgi, Django's own development server. A company cannot agree a private arrangement with each one. Instead, every courier and every company agree on one standard envelope, and then any courier can deliver to any company. For synchronous Python web applications that standard is <strong>WSGI</strong>, the Web Server Gateway Interface, defined in PEP 3333. ("Synchronous" here means that each request is one ordinary function call: the server calls the application and waits until it returns.)</p>
+<p>WSGI is small enough to write by hand, and writing one by hand is the fastest way to see what it is. A <strong>WSGI application</strong> is any callable that takes two arguments:</p>
 <ul>
 <li><strong><code>environ</code></strong>, a dictionary describing the request. It holds CGI-style keys such as <code>REQUEST_METHOD</code>, <code>PATH_INFO</code> and <code>QUERY_STRING</code>, every request header as an <code>HTTP_</code> key (<code>HTTP_HOST</code>, <code>HTTP_ACCEPT_LANGUAGE</code>), and a few <code>wsgi.</code> keys, including <code>wsgi.input</code>, a file-like object for the request body.</li>
 <li><strong><code>start_response</code></strong>, a function the application calls once with the status line and a list of <code>(name, value)</code> header pairs.</li>
@@ -844,9 +961,16 @@ headers: [('Content-Type', 'text/plain'), ('Content-Length', '12')]
 b'GET /hello/\n'
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><code>hello_app</code> is a complete web application, with no Django in it. It reads two keys from <code>environ</code>, builds the body as bytes, calls <code>start_response</code> with a status and two headers, and returns the body inside a list.</li>
+<li><code>setup_testing_defaults</code> added the seven <code>wsgi.</code> keys a real server would have provided. The printed list shows them.</li>
+<li>Our own <code>start_response</code> just prints what it was given. A real server would write those lines onto the network instead.</li>
+<li>The last line joins the returned chunks of bytes: <code>b'GET /hello/\n'</code>, twelve bytes, which is the <code>Content-Length</code> the application promised.</li>
+</ul>
 <p>That is the whole protocol. A WSGI server such as Gunicorn does exactly what that last line does, once per request: it fills an <code>environ</code> from the HTTP request it parsed, calls the application, writes the status and headers it was given, and then writes each chunk of bytes the application returns.</p>
 <h3 id="section-0-the-application-object-django-gives-the-server">The application object Django gives the server</h3>
-<p><code>startproject</code> writes a <code>config/wsgi.py</code> file that creates Django's WSGI application:</p>
+<p>Django is one more WSGI application, just a much bigger one than <code>hello_app</code>. <code>startproject</code> writes a <code>config/wsgi.py</code> file that creates it:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">cat</span><span class="w"> </span>config/wsgi.py
 </code></pre></div>
 
@@ -868,12 +992,18 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 application = get_wsgi_application()
 </code></pre></div>
 
-<p><code>get_wsgi_application()</code> does two things. It calls <code>django.setup()</code>, which reads the settings and loads every installed app (§2 covers that step). Then it returns a <code>WSGIHandler</code>, Django's implementation of the WSGI callable. The variable must be called <code>application</code>, because that is the name servers look for by default.</p>
+<p>The file is short, and only two lines do any work:</p>
+<ul>
+<li><code>os.environ.setdefault(...)</code> tells Django which settings module to use, unless the environment already names one.</li>
+<li><code>get_wsgi_application()</code> does two things. It calls <code>django.setup()</code>, which reads the settings and loads every installed app (§2 covers that step). Then it returns a <code>WSGIHandler</code>, Django's implementation of the WSGI callable.</li>
+</ul>
+<p>The variable must be called <code>application</code>, because that is the name servers look for by default.</p>
 <p>A production server is pointed at this object directly, by its import path:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">gunicorn</span><span class="w"> </span>config.wsgi:application<span class="w"> </span><span class="flag">--workers</span><span class="w"> </span><span class="m">4</span>
 </code></pre></div>
 
-<p>That line is how Gunicorn is started (§23 covers deployment). It is not run here, because this course's examples never start long-running servers. Instead, the next example does what Gunicorn would do: it imports <code>config.wsgi</code>, builds an <code>environ</code>, and calls <code>application</code> itself.</p>
+<p>That line is how Gunicorn is started (§23 covers deployment). <code>config.wsgi:application</code> reads as "import the module <code>config.wsgi</code>, then use the variable <code>application</code> inside it", and <code>--workers 4</code> starts four copies of the application, each in its own process.</p>
+<p>It is not run here, because this section's examples never start long-running servers. Instead, the next example does what Gunicorn would do: it imports <code>config.wsgi</code>, builds an <code>environ</code>, and calls <code>application</code> itself.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">wsgiref.util</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_testing_defaults</span>
 
@@ -916,6 +1046,7 @@ HttpResponse b'Sencha green tea, loose leaf, 100 g'
 <p>The settings file names the same object again, as <code>WSGI_APPLICATION = "config.wsgi.application"</code>. Only one program reads that setting: Django's own development server, <code>runserver</code>, which uses it to find the application to serve. Gunicorn, uWSGI, mod_wsgi and every other production server are given the import path on their command line or in their configuration, as above, and never look at it. If the setting is <code>None</code>, <code>runserver</code> falls back to calling <code>get_wsgi_application()</code> itself.</p>
 <p>This matters when a project wraps its application, for example in a middleware from another library that works at the WSGI level. The wrapper must be applied to <code>application</code> in <code>wsgi.py</code>, so that both <code>runserver</code> (through the setting) and the production server (through the import path) serve the wrapped object.</p>
 <h3 id="section-0-built-once-per-process">Built once per process</h3>
+<p>In the post room, the desks are set up once in the morning, and then every letter that day passes the same desks with the same clerks. Django works the same way.</p>
 <p>The handler builds its middleware chain when it is created, and <code>wsgi.py</code> creates it when the module is first imported. So in a server with four worker processes, each worker imports <code>config.wsgi</code> once, and builds its middleware once, before serving its first request. Every request that worker serves then goes through the <em>same</em> middleware instances. The next example proves it with two middleware that print when they are set up. §1.9 writes them; here they are used early, through <code>override_settings</code>, which changes a setting for the duration of a <code>with</code> block:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/middleware.py</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">outer</span><span class="p">(</span><span class="n">get_response</span><span class="p">):</span>
@@ -976,10 +1107,17 @@ outer: after the view, 200
 b'Glass teapot with infuser, 1 l'
 </code></pre></div>
 
-<p>Both "set up" lines printed once, during the import, before any request. Two requests later, they have not printed again. Notice also the order: <code>Inner</code> was set up <em>before</em> <code>outer</code>, although <code>outer</code> is first in the list. §1.9 explains why the chain is built from the inside out.</p>
-<p>The practical rule follows directly. <strong>Never store per-request data on a middleware instance or a module-level variable.</strong> A worker serving requests in threads (Gunicorn's <code>--threads</code>, or any ASGI server) runs several requests through the same instance at the same moment, so a value one request stores there can be read by another. Per-request data belongs on the <code>request</code> object.</p>
+<p>Reading the output from the top:</p>
+<ul>
+<li>Both "set up" lines printed once, during the import, before any request.</li>
+<li>Each of the two requests then printed its four "before" and "after" lines.</li>
+<li>Two requests later, the "set up" lines have not printed again. The same two objects served both requests.</li>
+</ul>
+<p>Notice also the order: <code>Inner</code> was set up <em>before</em> <code>outer</code>, although <code>outer</code> is first in the list. §1.9 explains why the chain is built from the inside out.</p>
+<p>The practical rule follows directly. <strong>Never store per-request data on a middleware instance or a module-level variable.</strong> A worker serving requests in threads (Gunicorn's <code>--threads</code>, or any ASGI server) runs several requests through the same instance at the same moment, so a value one request stores there can be read by another. That is the note left on a desk: the next letter's clerk reads it as if it were about their letter. Per-request data belongs on the <code>request</code> object, which is new for every request.</p>
 <h3 id="section-0-from-environ-to-httprequest">From <code>environ</code> to <code>HttpRequest</code></h3>
-<p>The handler turns <code>environ</code> into a <code>WSGIRequest</code>, Django's <code>HttpRequest</code> subclass for WSGI. It keeps the raw <code>environ</code> as <code>request.META</code> and adds parsed, friendlier views of it. <code>RequestFactory</code>, from Django's test tools, builds the same object without running any of the lifecycle, which makes it useful for looking at a request:</p>
+<p>This is the clerk copying the letter onto the internal form. <code>environ</code> is a plain dictionary of strings, which is awkward to work with: the query string is one unparsed piece of text, and the header names are spelled <code>HTTP_ACCEPT_LANGUAGE</code>.</p>
+<p>So the handler turns <code>environ</code> into a <code>WSGIRequest</code>, Django's <code>HttpRequest</code> subclass for WSGI. It keeps the raw <code>environ</code> as <code>request.META</code> and adds parsed, friendlier views of it. <code>RequestFactory</code>, from Django's test tools, builds the same object without running any of the lifecycle, which makes it useful for looking at a request:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">RequestFactory</span>
 
@@ -1003,7 +1141,8 @@ q=green&amp;q=black
 <li><strong><code>request.headers</code></strong> is a case-insensitive view of the <code>HTTP_</code> keys in <code>META</code>, with the original header names. <code>request.headers["Accept-Language"]</code> and <code>request.META["HTTP_ACCEPT_LANGUAGE"]</code> are the same value; the first is easier to read and works with any capitalisation.</li>
 </ul>
 <h3 id="section-0-when-django-is-mounted-under-a-prefix">When Django is mounted under a prefix</h3>
-<p>One more <code>environ</code> key matters: <strong><code>SCRIPT_NAME</code></strong>. A server can mount an application under a path prefix, for example serving Django at <code>/app/</code> and something else at <code>/</code>. It then tells the application about the prefix by putting it in <code>SCRIPT_NAME</code> and only the rest of the path in <code>PATH_INFO</code>. Django resolves URLs against <code>PATH_INFO</code> only, so the URL patterns do not change. But every URL Django <em>builds</em> must include the prefix, or its links would point outside the application.</p>
+<p>Picture the company on the third floor of a shared building. Inside the company, everyone says "room 12". But a reply that gives its return address as "room 12" is useless outside the building: it has to say "third floor, room 12".</p>
+<p>One more <code>environ</code> key carries the floor number: <strong><code>SCRIPT_NAME</code></strong>. A server can mount an application under a path prefix, for example serving Django at <code>/app/</code> and something else at <code>/</code>. It then tells the application about the prefix by putting it in <code>SCRIPT_NAME</code> and only the rest of the path in <code>PATH_INFO</code>. Django resolves URLs against <code>PATH_INFO</code> only, so the URL patterns do not change. But every URL Django <em>builds</em> must include the prefix, or its links would point outside the application.</p>
 <p>The handler handles this by storing the prefix at the start of each request (<code>set_script_prefix</code>), and <code>reverse()</code> adds it to every URL it builds. The <code>nav</code> view shows it, because its links are built by <code>reverse_lazy</code> when the response is rendered:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">wsgiref.util</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_testing_defaults</span>
@@ -1034,10 +1173,21 @@ About: /app/shop/about/
 Order 7: /app/shop/orders/7/
 </code></pre></div>
 
-<p>The second request resolved <code>/shop/nav/</code> exactly as the first did, and every link it built starts with <code>/app</code>. When a proxy strips the prefix and does not pass <code>SCRIPT_NAME</code>, the <code>FORCE_SCRIPT_NAME</code> setting supplies it instead.</p>
+<p>Line by line:</p>
+<ul>
+<li>The first call has no prefix, so the links are the plain internal paths.</li>
+<li>The second call said <code>SCRIPT_NAME="/app"</code>. It still resolved <code>/shop/nav/</code> exactly as the first did: the directory lookup did not change.</li>
+<li>But every link it built starts with <code>/app</code>, the floor number added to the room number.</li>
+</ul>
+<p>When a proxy strips the prefix and does not pass <code>SCRIPT_NAME</code>, the <code>FORCE_SCRIPT_NAME</code> setting supplies it instead.</p>
 <h2 id="section-0-14-asgi-the-asynchronous-contract">1.4 ASGI: The Asynchronous Contract</h2>
-<p>WSGI has one built-in assumption: a request is a function call. The server calls the application and waits until it returns. That makes a worker unavailable for the whole request, including any time the view spends waiting on the network. It also leaves no way to keep a connection open and push data in both directions, which WebSockets and long-polling need.</p>
-<p><strong>ASGI</strong>, the Asynchronous Server Gateway Interface, replaces the function call with a conversation. An <strong>ASGI application</strong> is an <code>async</code> callable that takes three arguments:</p>
+<p>WSGI has one built-in assumption: a request is a function call. The server calls the application and waits until it returns. That has two costs:</p>
+<ul>
+<li>A worker is unavailable for the whole request, including any time the view spends waiting on the network.</li>
+<li>There is no way to keep a connection open and push data in both directions, which WebSockets and long-polling need.</li>
+</ul>
+<p>A WSGI request is a letter: it arrives whole, one reply goes back, and the exchange is over. <strong>ASGI</strong>, the Asynchronous Server Gateway Interface, is a phone call instead. The line stays open, and either side can say something, wait, and say something else. One operator can also keep many calls on hold at once, switching to whichever caller is speaking.</p>
+<p>In code, ASGI replaces the function call with a conversation of messages. An <strong>ASGI application</strong> is an <code>async</code> callable that takes three arguments:</p>
 <ul>
 <li><strong><code>scope</code></strong>, a dictionary describing the connection: its <code>type</code> (<code>"http"</code>, <code>"websocket"</code> or <code>"lifespan"</code>), method, path, query string, headers as a list of byte pairs, and client and server addresses.</li>
 <li><strong><code>receive</code></strong>, an <code>async</code> function the application awaits to get the next message from the client, such as <code>{"type": "http.request", "body": b"...", "more_body": False}</code>.</li>
@@ -1066,7 +1216,12 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 application = get_asgi_application()
 </code></pre></div>
 
-<p>The same request as in §1.3, made through ASGI, shows the messages Django sends. The <code>receive</code> function here returns the request body the first time it is called. The second time it waits forever, because Django's handler keeps listening for an <code>http.disconnect</code> message while the view runs, and it cancels that wait when the response has been sent:</p>
+<p>The same request as in §1.3, made through ASGI, shows the messages Django sends. The example plays the server's part, so it needs a <code>receive</code> and a <code>send</code> of its own:</p>
+<ul>
+<li><code>scope_for</code> builds the <code>scope</code> dictionary for a GET request.</li>
+<li><code>receive</code> returns the request body the first time it is called. The second time it waits forever. That is deliberate: Django's handler keeps listening for an <code>http.disconnect</code> message while the view runs (the caller hanging up), and it cancels that wait when the response has been sent.</li>
+<li><code>send</code> just collects every message Django sends, so we can print them.</li>
+</ul>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
 
@@ -1110,9 +1265,11 @@ application = get_asgi_application()
 {'type': 'http.response.body', 'body': b'Sencha green tea, loose leaf, 100 g', 'more_body': False}
 </code></pre></div>
 
-<p>The headers are the same as over WSGI, because the same middleware produced them. Only the envelope changed.</p>
+<p>Two messages came back: first <code>http.response.start</code> with the status and the headers, then <code>http.response.body</code> with the body and <code>more_body: False</code>, meaning "that was all of it". The headers are the same six as over WSGI, because the same middleware produced them. Only the envelope changed.</p>
 <h3 id="section-0-what-runs-where">What runs where</h3>
-<p>Django's ASGI handler runs on an event loop: one thread that switches between many requests whenever one of them is waiting. Code that blocks that thread blocks every request on it, and most of Django's synchronous code, the ORM above all, blocks. So the handler runs every <strong>synchronous view and synchronous middleware in a worker thread</strong>, through <code>asgiref</code>'s <code>sync_to_async</code>, and awaits the result. The <code>where</code> view reports whether it is running on the main thread:</p>
+<p>Django's ASGI handler runs on an <strong>event loop</strong>: one thread that switches between many requests whenever one of them is waiting. That is the operator with many calls on hold.</p>
+<p>The operator has one weakness. If one caller makes the operator stop and look something up for ten minutes, every other caller waits too. Code that <em>blocks</em> the event loop's thread, meaning it makes the thread wait without letting anything else run, blocks every request on it. Most of Django's synchronous code, the ORM above all, blocks.</p>
+<p>So the handler hands that work to an assistant. It runs every <strong>synchronous view and synchronous middleware in a worker thread</strong>, through <code>asgiref</code>'s <code>sync_to_async</code>, and awaits the result. The <code>where</code> view reports whether it is running on the main thread, and the example calls it both ways:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
 
@@ -1154,15 +1311,16 @@ application = get_asgi_application()
 ASGI: main thread: False
 </code></pre></div>
 
-<p>Under WSGI the whole request runs on the thread the server called the application from. Under ASGI the sync view ran somewhere else. Each switch between the event loop and a worker thread costs time, and a request that crosses from async to sync several times pays it several times. The Django documentation puts it plainly: synchronous middleware between an ASGI server and an asynchronous view forces a switch into sync mode for the middleware and back for the view, and Django also holds the sync thread open so that middleware exceptions can propagate. For ordinary views that query the database and return, it says this is "not usually a meaningful penalty". It matters when ASGI is chosen for high concurrency on non-database waiting, such as calling other HTTP services or holding long-lived connections, because the extra thread per request caps that concurrency. §1.14 shows how a middleware avoids the switch, and §18 measures it.</p>
+<p>Under WSGI the whole request runs on the thread the server called the application from. Under ASGI the sync view ran somewhere else, in a worker thread.</p>
+<p>Each hand-over between the event loop and a worker thread costs time, and a request that crosses from async to sync several times pays it several times. The Django documentation puts it plainly: synchronous middleware between an ASGI server and an asynchronous view forces a switch into sync mode for the middleware and back for the view, and Django also holds the sync thread open so that middleware exceptions can propagate. For ordinary views that query the database and return, it says this is "not usually a meaningful penalty". It matters when ASGI is chosen for high concurrency on non-database waiting, such as calling other HTTP services or holding long-lived connections, because the extra thread per request caps that concurrency. §1.14 shows how a middleware avoids the switch, and §18 measures it.</p>
 <p>Two more facts complete the picture:</p>
 <ul>
 <li><strong>There is no <code>ASGI_APPLICATION</code> setting in Django.</strong> <code>runserver</code> serves WSGI. The setting of that name belongs to Daphne and Channels, whose <code>runserver</code> replacement reads it. An ASGI server is pointed at <code>config.asgi:application</code> on its command line, exactly as Gunicorn is pointed at <code>config.wsgi:application</code>.</li>
 <li><strong>Django's <code>ASGIHandler</code> serves only <code>http</code> scopes.</strong> A <code>websocket</code> scope raises <code>ValueError</code>. WebSockets need Channels or another ASGI framework in front of Django; §18 covers the options.</li>
 </ul>
-<p>Django's documentation also describes what a disconnect does under ASGI: "For long-lived requests, a client may disconnect before the view returns a response. In this case, an <code>asyncio.CancelledError</code> will be raised in the view." That is the <code>http.disconnect</code> wait above doing its job. A WSGI server has no equivalent: the view runs to the end whether anyone is still listening or not.</p>
+<p>Django's documentation also describes what a disconnect does under ASGI: "For long-lived requests, a client may disconnect before the view returns a response. In this case, an <code>asyncio.CancelledError</code> will be raised in the view." That is the <code>http.disconnect</code> wait above doing its job: on a phone call, you can hear the caller hang up. A WSGI server has no equivalent. A letter cannot be taken back, and the view runs to the end whether anyone is still listening or not.</p>
 <h2 id="section-0-15-the-handler-and-the-request-signals">1.5 The Handler and the Request Signals</h2>
-<p>Between the server interface and the middleware sits the handler, the <code>WSGIHandler</code> or <code>ASGIHandler</code> from §1.3 and §1.4. For each request it does the same five things, in this order:</p>
+<p>Between the server interface and the middleware sits the handler, the <code>WSGIHandler</code> or <code>ASGIHandler</code> from §1.3 and §1.4. It is the post-room clerk. For each request it does the same five things, in this order:</p>
 <ol>
 <li>Store the <code>SCRIPT_NAME</code> prefix for this request (§1.3).</li>
 <li>Send the <strong><code>request_started</code></strong> signal.</li>
@@ -1170,13 +1328,14 @@ ASGI: main thread: False
 <li>Call the middleware chain with the request, and get a response back.</li>
 <li>Hand the response to the server. When the server <em>closes</em> it, the response sends the <strong><code>request_finished</code></strong> signal.</li>
 </ol>
-<p>A <strong>signal</strong> is Django's publish-and-subscribe mechanism: code sends a named event, and any function connected to that signal is called with it. §19 covers signals in general. Three of Django's built-in signals belong to the request lifecycle:</p>
+<p>Steps 2 and 5 need a new idea. Imagine the clerk rings a bell when a letter arrives, and another when its reply leaves. The clerk does not know who is listening. Anyone in the building who cares, the cleaner, the security guard, the person counting letters, can listen for the bell and do their own job when it rings.</p>
+<p>That is a <strong>signal</strong>: Django's publish-and-subscribe mechanism. Code sends a named event, and any function connected to that signal is called with it. The sender does not know, or need to know, who the receivers are. §19 covers signals in general. Three of Django's built-in signals belong to the request lifecycle:</p>
 <ul>
 <li><strong><code>request_started</code></strong> is sent before Django builds the request object. Its receivers get the <code>environ</code> (WSGI) or <code>scope</code> (ASGI), not a request.</li>
 <li><strong><code>request_finished</code></strong> is sent when the response is closed, after the last byte of the body has been handed to the server.</li>
 <li><strong><code>got_request_exception</code></strong> is sent when a view or middleware raises an exception that becomes a 500 response. Its receivers get the <code>request</code>.</li>
 </ul>
-<p>Django connects some of its own code to these signals, and that code explains behaviour that otherwise looks like magic:</p>
+<p>Django connects some of its own code to these signals, and that code explains behaviour that otherwise looks like magic. The next example asks each signal for its list of receivers, and prints their names. (<code>receivers</code> is an internal list of tuples; the example only reads it, to show what is connected.)</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.core.signals</span><span class="w"> </span><span class="kn">import</span> <span class="n">request_finished</span><span class="p">,</span> <span class="n">request_started</span>
 
@@ -1196,7 +1355,8 @@ finished: ['close_old_connections', 'close_caches', 'reset_urlconf']
 <li><strong><code>close_caches</code></strong> closes the connections of the configured cache backends at the end of each request (§17).</li>
 <li><strong><code>reset_urlconf</code></strong> puts the URL configuration back to <code>ROOT_URLCONF</code> after a request that changed it (§1.10). It is connected when Django's handler module is first imported, which is why the example imports <code>config.wsgi</code> first, as every server process does.</li>
 </ul>
-<p>The next example connects a receiver to each of the three signals and calls the WSGI application directly, so the moment of each one is visible. Note where <code>request_finished</code> prints: not when the application returns, but when the response is closed.</p>
+<p>So the listeners are Django's own housekeeping: clearing the query log, replacing dead database connections, closing cache connections, restoring the URL configuration. None of it is code you wrote, and all of it runs on every request.</p>
+<p>Now we add listeners of our own. The next example connects a receiver to each of the three signals and calls the WSGI application directly, so the moment of each one is visible. Each receiver is an ordinary function that prints a line; <code>connect()</code> adds it to the signal's list. Note where <code>request_finished</code> prints: not when the application returns, but when the response is closed.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">wsgiref.util</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_testing_defaults</span>
 
@@ -1245,22 +1405,24 @@ Not Found: /shop/checkout/
   server closed the response
 </code></pre></div>
 
-<p>The <code>checkout</code> view raises <code>KeyError</code>, so the second request should have ended in a 500 and sent <code>got_request_exception</code>. It did neither: it ended in a 404, and the log line between the signals, written by Django's <code>django.request</code> logger (which records every response with a status of 400 or more), says "Not Found". The request for <code>/shop/checkout/</code> never reached <code>checkout</code>. It reached <code>product_detail</code>, which found no product called <code>checkout</code>, because of the mistake planted in §1.1's URL patterns. §1.6 finds it, and §1.15 shows <code>got_request_exception</code> firing for a real 500.</p>
+<p>The first request is the normal case. <code>request_started</code> rang before anything else, the application returned <code>200 OK</code>, and <code>request_finished</code> rang only when the example called <code>body.close()</code>, as a server does, <em>after</em> the application had returned.</p>
+<p>The second request is a surprise. The <code>checkout</code> view raises <code>KeyError</code>, so the second request should have ended in a 500 and sent <code>got_request_exception</code>. It did neither: it ended in a 404, and the log line between the signals, written by Django's <code>django.request</code> logger (which records every response with a status of 400 or more), says "Not Found". The request for <code>/shop/checkout/</code> never reached <code>checkout</code>. It reached <code>product_detail</code>, which found no product called <code>checkout</code>, because of the mistake planted in §1.1's URL patterns. §1.6 finds it, and §1.15 shows <code>got_request_exception</code> firing for a real 500.</p>
 <p>Two practical consequences:</p>
 <ul>
 <li><strong><code>request_finished</code> waits for the body.</strong> For a <code>StreamingHttpResponse</code> that streams a large export, it is sent only after the last chunk, which may be minutes later. Code that must run "after the response" for a fast response but cannot wait for a slow one does not belong on this signal.</li>
 <li><strong>Signals are synchronous calls inside the request.</strong> A slow receiver on <code>request_started</code> slows every request. Under ASGI, Django sends them with <code>asend</code>, which runs synchronous receivers in a thread.</li>
 </ul>
 <h2 id="section-0-16-url-resolution-from-a-path-to-a-view">1.6 URL Resolution: From a Path to a View</h2>
-<p>When the request reaches the innermost layer of the middleware, Django has to decide which view to call. That step is <strong>URL resolution</strong>, and its input is one string: <code>request.path_info</code>, the path without the domain, without the query string, and without any <code>SCRIPT_NAME</code> prefix.</p>
-<p>Resolution starts from the module named by <strong><code>ROOT_URLCONF</code></strong>, the <em>root URLconf</em>. A URLconf is any Python module with a variable called <strong><code>urlpatterns</code></strong>, a list of patterns. Django tries them <strong>in order, and the first match wins</strong>:</p>
+<p>When the request reaches the innermost layer of the middleware, Django has to decide which view to call. That step is <strong>URL resolution</strong>, and its input is one string: <code>request.path_info</code>, the path without the domain, without the query string, and without any <code>SCRIPT_NAME</code> prefix. For <code>https://shop.example.com/shop/green-tea/?ref=mail</code>, that string is <code>/shop/green-tea/</code>.</p>
+<p>In the post room, this is the company directory at the end of the corridor. The clerk reads it from the top, one entry at a time, and sends the letter to the first department whose entry fits. The clerk does not read on to look for a better fit.</p>
+<p>Django's directory works the same way. Resolution starts from the module named by <strong><code>ROOT_URLCONF</code></strong>, the <em>root URLconf</em>. A URLconf is any Python module with a variable called <strong><code>urlpatterns</code></strong>, a list of patterns. Django tries them <strong>in order, and the first match wins</strong>:</p>
 <ul>
 <li><strong><code>path("route/", view, name="...")</code></strong> matches a route string, which may contain <code>&lt;converter:name&gt;</code> placeholders (§1.7).</li>
 <li><strong><code>include("app.urls")</code></strong> matches a prefix, cuts it off, and continues with the patterns of another URLconf. That is how <code>/shop/green-tea/</code> reaches <code>shop/urls.py</code>: <code>config/urls.py</code> matched <code>shop/</code>, and <code>shop.urls</code> then sees <code>green-tea/</code>.</li>
 </ul>
 <p>Routes never start with a slash. The path is matched without its leading <code>/</code>, and the root URLconf's <code>""</code> route matches the site root.</p>
 <h3 id="section-0-seeing-what-matched-resolve-and-resolvermatch">Seeing what matched: <code>resolve()</code> and <code>ResolverMatch</code></h3>
-<p><code>django.urls.resolve()</code> runs exactly the resolution the handler runs, and returns a <strong><code>ResolverMatch</code></strong>: an object describing the view that matched and how. After a real request, the same object is on <code>request.resolver_match</code>, so views, middleware and templates can read it.</p>
+<p>You can look things up in the directory yourself, without sending a request. <code>django.urls.resolve()</code> runs exactly the resolution the handler runs, and returns a <strong><code>ResolverMatch</code></strong>: an object describing the view that matched and how. After a real request, the same object is on <code>request.resolver_match</code>, so views, middleware and templates can read it.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">resolve</span>
 
@@ -1275,9 +1437,16 @@ view: order_detail | args: () | kwargs: {'pk': 42}
 name: order | view_name: shop:order | route: shop/orders/&lt;int:pk&gt;/
 </code></pre></div>
 
-<p><code>route</code> is the complete pattern that matched, with the <code>include()</code> prefix joined on. It is the right value to use as a label for a request in monitoring and logs: <code>shop/orders/&lt;int:pk&gt;/</code> groups every order page under one name, where the raw path would make every order a separate line.</p>
+<p>Line by line:</p>
+<ul>
+<li><code>func</code> is the view that will run, <code>order_detail</code>.</li>
+<li><code>kwargs</code> holds the arguments the view will receive: <code>pk</code> is <code>42</code>, already an integer (§1.7 explains how).</li>
+<li><code>url_name</code> is the pattern's own name, <code>order</code>, and <code>view_name</code> adds the namespace in front of it, <code>shop:order</code> (§1.8).</li>
+<li><code>route</code> is the complete pattern that matched, with the <code>include()</code> prefix joined on.</li>
+</ul>
+<p><code>route</code> is worth remembering. It is the right value to use as a label for a request in monitoring and logs: <code>shop/orders/&lt;int:pk&gt;/</code> groups every order page under one name, where the raw path would make every order a separate line.</p>
 <h3 id="section-0-the-planted-bug-first-match-wins">The planted bug: first match wins</h3>
-<p>§1.5's request for <code>/shop/checkout/</code> ran <code>product_detail</code>. <code>resolve()</code> says why:</p>
+<p>Back to the mystery from §1.5: the request for <code>/shop/checkout/</code> ran <code>product_detail</code>. <code>resolve()</code> says why:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">resolve</span>
@@ -1297,6 +1466,7 @@ Not Found: /shop/about/
 </code></pre></div>
 
 <p>The pattern <code>&lt;slug:slug&gt;/</code> comes third in <code>shop/urls.py</code>, after <code>""</code> and <code>nav/</code>. A slug is any run of letters, digits, hyphens and underscores, so <code>about</code>, <code>checkout</code>, <code>staff</code>, <code>forgot</code>, <code>echo</code> and <code>prices</code> are all valid slugs. The slug pattern matched first, the six patterns after it were never tried, and the product view answered every one of those pages with "no product". <code>nav/</code> works only because it happens to come before the slug pattern, and <code>orders/7/</code> only because it contains a second slash, which a slug cannot match.</p>
+<p>In the directory's terms, an entry near the top said "anything with one word in it: Products department". Every entry below it that is also one word, "About", "Checkout", "Staff", could never be reached, because the clerk stopped reading at the Products line.</p>
 <p>This bug is common in real projects, and nothing reports it: Django does not warn about a pattern that can never match. The fix is ordering. <strong>Put specific patterns before general ones</strong>, and catch-all patterns such as a bare slug last:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
@@ -1333,7 +1503,7 @@ Not Found: /shop/about/
 
 <p>A design that avoids the problem altogether gives the catch-all its own prefix, such as <code>products/&lt;slug:slug&gt;/</code>, so that no future page can collide with a product slug. The fix by ordering still leaves one trap: a product whose slug is <code>about</code> can never be shown.</p>
 <h3 id="section-0-when-nothing-matches-resolver404">When nothing matches: <code>Resolver404</code></h3>
-<p>When no pattern matches, <code>resolve()</code> raises <strong><code>Resolver404</code></strong>, a subclass of <code>Http404</code>. Its argument records every pattern that was tried, as a list of paths through the URLconf tree. The handler turns it into a 404 response; with <code>DEBUG = True</code> that page lists the same patterns, which is how a developer sees what Django tried.</p>
+<p>Sometimes no entry in the directory fits at all. When no pattern matches, <code>resolve()</code> raises <strong><code>Resolver404</code></strong>, a subclass of <code>Http404</code>. Its argument records every pattern that was tried, as a list of paths through the URLconf tree. The handler turns it into a 404 response; with <code>DEBUG = True</code> that page lists the same patterns, which is how a developer sees what Django tried.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resolver404</span><span class="p">,</span> <span class="n">resolve</span>
 
@@ -1362,9 +1532,11 @@ Not Found: /shop/about/
 
 <p>Every pattern was tried, including <code>orders/&lt;int:pk&gt;/</code>, which failed because <code>abc</code> is not an integer, and <code>&lt;slug:slug&gt;/</code>, which failed because <code>orders/abc</code> contains a slash.</p>
 <h3 id="section-0-trailing-slashes">Trailing slashes</h3>
-<p>Each route above ends in <code>/</code>, so <code>/shop/about</code> (no slash) does not match <code>about/</code>. Django has no rule that URLs must end in a slash; the patterns decide. The convention of ending every route in a slash, combined with <code>CommonMiddleware</code>'s <code>APPEND_SLASH</code> redirect (§1.11), means a user who types the URL without the slash is redirected to the right page. A project should pick one convention and use it everywhere.</p>
+<p>A route is matched character by character, and the final slash is a character like any other. Each route above ends in <code>/</code>, so <code>/shop/about</code> (no slash) does not match <code>about/</code>. Django has no rule that URLs must end in a slash; the patterns decide. The convention of ending every route in a slash, combined with <code>CommonMiddleware</code>'s <code>APPEND_SLASH</code> redirect (§1.11), means a user who types the URL without the slash is redirected to the right page. A project should pick one convention and use it everywhere.</p>
 <h2 id="section-0-17-path-converters-and-re-path">1.7 Path Converters and <code>re_path</code></h2>
-<p>A <strong>path converter</strong> is the <code>int</code> in <code>&lt;int:pk&gt;</code>. It does two jobs:</p>
+<p>A URL is text. <code>/shop/orders/42/</code> does not contain the number 42; it contains the two characters <code>4</code> and <code>2</code>. A view that looks up order 42 wants a real number, and a URL like <code>/shop/orders/abc/</code> should not reach it at all.</p>
+<p>Think of a paper form with a box labelled "order number, digits only". The clerk refuses a form whose box holds letters, and for a good form passes the department a number, not the handwriting.</p>
+<p>A <strong>path converter</strong> is that box: the <code>int</code> in <code>&lt;int:pk&gt;</code>. It does two jobs:</p>
 <ul>
 <li><strong>Matching.</strong> It supplies a regular expression for the placeholder, so <code>&lt;int:pk&gt;</code> matches only digits.</li>
 <li><strong>Conversion.</strong> It turns the matched text into a Python value before the view sees it, and turns a value back into text when a URL is built (§1.8).</li>
@@ -1418,7 +1590,7 @@ Not Found: /shop/about/
 
 <p>The view needs no <code>int(pk)</code> and no <code>try/except ValueError</code>, because a path that is not an integer never reached it: it failed to match, and became a 404 (§1.6's <code>Resolver404</code>).</p>
 <h3 id="section-0-writing-a-converter-register-converter">Writing a converter: <code>register_converter</code></h3>
-<p>A custom converter is a class with three members:</p>
+<p>The five built-in converters cover most URLs. When none fits, you can write your own box. A custom converter is a class with three members:</p>
 <ul>
 <li><strong><code>regex</code></strong>, a class attribute: the regular expression to match.</li>
 <li><strong><code>to_python(value)</code></strong>, which converts the matched string. If it raises <code>ValueError</code>, Django treats the pattern as <strong>not matching</strong> and carries on with the next pattern.</li>
@@ -1481,10 +1653,15 @@ Not Found: /shop/sales/2026-13-45/
 /shop/sales/2026-13-45/ 404
 </code></pre></div>
 
-<p><code>2026-13-45</code> matched the regular expression (four digits, two, two) but <code>date.fromisoformat</code> rejected month 13. The <code>ValueError</code> made the pattern fail, no other pattern matched, and the result was a 404, which is the right answer for a URL that names a date that does not exist. Without the converter, the view would have to parse the date and turn the error into a 404 itself, and every view taking a date would repeat that code.</p>
+<p>Line by line:</p>
+<ul>
+<li><code>2026-10-05</code> matched, and the view received a real <code>date</code>: it could ask for the weekday, <code>Monday</code>, without parsing anything.</li>
+<li><code>2026-13-45</code> matched the regular expression (four digits, two, two) but <code>date.fromisoformat</code> rejected month 13. The <code>ValueError</code> made the pattern fail, no other pattern matched, and the result was a 404, which is the right answer for a URL that names a date that does not exist.</li>
+</ul>
+<p>Without the converter, the view would have to parse the date and turn the error into a 404 itself, and every view taking a date would repeat that code.</p>
 <p>The regex should still be as tight as it can be. <code>to_python</code> runs on every path the regex matches, so a loose regex makes it run, and fail, for paths that were never dates.</p>
 <h3 id="section-0-re-path-when-a-route-string-is-not-enough"><code>re_path()</code>: when a route string is not enough</h3>
-<p><strong><code>re_path()</code></strong> takes a regular expression instead of a route string. Named groups, <code>(?P&lt;name&gt;...)</code>, become keyword arguments; unnamed groups become positional ones. It exists for patterns a converter cannot express neatly, and for old URLconfs written before <code>path()</code> existed in Django 2.0.</p>
+<p><strong><code>re_path()</code></strong> takes a regular expression instead of a route string. A regular expression is a small pattern language for text: <code>[0-9]{4}</code> means "exactly four digits", <code>^</code> means "the start" and <code>$</code> means "the end". Named groups, <code>(?P&lt;name&gt;...)</code>, become keyword arguments; unnamed groups become positional ones. It exists for patterns a converter cannot express neatly, and for old URLconfs written before <code>path()</code> existed in Django 2.0.</p>
 <p>Its catch is conversion: a regular expression only matches text, so <strong>every captured value reaches the view as a string</strong>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
@@ -1495,12 +1672,15 @@ Not Found: /shop/sales/2026-13-45/
 <div class="highlight" data-lang="text"><pre><span></span><code>{"year": "2024", "type": "str"}
 </code></pre></div>
 
-<p><code>year</code> is <code>"2024"</code>, a string, where <code>&lt;int:year&gt;</code> would have given <code>2024</code>. The view must convert it, and handle the failure. A <code>re_path</code> expression should also start with <code>^</code> and end with <code>$</code> (or <code>\Z</code>). Django matches from the start of the remaining path anyway, but without <code>$</code> the pattern <code>archive/(?P&lt;year&gt;[0-9]{4})/</code> would also match <code>archive/2024/anything</code>.</p>
+<p><code>year</code> is <code>"2024"</code>, a string, where <code>&lt;int:year&gt;</code> would have given <code>2024</code>. The view must convert it, and handle the failure. The form box checked that the handwriting looked like four digits, but passed the handwriting on.</p>
+<p>A <code>re_path</code> expression should also start with <code>^</code> and end with <code>$</code> (or <code>\Z</code>). Django matches from the start of the remaining path anyway, but without <code>$</code> the pattern <code>archive/(?P&lt;year&gt;[0-9]{4})/</code> would also match <code>archive/2024/anything</code>.</p>
 <p>In practice, prefer <code>path()</code> with a custom converter over <code>re_path()</code>. It gives the view typed values, gives <code>reverse()</code> a way back (<code>to_url</code>), and gives the pattern a name that says what it matches.</p>
 <h2 id="section-0-18-naming-urls-reverse-namespaces-and-reverse-lazy">1.8 Naming URLs: <code>reverse()</code>, Namespaces and <code>reverse_lazy</code></h2>
-<p>Resolution goes from a path to a view. Its opposite, <strong>reversing</strong>, goes from a view's name to a path. Templates, redirects and API responses all need URLs, and writing them by hand (<code>"/shop/orders/" + str(pk) + "/"</code>) hard-codes the URL structure in every place that links to a page. Rename one prefix and every hand-written link breaks silently.</p>
+<p>Resolution goes from a path to a view. Its opposite, <strong>reversing</strong>, goes from a view's name to a path.</p>
+<p>Why would you need that? Templates, redirects and API responses all need URLs, and writing them by hand (<code>"/shop/orders/" + str(pk) + "/"</code>) hard-codes the URL structure in every place that links to a page. Rename one prefix and every hand-written link breaks silently.</p>
+<p>In an office, nobody writes "room 12" on an internal memo. They write "Accounts", and the directory says where Accounts is today. When Accounts moves to room 30, every memo addressed to "Accounts" still arrives.</p>
 <h3 id="section-0-named-url-patterns">Named URL patterns</h3>
-<p>The solution is the <strong>named URL pattern</strong>: a pattern given a <code>name=</code> argument in <code>path()</code> or <code>re_path()</code>. Code then asks for a URL by that name, and Django builds it from the patterns. Because every link goes through the name, a named URL pattern can change its route, its prefix or the app it is included from, and every link follows. Only renaming the pattern itself breaks links, and then loudly:</p>
+<p>Django's version of "Accounts" is the <strong>named URL pattern</strong>: a pattern given a <code>name=</code> argument in <code>path()</code> or <code>re_path()</code>. Code then asks for a URL by that name, and Django builds it from the patterns. Because every link goes through the name, a named URL pattern can change its route, its prefix or the app it is included from, and every link follows. Only renaming the pattern itself breaks links, and then loudly:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">date</span>
 
@@ -1531,8 +1711,9 @@ NoReverseMatch: Reverse for 'order' with keyword arguments '{'pk': 'abc'}' not f
 <li><strong><code>NoReverseMatch</code></strong> means no pattern with that name accepts those arguments. The message lists the patterns it tried, which is the fastest way to see a wrong argument. In a template, <code>{% url %}</code> raises the same error, and the whole page fails to render rather than shipping a broken link.</li>
 </ul>
 <h3 id="section-0-url-namespaces-app-name-and-namespace">URL namespaces: <code>app_name</code> and <code>namespace</code></h3>
-<p>The names above are written <code>shop:order</code>, not <code>order</code>, because each lives in a <strong>URL namespace</strong>. The <strong><code>app_name = "shop"</code></strong> line in <code>shop/urls.py</code> puts every name in that file into the <em>application namespace</em> <code>shop</code>. Without it, two apps that each name a pattern <code>detail</code> would collide, and <code>reverse("detail")</code> would silently return whichever Django found first.</p>
-<p>An application namespace also allows one app to be included more than once. Each inclusion then gets its own <strong>instance namespace</strong>, given by <code>include(..., namespace=...)</code>. Here the shop is included a second time, at <code>/store/</code>:</p>
+<p>Now suppose two companies share the building, and both have an "Accounts" department. A memo to "Accounts" is ambiguous. It has to say "the shop's Accounts".</p>
+<p>That is why the names above are written <code>shop:order</code>, not <code>order</code>: each lives in a <strong>URL namespace</strong>. The <strong><code>app_name = "shop"</code></strong> line in <code>shop/urls.py</code> puts every name in that file into the <em>application namespace</em> <code>shop</code>. Without it, two apps that each name a pattern <code>detail</code> would collide, and <code>reverse("detail")</code> would silently return whichever Django found first.</p>
+<p>An application namespace also allows one app to be included more than once, like one company with two branches in the building, each with its own Accounts. Each inclusion then gets its own <strong>instance namespace</strong>, given by <code>include(..., namespace=...)</code>. Here the shop is included a second time, at <code>/store/</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -1567,7 +1748,8 @@ shop store store:detail
 <li><strong><code>current_app</code></strong> is how a page inside <code>/store/</code> keeps its links inside <code>/store/</code>. A view passes <code>request.resolver_match.namespace</code> as <code>current_app</code>, and the template engine does it automatically when a request is rendered through <code>render()</code> or <code>TemplateResponse</code>, so <code>{% url "shop:list" %}</code> in a page served under <code>/store/</code> points to <code>/store/</code>.</li>
 </ul>
 <h3 id="section-0-reverse-lazy-urls-needed-before-the-urlconf-is-loaded"><code>reverse_lazy</code>: URLs needed before the URLconf is loaded</h3>
-<p><code>reverse()</code> needs the URLconf, and the first call imports it. Most of the time that is fine. It goes wrong when <code>reverse()</code> runs while the URLconf <em>itself</em> is being imported, which happens whenever a module that the URLconf imports calls <code>reverse()</code> at the top level. <code>shop/urls.py</code> imports <code>shop.views</code>, and <code>shop.views</code> imports <code>shop.menu</code>. Here is <code>menu.py</code> written with <code>reverse()</code>:</p>
+<p><code>reverse()</code> needs the URLconf, and the first call imports it. Most of the time that is fine. It goes wrong when <code>reverse()</code> runs while the URLconf <em>itself</em> is being imported. That is like asking for a room number from a directory that is still at the printer: the page you need does not exist yet.</p>
+<p>This happens whenever a module that the URLconf imports calls <code>reverse()</code> at the top level. <code>shop/urls.py</code> imports <code>shop.views</code>, and <code>shop.views</code> imports <code>shop.menu</code>. Here is <code>menu.py</code> written with <code>reverse()</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/menu.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">reverse</span>
 
@@ -1588,7 +1770,7 @@ shop store store:detail
 </code></pre></div>
 
 <p>The request imported <code>config.urls</code>, which imported <code>shop.urls</code>, which imported <code>shop.views</code>, which imported <code>shop.menu</code>, which called <code>reverse()</code>, which needs <code>config.urls</code>, which is still half imported and has no <code>urlpatterns</code> yet. Django's message names the likely cause.</p>
-<p><strong><code>reverse_lazy()</code></strong> fixes it by not reversing at all until the value is used as a string. It returns a lazy proxy object, and the URL is computed each time the proxy is converted to a string. That is the version §1.1 wrote, and it is restored here:</p>
+<p>The fix is to write down the request instead of the answer: a note saying "look up Accounts when this memo is sent", read only once the directory is printed. <strong><code>reverse_lazy()</code></strong> fixes it by not reversing at all until the value is used as a string. It returns a lazy proxy object, and the URL is computed each time the proxy is converted to a string. That is the version §1.1 wrote, and it is restored here:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/menu.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">reverse_lazy</span>
 
@@ -1615,11 +1797,24 @@ About: /shop/about/
 Order 7: /shop/orders/7/
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><code>MENU[0]</code> holds the label and the lazy value. Its type is <code>__proxy__</code>, Django's lazy object, not a string: no URL has been built yet.</li>
+<li><code>str(url)</code> asked for the string, and only then did Django reverse <code>shop:list</code> into <code>/shop/</code>.</li>
+<li>The <code>nav</code> page works again, because by the time it turns the menu into text, the URLconf has long finished importing.</li>
+</ul>
 <p>Django's documentation lists the usual places <code>reverse_lazy</code> is needed: the <code>url</code> or <code>success_url</code> attribute of a class-based view (§11), a decorator argument such as <code>login_url</code>, and a default value in a function signature. All three are evaluated when a module is imported. Inside a function that runs during a request, use plain <code>reverse()</code>. Because the lazy value is recomputed on each use, it also picks up the request's script prefix, which is why §1.3's <code>/app</code> request got <code>/app</code> links from a module-level constant.</p>
 <h2 id="section-0-19-middleware-layers-around-every-view">1.9 Middleware: Layers Around Every View</h2>
-<p>Some work must happen on every request, whatever view it reaches: checking the host header, loading the session, identifying the user, adding security headers to the response. Writing it into every view would repeat it hundreds of times and miss it in the one view someone forgot. <strong>Middleware</strong> is where that work goes: a layer of code that every request passes through on its way to the view, and every response passes through on its way back.</p>
+<p>Some work must happen on every request, whatever view it reaches: checking the host header, loading the session, identifying the user, adding security headers to the response. Writing it into every view would repeat it hundreds of times and miss it in the one view someone forgot.</p>
+<p>The post room solves the same problem with the corridor of desks. No department checks badges or stamps "confidential" itself. The desk does it, once, for every letter, and no department can forget.</p>
+<p><strong>Middleware</strong> is Django's corridor: a layer of code that every request passes through on its way to the view, and every response passes through on its way back.</p>
 <h3 id="section-0-the-shape-of-a-middleware">The shape of a middleware</h3>
-<p>A middleware is a <strong>factory</strong>: a callable that Django calls once, at start-up, with one argument, <code>get_response</code>, and that returns another callable. The returned callable is then called once per request, with the request, and must return a response. Inside, it calls <code>get_response(request)</code> to pass the request to the next layer and get its response.</p>
+<p>A middleware has two moments in its life, and its shape follows from them:</p>
+<ul>
+<li><strong>Once, at start-up</strong>, the desk is set up. Django calls the middleware with one argument, <code>get_response</code>, and keeps what it returns. A callable used like this, to build and return another callable, is called a <strong>factory</strong>.</li>
+<li><strong>Once per request</strong>, a letter arrives at the desk. Django calls the returned callable with the request, and it must return a response.</li>
+</ul>
+<p>Inside, the per-request callable calls <code>get_response(request)</code> to pass the request to the next layer and get its response. In post-room terms, <code>get_response</code> means "hand this letter to the next desk along, and wait for the reply to come back".</p>
 <p>There are two ways to write that shape, and §1.3 already used both:</p>
 <ul>
 <li>A <strong>function</strong> that takes <code>get_response</code>, does any set-up, and returns an inner function. <code>outer</code> in <code>shop/middleware.py</code> is one.</li>
@@ -1664,20 +1859,31 @@ client received 200 Glass teapot with infuser, 1 l
 <figure id="fig-dj-onion" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 760 456" role="img" aria-labelledby="t-dj-onion d-dj-onion" style="display:block;width:100%;min-width:540px;height:auto;max-width:760px;margin:0 auto"><title id="t-dj-onion">Middleware is an onion: each layer wraps the layers inside it</title><desc id="d-dj-onion">Two nested frames. The outer frame is the middleware called outer, first in MIDDLEWARE; inside it is the frame for Inner, second; inside that is the view. The request crosses outer, then Inner, reaches the view, and the response crosses Inner, then outer. The five printed steps are numbered: outer before the view, Inner before the view, the view, Inner after the view, outer after the view with status 200.</desc><defs><marker id="ah-dj-onion" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="20" y="24" width="720" height="372" rx="14" style="fill:none;stroke:#7c8cff;stroke-width:1.4" stroke-dasharray="6 5"/><text x="34" y="44" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#7c8cff;opacity:1">outer  (first in MIDDLEWARE)</text><rect x="80" y="92" width="600" height="236" rx="14" style="fill:none;stroke:#4a9eda;stroke-width:1.4" stroke-dasharray="6 5"/><text x="94" y="112" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#4a9eda;opacity:1">Inner  (second in MIDDLEWARE)</text><rect x="250" y="176" width="260" height="76" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="380" y="208.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">the view</text><text x="380" y="229" text-anchor="middle" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">product_detail(request, slug)</text><path d="M150,52 L150,206 Q150,214 158,214 L244,214" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-onion)"/><path d="M516,214 L602,214 Q610,214 610,206 L610,52" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-onion)"/><text x="166" y="70" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">1  outer: before the view</text><text x="166" y="140" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">2  Inner: before the view</text><text x="380" y="278" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">3  the view runs once</text><text x="594" y="140" text-anchor="end" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">4  Inner: after the view</text><text x="594" y="70" text-anchor="end" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">5  outer: after the view, 200</text><text x="380" y="360" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text-dim);opacity:1">request: top of the list → bottom   ·   response: bottom → top</text><text x="380" y="430" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">set-up runs once per process, from the inside out: “Inner: set up” printed before “outer: set up”</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The order §1.9 printed. The first layer in the list is the outermost: it sees the request first and the response last. The chain is built from the inside out, so Inner was set up before outer.</figcaption></figure>
 <!-- /fig:dj-onion -->
 
-<p>This is why the position in <code>MIDDLEWARE</code> matters so much. A middleware near the top sees the raw request before anything else touches it, and has the final word on the response. A middleware near the bottom sees a request that every layer above it has prepared, with <code>request.session</code> and <code>request.user</code> already set, and its changes to the response can still be overridden by every layer above. <strong>A layer can only rely on what the layers above it put on the request</strong>, and §1.11 shows Django refusing to run when that rule is broken.</p>
+<p>This is why the position in <code>MIDDLEWARE</code> matters so much. The desk nearest the door sees each letter first and each reply last. A middleware near the top sees the raw request before anything else touches it, and has the final word on the response. A middleware near the bottom sees a request that every layer above it has prepared, with <code>request.session</code> and <code>request.user</code> already set, and its changes to the response can still be overridden by every layer above. <strong>A layer can only rely on what the layers above it put on the request</strong>, and §1.11 shows Django refusing to run when that rule is broken.</p>
 <h3 id="section-0-answering-early">Answering early</h3>
-<p>A middleware does not have to call <code>get_response</code>. If it returns a response without calling it, the request never reaches the layers below it or the view. That is how a middleware can refuse a request: a maintenance switch, a blocked IP address, a rate limit, a redirect to HTTPS. The layers <em>above</em> it still see the response on its way out, because from their point of view <code>get_response</code> simply returned. §1.11 shows <code>SecurityMiddleware</code> doing exactly this to redirect to HTTPS.</p>
+<p>A middleware does not have to call <code>get_response</code>. If it returns a response without calling it, the request never reaches the layers below it or the view. The desk wrote its own reply, and the letter went no further down the corridor. That is how a middleware can refuse a request: a maintenance switch, a blocked IP address, a rate limit, a redirect to HTTPS. The layers <em>above</em> it still see the response on its way out, because from their point of view <code>get_response</code> simply returned. §1.11 shows <code>SecurityMiddleware</code> doing exactly this to redirect to HTTPS.</p>
 <h3 id="section-0-what-belongs-in-middleware">What belongs in middleware</h3>
-<p>Middleware runs on every request, including requests for pages that do not need it, so it must be cheap. Good uses share that property: setting headers, attaching a per-request value such as a request ID (exercise 1), choosing a URLconf or a language for the request, logging, and refusing requests early. A database query in a middleware runs on every request, health checks and static files included when Django serves them. Work that only some views need belongs in those views, in a decorator, or in a mixin (§11).</p>
+<p>Every letter passes every desk, including letters the desk has nothing to do with. So a desk's job must be quick. Middleware runs on every request, including requests for pages that do not need it, so it must be cheap. Good uses share that property: setting headers, attaching a per-request value such as a request ID (exercise 1), choosing a URLconf or a language for the request, logging, and refusing requests early. A database query in a middleware runs on every request, health checks and static files included when Django serves them. Work that only some views need belongs in those views, in a decorator, or in a mixin (§11).</p>
 <h2 id="section-0-110-the-hooks-process-view-process-exception-process-templat">1.10 The Hooks: <code>process_view</code>, <code>process_exception</code>, <code>process_template_response</code></h2>
-<p>The shape in §1.9 sees the request before URL resolution and the response after everything. A class-based middleware can also define up to three <strong>hook methods</strong>, which Django calls at points the plain shape cannot reach:</p>
+<p>The shape in §1.9 sees the request before URL resolution and the response after everything. That leaves three moments a desk cannot see:</p>
+<ul>
+<li>After the directory has chosen a department, but before the department starts work. Only then is it known <em>which</em> department the letter is going to.</li>
+<li>When the department drops the letter on the floor, which in Django means the view raises an exception.</li>
+<li>When the department's reply is still a draft, not yet typed out. A desk could add a line to a draft; once it is typed, it is too late.</li>
+</ul>
+<p>A class-based middleware can define up to three <strong>hook methods</strong>, one for each of those moments, which Django calls at points the plain shape cannot reach:</p>
 <ul>
 <li><strong><code>process_view(request, view_func, view_args, view_kwargs)</code></strong> runs after URL resolution and just before the view, so it knows which view is about to run. It returns <code>None</code> to continue, or a response to skip the view.</li>
 <li><strong><code>process_exception(request, exception)</code></strong> runs only if the view raises. It returns <code>None</code> to let the exception continue, or a response to use instead.</li>
 <li><strong><code>process_template_response(request, response)</code></strong> runs only if the view returned a response that has not been rendered yet, such as a <code>TemplateResponse</code>. It may change the template or its context before rendering, and must return a response.</li>
 </ul>
 <p>Django collects these hooks when it builds the chain. It then calls <code>process_view</code> hooks in <strong>list order</strong> (top down), and <code>process_exception</code> and <code>process_template_response</code> hooks in <strong>reverse order</strong> (bottom up), the same direction as the response.</p>
-<p>Here is a middleware that uses all three:</p>
+<p>The file below holds <code>Hooks</code>, a middleware that uses all three, plus four smaller middleware that the rest of this subsection uses one at a time. Read <code>Hooks</code> first. Each hook prints a line, so the output shows when it ran:</p>
+<ul>
+<li><code>process_view</code> closes the shop: if the query string contains <code>closed</code>, it answers with a 503 instead of running the view.</li>
+<li><code>process_exception</code> rescues a <code>KeyError</code> with a friendly 409 page, and lets every other exception carry on.</li>
+<li><code>process_template_response</code> adds a <code>banner</code> to a page that has not been rendered yet.</li>
+</ul>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/hooks.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.core.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">MiddlewareNotUsed</span>
@@ -1803,7 +2009,7 @@ GET /shop/about/
 <li><strong><code>/shop/about/</code></strong>: the view returned a <code>TemplateResponse</code>, which is rendered <em>after</em> the view returns. The hook added <code>banner</code> to its context before rendering, and the page shows it. A plain <code>HttpResponse</code> has already been rendered, so this hook does not run for it.</li>
 </ul>
 <h3 id="section-0-when-the-middleware-itself-fails">When the middleware itself fails</h3>
-<p><code>process_exception</code> handles exceptions raised by <strong>views</strong>, not by middleware. But a middleware that raises still produces a response, because Django wraps <em>every</em> layer, not just the view, in a converter that turns an uncaught exception into an error response. The layer above sees an ordinary 500:</p>
+<p>What if a desk itself drops the letter? <code>process_exception</code> handles exceptions raised by <strong>views</strong>, not by middleware. But a middleware that raises still produces a response, because Django wraps <em>every</em> layer, not just the view, in a converter that turns an uncaught exception into an error response. The layer above sees an ordinary 500:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">override_settings</span>
 
@@ -1821,7 +2027,7 @@ ValueError: middleware failed
 
 <p>That wrapping is why an outer middleware can always add a header or log a status, even for a request that failed deep inside the chain. <code>Client(raise_request_exception=False)</code> asks the test client to return that 500 response; by default, the test client re-raises the original exception instead, so that a test fails with the real traceback.</p>
 <h3 id="section-0-a-view-that-forgets-to-return">A view that forgets to return</h3>
-<p>A view must return a response. One that returns <code>None</code>, usually because a <code>return</code> is missing on one branch, is caught by the handler with a clear message rather than failing later in some middleware:</p>
+<p>A department that hands back an empty envelope is a different failure. A view must return a response. One that returns <code>None</code>, usually because a <code>return</code> is missing on one branch, is caught by the handler with a clear message rather than failing later in some middleware:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
 
@@ -1837,6 +2043,7 @@ ValueError: The view shop.views.forgot didn't return an HttpResponse object. It 
 </code></pre></div>
 
 <h3 id="section-0-switching-a-middleware-off-middlewarenotused">Switching a middleware off: <code>MiddlewareNotUsed</code></h3>
+<p>Some desks are only needed on some days: a desk that adds debugging notes is useful on a developer's machine and pointless in production. Rather than have it check on every letter, the desk can decide at set-up that it is not needed today, and leave the corridor.</p>
 <p>A middleware's set-up may decide that it is not needed in this process, by raising <strong><code>MiddlewareNotUsed</code></strong> from <code>__init__</code> (or from the factory function). Django then leaves it out of the chain entirely, so it costs nothing per request. <code>DebugHeader</code> above does this when <code>DEBUG</code> is off:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">override_settings</span>
@@ -1853,6 +2060,7 @@ DEBUG=False: None
 
 <p>Each iteration creates a new <code>Client</code>, and that is not a detail. A test client builds its middleware chain on its first request and keeps it, exactly as a server process does. A <code>Client</code> created <em>before</em> an <code>override_settings(MIDDLEWARE=...)</code> block goes on using the middleware it already built, and the override silently does nothing.</p>
 <h3 id="section-0-choosing-the-urlconf-per-request-requesturlconf">Choosing the URLconf per request: <code>request.urlconf</code></h3>
+<p>A desk can even swap the directory. Imagine a desk that sees letters addressed to the company's API team and hands the clerk a different directory for those letters only.</p>
 <p>The resolver reads <code>ROOT_URLCONF</code> unless the request says otherwise. A middleware may set <strong><code>request.urlconf</code></strong> to the import path of another URLconf, and resolution for that request starts there instead. That is how one Django project serves an API on its own subdomain with a different URL structure, or serves several tenants with different URLs. <code>api_host</code> in <code>shop/hooks.py</code> does it for any host starting with <code>api.</code>. The API's URLconf is this:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls_api.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">JsonResponse</span>
@@ -1888,6 +2096,7 @@ config.urls
 
 <p>The same path gave a 200 on the API host and a 404 on the main host, because the two requests were resolved against different URLconfs. After the request, <code>reset_urlconf</code> (a <code>request_finished</code> receiver, §1.5) put the default back, so the next request in the same thread does not inherit the API URLconf. <code>reverse()</code> inside an API request also uses the request's URLconf, because the handler activates it for the duration of the request.</p>
 <h2 id="section-0-111-djangos-middleware-stack-and-why-its-order-matters">1.11 Django's Middleware Stack, and Why Its Order Matters</h2>
+<p>So far the corridor held desks we wrote ourselves. A real project's corridor is mostly Django's own desks, and the five extra headers from the start of this section came from them. This subsection walks the default corridor desk by desk.</p>
 <p><code>startproject</code> generates this list (with <code>MessageMiddleware</code> between authentication and clickjacking, which this project leaves out because it does not install the messages app):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">MIDDLEWARE</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">"django.middleware.security.SecurityMiddleware"</span><span class="p">,</span>
@@ -1900,7 +2109,7 @@ config.urls
 <span class="p">]</span>
 </code></pre></div>
 
-<p>Each has one job, and its place in the list follows from what it needs and what it must protect.</p>
+<p>Each has one job, and its place in the list follows from what it needs and what it must protect. A desk that needs the customer's file must sit after the desk that fetches it; a desk that must stamp every reply must sit where every reply passes.</p>
 <p>The built-in middleware are written in an older style than §1.9's. They subclass <strong><code>MiddlewareMixin</code></strong>, which supplies the <code>__init__</code> and <code>__call__</code> of §1.9 and calls two optional methods from them: <strong><code>process_request(request)</code></strong> on the way in, which may return a response to answer early, and <strong><code>process_response(request, response)</code></strong> on the way out, which must return a response. The order rules are the same, because the mixin is just the onion with the "before" and "after" halves split into two methods. The table below says which half each one uses.</p>
 <table>
 <thead>
@@ -1957,7 +2166,7 @@ config.urls
 </tbody>
 </table>
 <h3 id="section-0-watching-the-defaults-work">Watching the defaults work</h3>
-<p>The headers in §1.3's output are the defaults of two of these middleware. Each one has a setting, and the defaults are the safe choice:</p>
+<p>The headers in §1.1's and §1.3's output are the defaults of two of these middleware, plus the <code>Content-Length</code> that <code>CommonMiddleware</code> adds. Each one has a setting, and the defaults are the safe choice:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
 
@@ -1980,6 +2189,7 @@ X-Frame-Options: DENY
 <li><strong><code>Cross-Origin-Opener-Policy: same-origin</code></strong> isolates the page from windows another site opened (<code>SECURE_CROSS_ORIGIN_OPENER_POLICY</code>).</li>
 <li><strong><code>X-Frame-Options: DENY</code></strong> stops other sites from showing the page in a frame, the basis of clickjacking attacks (<code>X_FRAME_OPTIONS</code>; a view can opt out with <code>@xframe_options_exempt</code>).</li>
 </ul>
+<p>That answers the puzzle from the start of this section. Of the six headers, the view wrote <code>Content-Type</code>; <code>CommonMiddleware</code> added <code>Content-Length</code>; <code>SecurityMiddleware</code> added the three in the middle of the list above; and <code>XFrameOptionsMiddleware</code> added <code>X-Frame-Options</code>.</p>
 <p>§16 explains each attack. Here the point is <em>where</em> they are added: on the way out, so they apply to every response that passes back through those layers, including error pages.</p>
 <p>Some protections switch on only with a setting, and only on the requests they make sense for. <strong>HSTS</strong> (<code>Strict-Transport-Security</code>) tells a browser to use HTTPS for this site from now on; it is only meaningful when sent over HTTPS, so <code>SecurityMiddleware</code> adds it only to secure requests. <strong><code>SECURE_SSL_REDIRECT</code></strong> is the inward half, an early answer as described in §1.9:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
@@ -2000,9 +2210,15 @@ https: max-age=31536000; includeSubDomains
 301 https://testserver/shop/green-tea/?ref=mail
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>The plain HTTP request got no HSTS header, because a browser ignores HSTS sent over HTTP anyway.</li>
+<li>The HTTPS request (<code>secure=True</code>) got <code>max-age=31536000</code>, one year in seconds, and <code>includeSubDomains</code>.</li>
+<li>With <code>SECURE_SSL_REDIRECT</code> on, the HTTP request never reached the view: <code>SecurityMiddleware</code> answered it with a 301 to the same address over <code>https</code>, query string included.</li>
+</ul>
 <p>Behind a proxy that terminates TLS, Django sees plain HTTP from the proxy and would redirect forever. The <code>SECURE_PROXY_SSL_HEADER</code> setting tells it which header the proxy uses to say the original request was HTTPS. §23 configures it.</p>
 <h3 id="section-0-the-order-is-enforced-authentication-needs-the-session">The order is enforced: authentication needs the session</h3>
-<p><code>AuthenticationMiddleware</code> finds the user through the session, so it needs <code>request.session</code> to exist when the request reaches it. Remove <code>SessionMiddleware</code>, or put it below authentication, and every request fails at once:</p>
+<p>The desk that attaches the customer's name can only do it after the desk that fetched the customer's file. <code>AuthenticationMiddleware</code> finds the user through the session, so it needs <code>request.session</code> to exist when the request reaches it. Remove <code>SessionMiddleware</code>, or put it below authentication, and every request fails at once:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">override_settings</span>
 
@@ -2023,7 +2239,8 @@ ImproperlyConfigured
 The Django authentication middleware requires session middleware to be installed. Edit your MIDDLEWARE setting to insert 'django.contrib.sessions.middleware.SessionMiddleware' before 'django.contrib.auth.middleware.AuthenticationMiddleware'.
 </code></pre></div>
 
-<p>The rule from §1.9 is what fails here: a layer can only rely on what the layers <em>above</em> it put on the request. Also note what <code>request.user</code> is once both are in the right order: a lazy object, not a user. The session is not read and the user is not loaded from the database until a view or template actually touches <code>request.user</code>. A request that never looks at the user costs no query for it.</p>
+<p>The rule from §1.9 is what fails here: a layer can only rely on what the layers <em>above</em> it put on the request.</p>
+<p>Also note what <code>request.user</code> is once both are in the right order: a lazy object, not a user. Think of a sealed envelope with "customer details" written on it: the desk attaches the envelope, but nobody opens it, and nobody pays for fetching the details, unless a department actually reads it. The session is not read and the user is not loaded from the database until a view or template actually touches <code>request.user</code>. A request that never looks at the user costs no query for it.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.middleware</span><span class="w"> </span><span class="kn">import</span> <span class="n">AuthenticationMiddleware</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.sessions.middleware</span><span class="w"> </span><span class="kn">import</span> <span class="n">SessionMiddleware</span>
@@ -2047,7 +2264,7 @@ after use:  False AnonymousUser
 
 <p>That last example also shows that a middleware chain is nothing more than the objects nesting each other: <code>SessionMiddleware(AuthenticationMiddleware(view))</code> is the onion of §1.9, built by hand.</p>
 <h3 id="section-0-commonmiddleware-and-append-slash"><code>CommonMiddleware</code> and <code>APPEND_SLASH</code></h3>
-<p>With <code>APPEND_SLASH = True</code>, the default, <code>CommonMiddleware</code> handles a path that does not end in a slash and does not match any pattern. It does this <strong>on the way out</strong>, in <code>process_response</code>: the request goes through the rest of the stack and URL resolution as usual, fails with a 404, and only then does <code>CommonMiddleware</code> check whether the same path <em>with</em> a slash would match. If it would, the 404 is replaced by a 301 redirect there. If not, the 404 stands:</p>
+<p>§1.6 promised a rescue for URLs typed without their final slash. With <code>APPEND_SLASH = True</code>, the default, <code>CommonMiddleware</code> handles a path that does not end in a slash and does not match any pattern. It does this <strong>on the way out</strong>, in <code>process_response</code>: the request goes through the rest of the stack and URL resolution as usual, fails with a 404, and only then does <code>CommonMiddleware</code> check whether the same path <em>with</em> a slash would match. If it would, the 404 is replaced by a 301 redirect there. If not, the 404 stands:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">override_settings</span>
 
@@ -2076,9 +2293,17 @@ Not Found: /shop/about
 APPEND_SLASH off: 404
 </code></pre></div>
 
-<p><code>/nowhere</code> has no pattern with or without the slash, so it stays a 404. A view can opt out of the redirect with the <code>@no_append_slash</code> decorator.</p>
+<p>Line by line:</p>
+<ul>
+<li><code>/shop</code> and <code>/shop/about</code> have no pattern of their own, but with a slash added they do, so both became a 301 to the slashed address.</li>
+<li><code>/nowhere</code> has no pattern with or without the slash, so it stays a 404.</li>
+<li>The POST without a slash raised a <code>RuntimeError</code>, explained below. The message appears twice: once in the <code>django.request</code> log, once from our <code>print</code>, cut to 118 characters.</li>
+<li>With <code>APPEND_SLASH</code> off, <code>/shop/about</code> is a plain 404.</li>
+</ul>
+<p>A view can opt out of the redirect with the <code>@no_append_slash</code> decorator.</p>
 <p>The POST is the interesting case. A browser follows a 301 with a GET, and the form data would be lost. So in <code>DEBUG</code> mode Django refuses loudly with a <code>RuntimeError</code> naming the fix; in production the request gets the redirect, and the data is lost silently. The real fix is to make the form's <code>action</code> the URL with the slash, which <code>{% url %}</code> does automatically.</p>
 <h3 id="section-0-csrfviewmiddleware"><code>CsrfViewMiddleware</code></h3>
+<p>CSRF, cross-site request forgery, is a trick where another website makes your browser send a request to this one, with your cookies attached. The defence is a secret token that only this site's own pages contain, like a reply slip the company printed itself: a letter that arrives without one did not come from a form the company sent out.</p>
 <p>The CSRF middleware rejects any unsafe request that does not carry a valid token. It runs in <code>process_view</code>, after resolution, so that a view decorated with <code>@csrf_exempt</code> (like <code>echo</code>) can be recognised and skipped. The test client normally switches CSRF checks off, because tests rarely want them; <code>enforce_csrf_checks=True</code> turns them back on:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
@@ -2093,9 +2318,10 @@ APPEND_SLASH off: 404
 POST 87 bytes
 </code></pre></div>
 
+<p>The POST to <code>green-tea</code> carried no token, so it was refused with a 403 before the view ran. The POST to <code>echo</code> carried no token either, but <code>echo</code> is marked <code>@csrf_exempt</code>, so it went through and reported the 87 bytes of form data the test client encoded.</p>
 <p>§16 covers how the token works, and when <code>csrf_exempt</code> is and is not acceptable.</p>
 <h2 id="section-0-112-optional-middleware-compression-conditional-get-and-logi">1.12 Optional Middleware: Compression, Conditional GET and Login by Default</h2>
-<p>Three more middleware ship with Django but are not in the default list. Each is worth knowing, and each has a placement rule. Django's middleware reference gives one combined order for all the built-in middleware a project might use, and every rule in this subsection and the last is visible in it:</p>
+<p>Three more middleware ship with Django but are not in the default list. Think of them as desks you can add to the corridor when you need them. Each is worth knowing, and each has a placement rule: where in the corridor it must stand to do its job. Django's middleware reference gives one combined order for all the built-in middleware a project might use, and every rule in this subsection and the last is visible in it:</p>
 <ol>
 <li><code>SecurityMiddleware</code></li>
 <li><code>UpdateCacheMiddleware</code> (§17)</li>
@@ -2114,7 +2340,8 @@ POST 87 bytes
 <li><code>RedirectFallbackMiddleware</code></li>
 </ol>
 <h3 id="section-0-gzipmiddleware"><code>GZipMiddleware</code></h3>
-<p><strong><code>GZipMiddleware</code></strong> compresses the response body when the client sends <code>Accept-Encoding: gzip</code>. It leaves a response alone when the body is under 200 bytes, when the response already has a <code>Content-Encoding</code>, or when the client did not ask for gzip. For the rest it adds <code>Vary: Accept-Encoding</code>, so that a cache in between does not serve the compressed body to a client that cannot read it. It also keeps the uncompressed body if compressing did not make it shorter. The <code>price_list</code> view (<code>/shop/prices/</code>) returns 965 bytes of repetitive text, which compresses well:</p>
+<p>Sending a big reply costs postage. Vacuum-packing it first makes the parcel smaller, as long as the customer owns the machine that unpacks it.</p>
+<p><strong><code>GZipMiddleware</code></strong> compresses the response body when the client sends <code>Accept-Encoding: gzip</code>. That header is the customer saying "I can unpack gzip". It leaves a response alone when the body is under 200 bytes, when the response already has a <code>Content-Encoding</code>, or when the client did not ask for gzip. For the rest it adds <code>Vary: Accept-Encoding</code>, so that a cache in between does not serve the compressed body to a client that cannot read it. It also keeps the uncompressed body if compressing did not make it shorter. The <code>price_list</code> view (<code>/shop/prices/</code>) returns 965 bytes of repetitive text, which compresses well:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">gzip</span>
 
@@ -2139,10 +2366,18 @@ different compressed sizes in 20 identical requests: True
 short body: None b'Sencha green tea, loose leaf, 100 g'
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>The compressed response says <code>Content-Encoding: gzip</code>, and <code>Vary: Accept-Encoding</code> warns caches that the body depends on that request header.</li>
+<li>Unpacked, the body is the full 965 bytes; packed, it travelled in fewer than 500.</li>
+<li>Twenty identical requests produced more than one compressed size. That surprising line is explained next.</li>
+<li>The 35-byte green-tea body was left alone: it is under 200 bytes.</li>
+</ul>
 <p>The same page compressed to different sizes on identical requests, and that is deliberate. Compressing a response that contains both a secret, such as a CSRF token, and text an attacker can influence enables the <strong>BREACH</strong> attack, which recovers the secret by watching how the compressed size changes. Django's documentation describes its mitigation, called <strong>Heal The Breach</strong>: <code>GZipMiddleware</code> adds up to 100 random bytes (its <code>max_random_bytes</code> attribute) to each compressed response, so the size no longer leaks reliably. A test that asserts an exact compressed <code>Content-Length</code> will therefore be flaky.</p>
 <p>It belongs <strong>near the top of the list</strong>, above any middleware that reads or changes the response body, because once it runs on the way out the body is compressed bytes. Two cautions keep it out of many production stacks. First, compression is often done better by the proxy in front of Django (nginx, a CDN), which can compress static files too. Second, random padding weakens BREACH but does not remove it; §16 covers the other defences, including the CSRF token being masked differently on every response.</p>
 <h3 id="section-0-conditionalgetmiddleware"><code>ConditionalGetMiddleware</code></h3>
-<p><strong><code>ConditionalGetMiddleware</code></strong> saves bandwidth for unchanged pages. On the way out it adds an <code>ETag</code>, a fingerprint of the body, if the response has none. When the browser asks again it sends that fingerprint back in <code>If-None-Match</code>, and if it still matches, the middleware replaces the response with an empty <strong>304 Not Modified</strong>:</p>
+<p>Imagine a customer who writes every week asking for the price list, and keeps last week's copy. The cheapest reply, when nothing has changed, is a postcard saying "no change since the copy you have".</p>
+<p><strong><code>ConditionalGetMiddleware</code></strong> saves bandwidth for unchanged pages that way. On the way out it adds an <code>ETag</code>, a fingerprint of the body, if the response has none. When the browser asks again it sends that fingerprint back in <code>If-None-Match</code>, and if it still matches, the middleware replaces the response with an empty <strong>304 Not Modified</strong>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">override_settings</span>
 
@@ -2165,10 +2400,17 @@ short body: None b'Sencha green tea, loose leaf, 100 g'
 200 W/"9943ad49bc6320017bba6c73b8c1ed93"
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>The first request got the full page and an <code>ETag</code>, the fingerprint.</li>
+<li>The second request sent the fingerprint back in <code>If-None-Match</code>. It still matched, so the reply was a 304 with an empty body: the postcard.</li>
+<li>The third request asked for gzip, and its ETag starts with <code>W/</code>. That is explained below.</li>
+</ul>
 <p>The saving is only in transfer. The view still ran and built the whole page, because the fingerprint is computed from the body the view produced. To skip the work as well, a view needs the <code>condition</code>, <code>etag</code> or <code>last_modified</code> decorators, which check a cheap value such as an <code>updated_at</code> column before running the view (§10).</p>
 <p>The third request shows the placement rule in action. <code>GZipMiddleware</code> is above <code>ConditionalGetMiddleware</code>, so on the way out the ETag was computed first, on the uncompressed body, and then <code>GZipMiddleware</code> compressed the body and made the ETag <strong>weak</strong> by prefixing <code>W/</code>. A weak ETag means "the same content, not necessarily the same bytes", which is true of a compressed and an uncompressed version of the same page.</p>
 <h3 id="section-0-loginrequiredmiddleware"><code>LoginRequiredMiddleware</code></h3>
-<p><strong><code>LoginRequiredMiddleware</code></strong>, added in Django 5.1, reverses the default: every view requires a logged-in user unless it is marked with the <strong><code>@login_not_required</code></strong> decorator. For an application where nearly every page is private, this is much safer than remembering <code>@login_required</code> on each view, because a forgotten decorator now leaves a page <em>closed</em> instead of open. It uses <code>process_view</code> (§1.10), because it has to know which view was chosen before it can look for the decorator:</p>
+<p>Most office buildings are open to visitors, and the private rooms have locks. Some buildings work the other way: every door is staff-only, and only the few doors marked "public", such as reception, are open.</p>
+<p><strong><code>LoginRequiredMiddleware</code></strong>, added in Django 5.1, turns a Django site into the second kind of building. It reverses the default: every view requires a logged-in user unless it is marked with the <strong><code>@login_not_required</code></strong> decorator. For an application where nearly every page is private, this is much safer than remembering <code>@login_required</code> on each view, because a forgotten decorator now leaves a page <em>closed</em> instead of open. It uses <code>process_view</code> (§1.10), because it has to know which view was chosen before it can look for the decorator:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span><span class="p">,</span> <span class="n">override_settings</span>
 
@@ -2189,7 +2431,8 @@ short body: None b'Sencha green tea, loose leaf, 100 g'
 
 <p>The anonymous request was redirected to <code>LOGIN_URL</code>, with the page it wanted encoded in <code>next</code> so the login view can send the user back. <code>about</code> carries <code>@login_not_required</code> (§1.1), so it was served. Its placement rule is the authentication rule again: it must come <strong>after <code>AuthenticationMiddleware</code></strong>, because it reads <code>request.user</code>. The login view itself must be marked <code>@login_not_required</code>, or nobody could reach it; Django's own <code>LoginView</code> already is.</p>
 <h2 id="section-0-113-when-a-request-fails-exceptions-become-responses">1.13 When a Request Fails: Exceptions Become Responses</h2>
-<p>Every request ends in a response, even a failed one. The handler and the converters around each middleware layer (§1.10) turn any exception that escapes a view or a middleware into a response. Which response depends on the exception:</p>
+<p>A good post room never loses a letter without a reply. If a department cannot answer, the customer still gets a letter back: "we have no such product", "you are not allowed to see this", "something went wrong on our side".</p>
+<p>Django keeps the same promise. Every request ends in a response, even a failed one. The handler and the converters around each middleware layer (§1.10) turn any exception that escapes a view or a middleware into a response. Which response depends on the exception:</p>
 <table>
 <thead>
 <tr>
@@ -2222,6 +2465,7 @@ short body: None b'Sencha green tea, loose leaf, 100 g'
 </tbody>
 </table>
 <h3 id="section-0-with-debug-true">With <code>DEBUG = True</code></h3>
+<p>While the company is still testing its post room, a failed letter comes back with an internal incident report attached: which desk, which directory entry, what the clerk was holding. That is very useful to the people building the post room, and must never reach a real customer.</p>
 <p>During development, the 404 and 500 pages are Django's <strong>technical pages</strong>: full HTML documents with the patterns that were tried, or the traceback, local variables and settings. They exist to help the developer, and they must never reach users, because they print the settings and the code:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
@@ -2236,8 +2480,9 @@ short body: None b'Sencha green tea, loose leaf, 100 g'
 True True
 </code></pre></div>
 
+<p>The response is a whole HTML page, and the two <code>True</code>s show what is inside it: the sentence "Using the URLconf defined in", which introduces the list of patterns Django tried, and the <code>shop/</code> pattern itself. Anyone who can see that page can see how your URLs are laid out.</p>
 <h3 id="section-0-with-debug-false-handler404-and-handler500">With <code>DEBUG = False</code>: <code>handler404</code> and <code>handler500</code></h3>
-<p>In production, each status is rendered by a <strong>handler view</strong>: Django's defaults render the templates <code>404.html</code>, <code>500.html</code>, <code>403.html</code> and <code>400.html</code> if they exist, and a minimal page if not. A project can replace them by setting the variables <code>handler404</code>, <code>handler500</code>, <code>handler403</code> and <code>handler400</code> in its <strong>root</strong> URLconf (in an included one they have no effect). Each is a view or the import path of one. <code>handler404</code> receives the exception; <code>handler500</code> does not, because the error might lie in anything, including the code that would describe it.</p>
+<p>In production, the incident report is replaced by a polite standard letter. Each status is rendered by a <strong>handler view</strong>: Django's defaults render the templates <code>404.html</code>, <code>500.html</code>, <code>403.html</code> and <code>400.html</code> if they exist, and a minimal page if not. A project can replace them by setting the variables <code>handler404</code>, <code>handler500</code>, <code>handler403</code> and <code>handler400</code> in its <strong>root</strong> URLconf (in an included one they have no effect). Each is a view or the import path of one. <code>handler404</code> receives the exception; <code>handler500</code> does not, because the error might lie in anything, including the code that would describe it.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/errors.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">HttpResponse</span>
 
@@ -2285,7 +2530,7 @@ True True
 (bad Host header)   400
 </code></pre></div>
 
-<p>Each line follows the table:</p>
+<p>Each line follows the table, and each one is a different standard letter:</p>
 <ul>
 <li>An <code>Http404</code> from the view and a <code>Resolver404</code> from URL resolution both reached the custom <code>handler404</code>.</li>
 <li><code>PermissionDenied</code> became Django's default 403 page, because the project did not set <code>handler403</code>.</li>
@@ -2293,19 +2538,20 @@ True True
 <li>A <code>Host</code> header not in <code>ALLOWED_HOSTS</code> raised <code>DisallowedHost</code>, a <code>SuspiciousOperation</code>, and became a 400. The view never ran. This check is what stops an attacker from making Django build links, such as password reset links, that point at the attacker's domain.</li>
 </ul>
 <p>Notice also what did <em>not</em> print: with <code>DEBUG = False</code> the <code>django.request</code> log lines of §1.5 are gone from the console. Django's default logging sends errors to the console only while <code>DEBUG</code> is on, and to the site's admins by email when it is off (§22 configures logging for production). A production project must configure logging deliberately, or its errors go nowhere visible.</p>
-<p>The error handlers themselves must be <strong>boring</strong>. A <code>handler500</code> that queries the database fails exactly when the database is the reason for the 500, and an exception inside an error handler turns into Django's bare fallback page. Keep them static, and test them (<code>django.test.Client</code> and <code>override_settings(DEBUG=False)</code>, as above).</p>
+<p>The error handlers themselves must be <strong>boring</strong>. The standard apology letter is pre-printed for a reason: on the day the filing room is on fire, nobody should need the filing room to write it. A <code>handler500</code> that queries the database fails exactly when the database is the reason for the 500, and an exception inside an error handler turns into Django's bare fallback page. Keep them static, and test them (<code>django.test.Client</code> and <code>override_settings(DEBUG=False)</code>, as above).</p>
 <h3 id="section-0-got-request-exception-and-the-test-client"><code>got_request_exception</code> and the test client</h3>
 <p>When an exception becomes a 500, the handler sends <strong><code>got_request_exception</code></strong> (§1.5) before rendering the error. Error-reporting tools hook in there or in the <code>django.request</code> logger, which is how they capture the traceback of a request that has already been answered.</p>
 <p>The test client connects to the same signal. That is how it can re-raise a view's exception in the test that made the request, as §1.10 showed, instead of returning a 500 and hiding the cause.</p>
 <h2 id="section-0-114-middleware-in-an-async-world">1.14 Middleware in an Async World</h2>
-<p>§1.4 showed that under ASGI Django runs synchronous code in a worker thread. Middleware is code like any other, so each layer is either synchronous or asynchronous, and Django has to connect them.</p>
+<p>§1.4 showed that under ASGI Django runs synchronous code in a worker thread. In the phone-call picture, every desk that can only handle letters forces the operator to hand the call to an assistant, and take it back afterwards.</p>
+<p>Middleware is code like any other, so each layer is either synchronous or asynchronous, and Django has to connect them.</p>
 <p>Django decides from two attributes, which a middleware factory may set:</p>
 <ul>
 <li><strong><code>sync_capable</code></strong>, <code>True</code> by default: the middleware can be called synchronously.</li>
 <li><strong><code>async_capable</code></strong>, <code>False</code> by default: the middleware can be called with an <code>async</code> <code>get_response</code>, and then returns a coroutine.</li>
 </ul>
 <p>Every middleware written as in §1.9 is therefore synchronous only. Under ASGI, Django wraps each one with <code>sync_to_async</code> and each layer below it with <code>async_to_sync</code> as needed. That works, but each crossing is a thread switch, which is the penalty §1.4 quoted. All of Django's built-in middleware is written to support both modes, so a project that adds only async-capable middleware lets an async view run without switching threads at all.</p>
-<p>A middleware that supports both modes checks which kind of <code>get_response</code> it was given, and returns the matching kind of function. The <strong><code>sync_and_async_middleware</code></strong> decorator sets both flags:</p>
+<p>The best desk can handle both a letter and a phone call. A middleware that supports both modes checks which kind of <code>get_response</code> it was given, and returns the matching kind of function. The <strong><code>sync_and_async_middleware</code></strong> decorator sets both flags:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/either.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">asgiref.sync</span><span class="w"> </span><span class="kn">import</span> <span class="n">iscoroutinefunction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.utils.decorators</span><span class="w"> </span><span class="kn">import</span> <span class="n">sync_and_async_middleware</span>
@@ -2349,9 +2595,9 @@ either: async path
 200
 </code></pre></div>
 
-<p><code>AsyncClient</code> drives the same lifecycle through Django's ASGI handler, so the chain was built in async mode and the async path ran. A class-based middleware does the same by setting the two class attributes and, when it is in async mode, marking itself with <code>markcoroutinefunction(self)</code> in <code>__init__</code>, so that Django can tell its <code>__call__</code> will return a coroutine. Django's own <code>MiddlewareMixin</code>, the base class of the built-in middleware, does exactly that. §18 writes async middleware and views, and measures the cost of mixing them.</p>
+<p>The same middleware ran both ways. The ordinary <code>Client</code> goes through the WSGI handler, so the chain was built in sync mode and the sync path ran. <code>AsyncClient</code> drives the same lifecycle through Django's ASGI handler, so the chain was built in async mode and the async path ran. A class-based middleware does the same by setting the two class attributes and, when it is in async mode, marking itself with <code>markcoroutinefunction(self)</code> in <code>__init__</code>, so that Django can tell its <code>__call__</code> will return a coroutine. Django's own <code>MiddlewareMixin</code>, the base class of the built-in middleware, does exactly that. §18 writes async middleware and views, and measures the cost of mixing them.</p>
 <h2 id="section-0-115-one-request-end-to-end">1.15 One Request, End to End</h2>
-<p>Everything above can now be watched at once. The next example installs the default stack plus the tracing <code>outer</code> middleware at the top and the <code>Hooks</code> middleware at the bottom, connects receivers to the three request signals, and calls the WSGI application the way a server would, for three requests: one that succeeds, one whose view fails and is rescued, and one that never reaches a view.</p>
+<p>Everything above can now be watched at once: one letter, followed from the door to the department and back, with every bell, desk and directory lookup printing a line. The next example installs the default stack plus the tracing <code>outer</code> middleware at the top and the <code>Hooks</code> middleware at the bottom, connects receivers to the three request signals, and calls the WSGI application the way a server would, for three requests: one that succeeds, one whose view fails and is rescued, and one that never reaches a view.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">wsgiref.util</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_testing_defaults</span>
 
@@ -2419,9 +2665,15 @@ request_finished
 ===
 </code></pre></div>
 
-<p>Read the first request as the lifecycle itself: the signal, then the middleware inward, <code>process_view</code> with the resolved view, the view, the middleware outward, the status reaching the server, and the signal when the server closed the response. The second request shows a view exception being turned into a 409 by <code>process_exception</code>, with no <code>got_request_exception</code>, because no 500 was produced. The third request's view returned <code>None</code>; nothing rescued that, so <code>got_request_exception</code> fired, the <code>django.request</code> logger recorded the 500, and every layer above saw an ordinary 500 response go past.</p>
+<p>Take the requests one at a time:</p>
+<ul>
+<li><strong>The first request is the lifecycle itself.</strong> The bell rang (<code>request_started</code>), the desks saw the request inward, <code>process_view</code> saw the resolved view, the view ran, the desks saw the response outward, the status reached the server, and the second bell (<code>request_finished</code>) rang when the server closed the response.</li>
+<li><strong>The second request shows a rescue.</strong> The view raised <code>KeyError</code>, and <code>process_exception</code> turned it into a 409. There was no <code>got_request_exception</code>, because no 500 was produced.</li>
+<li><strong>The third request shows a failure nobody rescued.</strong> The view returned <code>None</code>. Nothing caught that, so <code>got_request_exception</code> fired, the <code>django.request</code> logger recorded the 500, and every layer above saw an ordinary 500 response go past.</li>
+</ul>
 <p>The fourth is the subtle one. <code>/shop/no-slash</code> matched no pattern, so there was no <code>process_view</code> and no view: URL resolution raised <code>Resolver404</code>, and the converter around the innermost layer turned it into a 404. <code>Hooks</code>, at the bottom, saw that 404. <code>CommonMiddleware</code>, higher up, then replaced it on the way out with a 301 to <code>/shop/no-slash/</code>, and <code>outer</code>, at the top, saw only the 301. Two layers of the same request disagree about its status, and both are right about what they saw. Note also that no "Not Found" line was logged: the handler logs the status of the <em>final</em> response, after the whole chain.</p>
 <p>That four-way comparison is the most useful debugging habit this section can give. When a response is not what you expect, ask which layers it passed through, in which direction, and which layer could have answered it before the one you are looking at.</p>
+<p>In the post room's words: when a reply surprises you, ask which desks it passed, in which direction, and which desk nearer the door could have written it instead.</p>
 <h2 id="section-0-116-interview-questions">1.16 Interview Questions</h2>
 <p>These are questions senior Django interviews really ask about this material. Each answer is short enough to say aloud and points back to the example that proves it.</p>
 <p><strong>Q1. Walk me through what happens when a request reaches a Django application.</strong></p>
@@ -2446,6 +2698,7 @@ request_finished
 <p>A middleware sets <code>request.urlconf</code> to the API's URLconf for requests on that host; resolution and <code>reverse()</code> then use it for that request only, and <code>reset_urlconf</code> restores the default afterwards (§1.10). <code>ALLOWED_HOSTS</code> must include the subdomain, for example as <code>.example.com</code>.</p>
 <h2 id="section-0-what-this-section-established">What This Section Established</h2>
 <ul>
+<li><strong>The picture:</strong> a request is a letter through a post room. The courier (the server) delivers it in a standard envelope (WSGI or ASGI), the clerk (the handler) copies it onto a form and rings a bell (a signal), it passes a corridor of desks (middleware) to the directory (URL resolution) and the department (the view), and the reply comes back past the same desks in reverse.</li>
 <li>The <strong>request lifecycle</strong> is fixed: server → <strong>WSGI/ASGI</strong> → handler (<code>request_started</code>) → middleware inward → <strong>URL resolution</strong> → <code>process_view</code> → view → middleware outward → server, then <code>request_finished</code> when the response is closed.</li>
 <li><strong>WSGI</strong> is <code>application(environ, start_response)</code>; <strong>ASGI</strong> is <code>await application(scope, receive, send)</code>. <code>get_wsgi_application()</code> and <code>get_asgi_application()</code> call <code>django.setup()</code> and return Django's handler. <code>WSGI_APPLICATION</code> is read only by <code>runserver</code>, and Django has no <code>ASGI_APPLICATION</code> setting.</li>
 <li>The handler, the middleware and the resolver are <strong>built once per process</strong>. Per-request data belongs on the request.</li>
