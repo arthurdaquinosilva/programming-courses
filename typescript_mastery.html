@@ -438,6 +438,208 @@ body {
   .course-section { display: block !important; page-break-after: always; }
   body { background: white !important; color: black !important; }
 }
+/* ============================================================
+   Terminal design system (approved 2026-10-19)
+   Appended after theme_main.css by restyle.py and overrides it. The chrome, headings,
+   code and tables are JetBrains Mono; running prose stays sans for long reading.
+   ============================================================ */
+:root[data-theme="dark"] {
+  --bg: #0b0c0e;
+  --bg-elevated: #0e1013;
+  --bg-code: #111317;
+  --bg-subtle: #23262c;
+  --border: #3a3f47;
+  --border-soft: #262a30;
+  --text: #d7dae0;
+  --text-dim: #9aa1ac;
+  --text-faint: #6b727d;
+  --accent: #7ee0a1;
+  --accent-hover: #a2ecbd;
+  --accent-soft: rgba(126, 224, 161, 0.14);
+  --accent-contrast: #0b0c0e;
+  --t-cyan: #7cc7e8;
+  --t-amber: #e5b567;
+  --t-violet: #c3a6ff;
+  --t-select: #2a2e35;
+  --shadow: 0 0 0 1px #3a3f47;
+  --shadow-soft: none;
+}
+:root[data-theme="light"] {
+  --bg: #f7f6f1;
+  --bg-elevated: #f1efe8;
+  --bg-code: #efede5;
+  --bg-subtle: #e4e1d6;
+  --border: #b9b5a8;
+  --border-soft: #d8d4c8;
+  --text: #1f2125;
+  --text-dim: #555a62;
+  --text-faint: #858a92;
+  --accent: #1f7a45;
+  --accent-hover: #155c33;
+  --accent-soft: rgba(31, 122, 69, 0.12);
+  --accent-contrast: #f7f6f1;
+  --t-cyan: #1f6f94;
+  --t-amber: #94600f;
+  --t-violet: #6a43b8;
+  --t-select: #e4e1d6;
+  --shadow: 0 0 0 1px #b9b5a8;
+  --shadow-soft: none;
+}
+:root { --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace; --sans: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+/* Everything in the chrome is monospace, square and hairline-bordered. */
+body, .sidebar, .brand-text, .brand-sub, .progress-text, .search-btn, .kbd-hint, .section-tag,
+.btn-complete, .section-title, .course-section h1, .course-section h2, .course-section h3,
+.course-section h4, .course-section table, .course-section summary, .copy-btn, .btn-prev,
+.btn-next, .search-modal, .search-input, .live-demo-label, .course-section figcaption {
+  font-family: var(--mono) !important;
+}
+body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
+* { border-radius: 0 !important; }
+::selection { background: var(--accent); color: var(--accent-contrast); }
+
+/* ---------- Sidebar: a terminal pane ---------- */
+.sidebar { background: var(--bg); border-right: 1px solid var(--border); }
+.sidebar-header { padding: 22px 20px 18px; border-bottom: 1px solid var(--border); }
+.brand-text { font-size: 15px; font-weight: 700; letter-spacing: 0; }
+.brand-text::before { content: "session "; color: var(--text-faint); font-weight: 400; }
+.brand-text::after { content: "█"; color: var(--accent); margin-left: 6px; animation: t-blink 1.1s steps(1) infinite; }
+.brand-sub { font-size: 12px; margin-top: 4px; }
+.brand-sub::before { content: "# "; }
+.progress-bar { height: 10px; margin-top: 14px; background: repeating-linear-gradient(90deg, var(--border) 0 6px, transparent 6px 8px); }
+.progress-fill { height: 10px; background: repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 8px); }
+.progress-text { font-size: 12px; margin-top: 6px; }
+.search-btn { background: var(--bg); border: 1px solid var(--border); font-size: 12.5px; padding: 8px 10px; margin-top: 16px; }
+.search-btn > span::before { content: "/ "; color: var(--accent); }
+.search-btn kbd, .kbd-hint kbd { background: none; border: 1px solid var(--border); }
+.sidebar-nav { padding: 10px 0 22px; }
+.nav-item { padding: 5px 18px 5px 14px; margin: 0; font-size: 13px; gap: 10px; border-left: 2px solid transparent; }
+.nav-item:hover { background: var(--bg-elevated); }
+.nav-item.active { background: var(--t-select); border-left-color: var(--accent); font-weight: 700; }
+.nav-item .num { font-size: 12px; width: 22px; }
+.nav-item.active .num::before { content: "❯"; position: absolute; left: -2px; color: var(--accent); }
+.nav-item.active .num { color: transparent; }
+.nav-item.completed .num::after { content: "✓"; width: auto; height: auto; background: none; right: -12px; font-size: 10px; color: var(--accent); }
+.sidebar-footer { border-top: 1px solid var(--border); padding: 12px 16px; }
+.theme-toggle { border: 1px solid var(--border); background: none; color: var(--text-dim); height: 28px; font-family: var(--mono); font-size: 12px; cursor: pointer; }
+.theme-toggle:hover { color: var(--text); border-color: var(--text-faint); }
+
+/* ---------- Main column ---------- */
+.main { max-width: 900px; padding: 48px 56px 120px; }
+.section-header-meta { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+.section-tag { font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--text-faint); }
+.section-tag::before { content: "── "; }
+.section-tag::after { content: " ──"; }
+.btn-complete { font-size: 12px; padding: 3px 10px; }
+.btn-complete.done { background: var(--accent-soft); }
+
+/* Headings read like prompts and markdown in a terminal. */
+.section-title, .course-section > h1 { font-size: 26px; font-weight: 700; letter-spacing: 0; line-height: 1.3; margin-bottom: 24px; hyphens: none; }
+.section-title::before, .course-section > h1::before { content: "❯ "; color: var(--accent); }
+.section-title::after, .course-section > h1::after { content: "█"; color: var(--accent); margin-left: 8px; font-weight: 400; animation: t-blink 1.1s steps(1) infinite; }
+.course-section h2 { font-size: 18px; font-weight: 700; letter-spacing: 0; margin: 52px 0 12px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.course-section h2::before { content: "## "; color: var(--accent); }
+.course-section h3 { font-size: 15.5px; font-weight: 700; letter-spacing: 0; margin: 32px 0 8px; color: var(--t-cyan); }
+.course-section h3::before { content: "### "; color: var(--text-faint); }
+.course-section h4 { font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--t-amber); }
+.course-section h4::before { content: "#### "; color: var(--text-faint); }
+@keyframes t-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .brand-text::after, .section-title::after, .course-section > h1::after { animation: none; } }
+
+.course-section p, .course-section li { font-size: 15px; line-height: 1.78; }
+.course-section p { margin: 14px 0; }
+.course-section strong { font-weight: 700; color: var(--text); }
+.course-section em { font-style: normal; color: var(--t-amber); }
+.course-section li::marker { color: var(--accent); }
+.course-section ul { list-style: none; padding-left: 22px; }
+.course-section ul > li { position: relative; }
+.course-section ul > li::before { content: "•"; position: absolute; left: -16px; color: var(--accent); }
+.course-section ol { padding-left: 30px; }
+.course-section a { color: var(--t-cyan); border-bottom: 1px solid currentColor; }
+
+/* Inline code: coloured text, no pill. */
+.course-section code { font-size: 1em; background: none; border: none; padding: 0; color: var(--t-cyan); }
+.course-section a code { color: inherit; }
+.course-section strong code { color: var(--t-cyan); }
+
+/* Code blocks: a bordered pane with its language as a title in the top rule. */
+.course-section .highlight { position: relative; margin: 26px 0; }
+.course-section .highlight pre { margin: 0; border: 1px solid var(--border) !important; background: var(--bg-code) !important; font-size: 13.5px !important; padding: 20px 18px 16px !important; }
+.course-section .highlight[data-lang]::before {
+  content: attr(data-lang); position: absolute; top: -9px; left: 12px; z-index: 1;
+  padding: 0 6px; background: var(--bg); color: var(--text-faint);
+  font-family: var(--mono); font-size: 11.5px; line-height: 18px;
+}
+.course-section .highlight[data-lang="text"]::before { content: "output"; color: var(--accent); }
+.course-section .highlight[data-lang="text"] pre { border-style: dashed !important; background: var(--bg) !important; }
+.course-section .highlight[data-lang="bash"]::before { content: "shell"; }
+.course-section .highlight[data-lang="bash"] .line::before, .course-section .highlight[data-lang="bash"] pre > code::before { content: none; }
+.course-section .highlight[data-lang^="output-"] pre::after { font-family: var(--mono); text-transform: none; }
+.copy-btn { font-size: 11px; background: var(--bg); }
+
+/* Tables: full box borders, as in a TUI. */
+.course-section table { font-size: 13.5px; border: 1px solid var(--border); }
+.course-section th, .course-section td { border: 1px solid var(--border); padding: 8px 12px; }
+.course-section th { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--text); font-weight: 700; background: var(--bg-elevated); }
+
+.course-section blockquote { border-left: 2px solid var(--accent); padding-left: 18px; color: var(--text-dim); }
+.course-section blockquote p { font-size: 15px; }
+.course-section hr { height: 0; background: none; border-top: 1px dashed var(--border); }
+
+/* Exercise solutions fold like a collapsed region in an editor. */
+.course-section details { background: var(--bg); border: 1px solid var(--border); }
+.course-section summary { background: var(--bg-elevated); font-size: 13px; color: var(--text-dim); }
+.course-section summary::before { border: none; width: auto; height: auto; content: "[+]"; color: var(--accent); transform: none !important; }
+.course-section details[open] summary::before { content: "[-]"; }
+.course-section details > .highlight { padding: 0; margin: 26px 17px; }
+.course-section details .highlight pre { margin: 0 !important; }
+
+/* Figures and inline diagrams keep their layout; only their frame changes. */
+.course-section figure { border-color: var(--border) !important; background: var(--bg) !important; }
+
+/* Footer navigation and search look like keyboard commands. */
+.btn-prev, .btn-next { font-size: 13px; padding: 9px 16px; }
+.btn-prev::before { content: "← "; }
+.btn-next::after { content: " →"; }
+.btn-next { color: var(--accent-contrast); }
+.search-overlay { background: rgba(0,0,0,0.6); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.search-modal { box-shadow: var(--shadow); }
+.search-input { font-size: 15px; }
+.search-result.highlighted, .search-result:hover { background: var(--t-select); }
+.search-result.highlighted .search-result-title::before { content: "❯ "; color: var(--accent); }
+.reading-progress { height: 2px; }
+
+/* ---------- Status bar (filled by the pilot's script) ---------- */
+.t-status {
+  position: fixed; left: 292px; right: 0; bottom: 0; z-index: 40;
+  display: flex; gap: 18px; align-items: center; justify-content: space-between;
+  padding: 4px 16px; font-family: var(--mono); font-size: 12px;
+  background: var(--bg); border-top: 1px solid var(--border); color: var(--text-dim);
+}
+.t-status b { color: var(--text); font-weight: 700; }
+.t-status .t-mode { color: var(--accent-contrast); background: var(--accent); padding: 0 6px; font-weight: 700; }
+.t-status .t-left, .t-status .t-right { display: flex; gap: 14px; align-items: center; white-space: nowrap; overflow: hidden; }
+.t-status .t-sec { overflow: hidden; text-overflow: ellipsis; }
+.main { padding-bottom: 140px; }
+@media (max-width: 980px) {
+  .t-status { left: 0; }
+  .t-status .t-hide-sm { display: none; }
+  .main { padding: 60px 18px 110px; }
+  .section-title, .course-section > h1 { font-size: 21px; }
+  .course-section h2 { font-size: 16.5px; }
+  .course-section p, .course-section li { font-size: 14.5px; }
+}
+
+/* ---------- Running prose: sans inside the terminal frame ---------- */
+.course-section p, .course-section li, .course-section blockquote p {
+  font-family: var(--sans); font-size: 17.5px; line-height: 1.7;
+}
+.course-section p code, .course-section li code { font-size: 0.86em; }
+.course-section em { font-style: italic; color: inherit; }
+@media (max-width: 980px) {
+  .course-section p, .course-section li, .course-section blockquote p { font-size: 16.5px; }
+}
+@media print { .t-status { display: none !important; } }
 </style>
 </head>
 <body>
@@ -12315,6 +12517,40 @@ var lastSection = hash || safeGet(LAST_SECTION_KEY) || 'intro';
 var startSection = allSectionIds.indexOf(lastSection) !== -1 ? lastSection : 'intro';
 showSection(startSection, false);
 renderCompletion();
+</script>
+<script id="terminal-status">
+(function () {
+  // The terminal theme's status bar: mode, session, current section, done count, scroll position, clock.
+  var course = (document.querySelector('.brand-text') || {}).textContent || '';
+  var status = document.createElement('div');
+  status.className = 't-status';
+  status.setAttribute('aria-hidden', 'true');
+  status.innerHTML = '<div class="t-left"><span class="t-mode">READ</span>' +
+    '<span class="t-hide-sm">session <b class="t-course"></b></span><span class="t-sec"></span></div>' +
+    '<div class="t-right"><span class="t-hide-sm t-done"></span><span class="t-pos"></span><span class="t-clock"></span></div>';
+  document.body.appendChild(status);
+  status.querySelector('.t-course').textContent = course.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function tick() {
+    var active = document.querySelector('.nav-item.active');
+    var num = active ? active.querySelector('.num').textContent : '';
+    var name = active ? active.querySelector('.label').textContent : '';
+    status.querySelector('.t-sec').textContent = (num && num !== '★' ? '§' + num + ' ' : '') + name;
+    var done = document.getElementById('progress-text');
+    status.querySelector('.t-done').textContent = done ? done.textContent.replace(' complete', ' done') : '';
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    var pct = max > 0 ? Math.round(100 * window.scrollY / max) : 0;
+    status.querySelector('.t-pos').textContent = pct <= 0 ? 'Top' : (pct >= 100 ? 'Bot' : pct + '%');
+    var d = new Date();
+    status.querySelector('.t-clock').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  tick();
+  window.addEventListener('scroll', tick, { passive: true });
+  window.addEventListener('hashchange', function () { setTimeout(tick, 50); });
+  document.addEventListener('click', function () { setTimeout(tick, 50); });
+  setInterval(tick, 15000);
+})();
 </script>
 </body>
 </html>
