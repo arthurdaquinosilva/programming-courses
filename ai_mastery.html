@@ -751,11 +751,140 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <hr />
 <div class="section-footer"><button class="btn-next" data-next="section-0">Start: What AI Engineering Is →</button></div>
 </section>
-<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">What AI Engineering Is</h1><p>Building software on a language model is unlike anything else in this collection. The difference is not that the model is clever. It is that <strong>the component at the centre of your system is non-deterministic, priced by the word, and confidently wrong in ways that look exactly like being right.</strong> Non-deterministic means that asking twice can give two different answers.</p>
-<p>Every technique in this course is a response to one of those three properties. This section covers what the model actually is, what a token (a small piece of text, the unit you are billed in) actually costs, and what changes about engineering when your most important dependency samples from a distribution, meaning it picks its output by weighted chance.</p>
+<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">What AI Engineering Is</h1><p>Start with a puzzle. You give a small text generator the single word "the", and ask it to finish the sentence. You do that a thousand times, with exactly the same input and exactly the same program. How many different sentences come back?</p>
+<p>Guess before reading on.</p>
+<p>Five. The most common one came back 311 times out of 1,000, and the rarest 98 times. Nothing was broken, and nothing changed between runs. §1.1 runs exactly this and prints every sentence it got.</p>
+<p>That generator is a cartoon of a <em>language model</em>, the kind of program behind Claude and every chatbot you may have used. A real model has far more than five possible answers, but it works the same way: it picks its words by weighted chance. <em>AI engineering</em>, in this course, means building software on top of a language model that someone else trained and runs. You send it text over the internet, and your program uses the text that comes back.</p>
+<p>Building on a component like that is unlike anything else in this collection. The difference is not that the model is clever. It is that <strong>the component at the centre of your system is non-deterministic, priced by the word, and confidently wrong in ways that look exactly like being right.</strong> Taking those one at a time:</p>
+<ul>
+<li><em>Non-deterministic</em> means that asking twice can give two different answers. The puzzle above is that property.</li>
+<li><em>Priced by the word</em> means that every piece of text you send, and every piece it sends back, appears on your bill (§1.3).</li>
+<li><em>Confidently wrong</em> means that a made-up answer is written just as smoothly as a true one. Reading it does not tell you which one you have.</li>
+</ul>
+<p>Every technique in this course is a response to one of those three properties. This section covers three things:</p>
+<ol>
+<li>what the model actually is (§1.1);</li>
+<li>what a token, the small piece of text you are billed in, actually costs (§1.2, §1.3);</li>
+<li>what changes about engineering when your most important dependency samples from a distribution, meaning it picks its output by weighted chance (§1.4 to §1.6).</li>
+</ol>
+<p>Here is a picture to keep in mind for the whole section: <strong>a ghostwriter you can only reach by telegram</strong>. A telegram was a short message sent through a telegraph office, and the office charged by the word. Imagine a writer who has read nearly everything ever printed, and who works only that way:</p>
+<ul>
+<li>You send the start of a text. They send back what most likely comes next, one word at a time, picking each word by feel.</li>
+<li>They keep no copies. To continue a conversation, you must send the whole conversation again, every time.</li>
+<li>Send the same telegram twice, and the two replies may be worded differently, or even say different things.</li>
+<li>They write just as smoothly when they are guessing as when they know. Nothing in the reply tells you which.</li>
+<li>The office charges for every word you send, and five times as much for every word they send back.</li>
+<li>They can only send words. If a reply says "sell the shares", nothing is sold unless a clerk in <em>your</em> office reads it and does it.</li>
+</ul>
+<p>Every idea in this section has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>In the telegram picture</th>
+<th>In an AI application</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The writer, who continues whatever text arrives</td>
+<td>the language model, doing next-token prediction</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>Picking each word by feel, so two replies differ</td>
+<td>sampling from a probability distribution</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>Keeping no copies, so the whole conversation is resent</td>
+<td>statelessness</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>Writing just as smoothly when guessing</td>
+<td>predicting, not knowing</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>A reply asking your clerk to do something</td>
+<td>a tool call, which your code chooses to run</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>The office's own way of counting, in pieces of words</td>
+<td>tokens and the tokeniser</td>
+<td>§1.2</td>
+</tr>
+<tr>
+<td>Charging by the piece, five times more for replies</td>
+<td>input and output prices</td>
+<td>§1.3</td>
+</tr>
+<tr>
+<td>A long standard opening kept on file, cheaper to resend</td>
+<td>prompt caching</td>
+<td>§1.3</td>
+</tr>
+<tr>
+<td>"The reply came back fine when I tried it"</td>
+<td>one sample from a distribution</td>
+<td>§1.4</td>
+</tr>
+<tr>
+<td>Your own clerks: sorting, checking, filing, paying</td>
+<td>the nine components that are yours to build</td>
+<td>§1.5</td>
+</tr>
+<tr>
+<td>"Of these 100 letters, at least 85 replies must be right"</td>
+<td>a success criterion someone else can measure</td>
+<td>§1.6</td>
+</tr>
+</tbody>
+</table>
+<p>Every example in this section is plain Python. None of them calls a real model, so they need no account, and they print the same thing on every machine.</p>
 <h2 id="section-0-11-what-the-model-is">1.1 What the Model Is</h2>
-<p>A large language model does one thing: it reads text and predicts what text is most likely to come next. More precisely, it takes a sequence of tokens (small pieces of text, roughly word fragments) and gives back a probability for every token that could follow. Mathematicians call that a <em>probability distribution</em>: a list of every possible option, each with a chance attached. To produce an answer, you pick one token according to those chances, add it to the text, and ask again. Repeating that step is the whole mechanism, and it has a name: <strong>next-token prediction</strong>. Everything the model appears to do, such as reasoning, planning and refusing, is next-token prediction over a sequence that makes those continuations likely.</p>
-<p>Everything layered on top, including chat, tools, agents, retrieval and structured output, is a <em>convention</em> implemented by the people calling that function. There is no chat inside the model. There is no memory. There is no session.</p>
+<p>A <em>large language model</em>, or LLM, does one thing: it reads text and predicts what text is most likely to come next. You have probably used a tiny version of this already. The keyboard on a phone suggests the next word as you type. A language model is that idea, trained on an enormous amount of text, and good enough to continue almost anything.</p>
+<p>Here is the mechanism, step by step:</p>
+<ol>
+<li>The model takes a sequence of tokens: small pieces of text, roughly word fragments (§1.2 measures them).</li>
+<li>For every token that could come next, it gives back a probability, a chance between 0 and 1. Mathematicians call that list a <em>probability distribution</em>: every possible option, each with a chance attached.</li>
+<li>To produce an answer, you pick one token according to those chances, and add it to the text.</li>
+<li>Then you ask again, with the longer text.</li>
+</ol>
+<p>Repeating that step is the whole mechanism, and it has a name: <strong>next-token prediction</strong>. In the picture, it is the writer choosing the next word of the telegram by feel, then the next, then the next.</p>
+<p>Start with a single step. Suppose that after the word "the", the possible next words are "cat" with a 40% chance, and "dog" and "sky" with 30% each. This program picks the next word eight times, from the same input:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="n">rng</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="mi">20260825</span><span class="p">)</span>
+<span class="n">words</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"cat"</span><span class="p">,</span> <span class="s2">"dog"</span><span class="p">,</span> <span class="s2">"sky"</span><span class="p">]</span>
+<span class="n">chances</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"the"</span><span class="p">,</span> <span class="n">rng</span><span class="o">.</span><span class="n">choices</span><span class="p">(</span><span class="n">words</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">chances</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>the cat
+the dog
+the cat
+the cat
+the dog
+the cat
+the cat
+the cat
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><code>rng.choices(words, weights=chances)</code> picks one word, using the chances as weights. It returns a list, so <code>[0]</code> takes the one word out of it.</li>
+<li>The same input, "the", went in all eight times.</li>
+<li>"cat" came out six times, and "dog" twice. That is what weighted chance looks like: the likeliest word wins most often, but not every time.</li>
+<li>"sky" never came out at all, although it has a 30% chance. Eight picks are far too few to show the real chances.</li>
+</ul>
+<p>The <code>20260825</code> is a <em>seed</em>: a starting number that makes Python's random choices repeat exactly, so this page and your screen show the same eight lines. §1.4 comes back to seeds.</p>
+<p>Everything the model appears to do, such as reasoning, planning and refusing, is next-token prediction over a sequence that makes those continuations likely.</p>
+<p>Now let the loop run to the end of a sentence. Each picked word is added to the text, and the longer text decides what can come next. A loop that feeds its own output back in as its next input like this is called <em>autoregressive</em>. The table <code>DISTRIBUTIONS</code> holds the chances for each text so far. When a text has no entry, the sentence is finished. The program builds a sentence from "the" a thousand times and counts the results:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># A toy autoregressive loop, so the shape is concrete rather than metaphorical.</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
 
@@ -814,7 +943,24 @@ nothing is broken. The function returns a distribution, not an answer,
 which is why one run tells you almost nothing (13.1).
 </code></pre></div>
 
-<p>Four consequences follow, and they are the spine of the course.</p>
+<p>This is the puzzle from the start of the section, answered. Read it line by line:</p>
+<ul>
+<li>All 1,000 runs started from the same input, "the", and used the same function.</li>
+<li>"the dog" and "the sky" are the most common sentences, at 31.1% and 30.3%. Each had a 30% chance at the first step, and each sentence stops right there.</li>
+<li>"cat" was the likeliest first word, at 40%. But after "the cat" the sentence splits again, so its share is divided between three endings: 16.0%, 12.8% and 9.8%.</li>
+<li>5 different outputs came from one input.</li>
+</ul>
+<p>Nothing is broken. The function returns a distribution, not an answer, and one run of it is one sample. That is why one run tells you almost nothing, and why §13.1 measures a prompt over many runs.</p>
+<p>Everything layered on top of that function is a <em>convention</em>: an agreement about how to call it, implemented by the people calling it. That includes all of these:</p>
+<ul>
+<li><em>chat</em>, a back-and-forth conversation;</li>
+<li><em>tools</em>, which let the model ask your program to do something;</li>
+<li><em>agents</em>, loops that let the model take many steps in a row;</li>
+<li><em>retrieval</em>, looking up documents to put in front of the model;</li>
+<li><em>structured output</em>, answers in a fixed format such as JSON.</li>
+</ul>
+<p>None of these lives inside the model. There is no chat inside the model. There is no memory. There is no session, nothing that remembers who you are from one request to the next.</p>
+<p>Four consequences follow, and they are the spine of the course. In the picture, they are the four things you learn about the writer by working with them:</p>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">It is stateless</div><div><strong>A conversation is a list you resend.</strong> Turn twenty costs twenty turns of input, not one. §2.3 shows the mechanism; §9.1 does the arithmetic, and it is a quadratic.</div>
 <div style="font-weight:600;color:#35b37e">It is a distribution</div><div><strong>One run is one sample.</strong> You cannot test it by trying it once, which is why §13 is a section rather than a paragraph.</div>
@@ -822,13 +968,21 @@ which is why one run tells you almost nothing (13.1).
 <div style="font-weight:600;color:#7c8cff">It only emits tokens</div><div><strong>So it cannot do anything.</strong> A tool call is a structured request your program chooses to execute. §6.1 develops this and §14.4 turns it into a security model.</div>
 </div>
 
-<p>Hold the last one particularly firmly. <strong>"The model deleted the record" is never true.</strong> The model produced JSON naming a function, and a loop you wrote passed it to code you wrote. Where that decision lives, and what it refuses, is the entirety of agent safety.</p>
+<p>Two words in that list need a meaning:</p>
+<ul>
+<li><em>Stateless</em> means the model keeps nothing between requests: the writer who keeps no copies. A <em>quadratic</em> cost grows with the square of the length. A conversation twice as long resends about four times as much old text in total, because every turn resends all the turns before it.</li>
+<li>A <em>tool call</em> is the model writing out a request, such as "run the function <code>delete_record</code> with these arguments", in a fixed format. Your program reads that request and decides whether to run it.</li>
+</ul>
+<p>Hold the last one particularly firmly. <strong>"The model deleted the record" is never true.</strong> The model produced JSON, a plain-text format for structured data, naming a function. Then a loop you wrote passed it to code you wrote. In the picture, the writer wrote "sell the shares", and your own clerk sold them. An <em>agent</em> is exactly that arrangement running in a loop (§11). Where the decision to act lives, and what it refuses, is the entirety of agent safety.</p>
+<p>The whole mechanism fits in one picture:</p>
 <!-- fig:ai-nexttoken -->
 <figure id="fig-ai-nexttoken" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 380" role="img" aria-labelledby="t-ai-nexttoken d-ai-nexttoken" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-nexttoken">The whole mechanism: predict, sample, append, repeat</title><desc id="d-ai-nexttoken">The tokens so far go into the model, which is a function returning a probability distribution over the next token. One token is sampled from it and appended to the sequence, and the loop repeats. Chat, tools, agents and retrieval are conventions built by the caller on top of this loop.</desc><defs><marker id="ah-ai-nexttoken" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="20" y="40" width="200" height="84" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="120" y="77.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">The tokens so far</text><text x="120" y="96.675" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">The capital of France is</text><path d="M226,82 L250,82" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-nexttoken)"/><rect x="256" y="40" width="150" height="84" rx="10" style="fill:#7c8cff;fill-opacity:0.13;stroke:#7c8cff;stroke-width:1.6"/><text x="331" y="69.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">The model</text><text x="331" y="88.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">a function;</text><text x="331" y="104.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">no memory</text><path d="M412,82 L452,82" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-nexttoken)"/><rect x="456" y="14" width="252" height="250" rx="14" style="fill:none;stroke:#8a94a6;stroke-width:1.4"/><text x="470" y="34" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#8a94a6;opacity:1">NEXT-TOKEN DISTRIBUTION (illustrative)</text><text x="472" y="77" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">Paris</text><rect x="548" y="60" width="127.4" height="24" rx="2" style="fill:#4a9eda;fill-opacity:0.35;stroke:#4a9eda;stroke-width:1.2"/><text x="681.4" y="77" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">0.91</text><text x="472" y="115" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">the</text><rect x="548" y="98" width="5.6" height="24" rx="2" style="fill:#8a94a6;fill-opacity:0.35;stroke:#8a94a6;stroke-width:1.2"/><text x="559.6" y="115" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">0.04</text><text x="472" y="153" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">a</text><rect x="548" y="136" width="4" height="24" rx="2" style="fill:#8a94a6;fill-opacity:0.35;stroke:#8a94a6;stroke-width:1.2"/><text x="558" y="153" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">0.02</text><text x="472" y="191" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">located</text><rect x="548" y="174" width="4" height="24" rx="2" style="fill:#8a94a6;fill-opacity:0.35;stroke:#8a94a6;stroke-width:1.2"/><text x="558" y="191" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">0.015</text><text x="472" y="229" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">known</text><rect x="548" y="212" width="4" height="24" rx="2" style="fill:#8a94a6;fill-opacity:0.35;stroke:#8a94a6;stroke-width:1.2"/><text x="558" y="229" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">0.01</text><rect x="256" y="188" width="150" height="76" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="331" y="221.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Sample one</text><text x="331" y="240.675" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">append it</text><path d="M452,226 L412,226" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-nexttoken)"/><path d="M250,226 L115,226 L115,130" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-nexttoken)"/><text x="180" y="216" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">and go round again</text><text x="360" y="320" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text-dim);opacity:1">no chat, no memory, no session inside the model:</text><text x="360" y="339.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text-dim);opacity:1">everything else is a convention implemented by the caller</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">A function from tokens to a distribution, called in a loop. There is no chat, no memory and no session inside the model.</figcaption></figure>
 <!-- /fig:ai-nexttoken -->
 
 <h2 id="section-0-12-tokens">1.2 Tokens</h2>
-<p>The unit of everything, including cost, limits and latency, is the token. It is not a word and not a character, and the gap between intuition and reality is where budgeting goes wrong.</p>
+<p>The unit of everything, including cost, limits and latency, is the token. <em>Latency</em> is how long you wait for an answer. The <em>limits</em> are how much text one request can hold, and how much a reply may contain. All of them are counted in tokens.</p>
+<p>A token is not a word and not a character, and the gap between intuition and reality is where budgeting goes wrong. In the picture, the telegraph office does not count words the way you do. It cuts your text into pieces by its own rule, and charges per piece. A short, common English word is often one piece. A long or unusual word, a string of digits or a word in another script can take several.</p>
+<p>You cannot see the real pieces without asking the API (§2.8 shows how). What you can do on your own is the common estimate: divide the number of characters by four. This program applies that estimate to five kinds of text, and prints the characters, the words and the estimated tokens for each:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">SAMPLES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"plain English prose"</span><span class="p">,</span>
      <span class="s2">"The quick brown fox jumps over the lazy dog near the river bank."</span><span class="p">),</span>
@@ -865,10 +1019,18 @@ code, JSON, identifiers and non-Latin scripts all run denser,
 so a budget estimated this way is optimistic exactly where it matters.
 </code></pre></div>
 
-<p><strong>Use <code>count_tokens</code> (§2.8) for anything that must fit.</strong> It is free, it takes the same request shape, and it includes your tools and system prompt. The <code>chars / 4</code> estimate (characters divided by four) is for deciding whether to investigate, and never for deciding whether a request fits.</p>
-<p><strong>The tokeniser changed.</strong> The tokeniser is the part that splits text into tokens. Claude 4.7 and later use a newer one that produces roughly 30% more tokens for the same text than Sonnet 4.6 and earlier. That is not a price rise, because the per-token prices differ too. But it does mean a token budget measured on an older model does not transfer. Any inherited "this fits in 8,000 tokens" claim should be re-measured and not trusted.</p>
+<p>Line by line:</p>
+<ul>
+<li>The English sentence has 64 characters and 13 words, and the estimate says 16 tokens. For ordinary English prose, the estimate is roughly right.</li>
+<li>The code has 75 characters but only 9 "words", because <code>text.split()</code> cuts only at spaces.</li>
+<li>The JSON, the UUID and the Japanese line each count as a single word, because none of them contains a space. (A <em>UUID</em> is a long random identifier, the kind databases hand out.) For text like this, a word count tells you nothing at all.</li>
+<li>The last three printed lines give the catch. The estimate holds only for English prose. Code, JSON, identifiers and non-Latin scripts really produce more tokens than it predicts, so a budget built on it runs short exactly where it matters.</li>
+</ul>
+<p><strong>Use <code>count_tokens</code> (§2.8) for anything that must fit.</strong> <code>count_tokens</code> asks the real tokeniser how many tokens a request contains. It is free, it takes the same request shape (the same fields as a real request), and it includes your tools and system prompt. The <em>system prompt</em> is the standing instructions you send at the top of every request (§3). The <code>chars / 4</code> estimate (characters divided by four) is for deciding whether to investigate, and never for deciding whether a request fits.</p>
+<p><strong>The tokeniser changed.</strong> The tokeniser is the part that splits text into tokens: in the picture, the office's rule for cutting text into pieces. Claude 4.7 and later use a newer one that produces roughly 30% more tokens for the same text than Sonnet 4.6 and earlier. That is not a price rise, because the per-token prices differ too. But it does mean that a token budget measured on an older model does not transfer. Any inherited "this fits in 8,000 tokens" claim should be re-measured and not trusted.</p>
 <h2 id="section-0-13-what-it-costs">1.3 What It Costs</h2>
-<p>Two prices, and the one people ignore is the expensive one.</p>
+<p>Two prices, and the one people ignore is the expensive one. You pay for <em>input tokens</em>, the text you send, and for <em>output tokens</em>, the text the model writes back. Prices are quoted in dollars per million tokens, written $/MTok.</p>
+<p>This program prices one typical call, 4,000 tokens in and 600 tokens out, on the three models in this course's price list (§2.2 has the full catalogue):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">CATALOGUE</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"Claude Opus 5"</span><span class="p">,</span> <span class="mf">5.00</span><span class="p">,</span> <span class="mf">25.00</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"Claude Sonnet 5"</span><span class="p">,</span> <span class="mf">2.00</span><span class="p">,</span> <span class="mf">10.00</span><span class="p">),</span>
@@ -903,15 +1065,33 @@ output costs 5x input on every model.
 600 output tokens against 4,000 input is 13% of the tokens and 43% of the bill.
 </code></pre></div>
 
-<p><strong>Output is five times input, on every tier.</strong> That ratio holds across the catalogue, and it means anything that shortens responses is working on the expensive side, such as §5.2's effort parameter and §4's structured output. Note also that the <strong>cost per token</strong> is the only price there is. There is no per-request fee, no minimum, and no charge for a request that returns a refusal before any output (§14.6). The cost per token differs between input and output, and again for cache reads and writes (§9.3). So a single blended "price per call" is always an approximation over a particular traffic shape.</p>
-<p><strong>A newer model is not always more expensive.</strong> Claude Sonnet 5 costs less than the Sonnet 4.6 it succeeded (§2.2). Never assume newer is dearer.</p>
+<p>Line by line, for the first row:</p>
+<ul>
+<li>Claude Opus 5 charges $5.00 per million input tokens and $25.00 per million output tokens.</li>
+<li>4,000 input tokens cost 4,000 / 1,000,000 × $5.00 = $0.020. 600 output tokens cost 600 / 1,000,000 × $25.00 = $0.015.</li>
+<li>Together that is $0.035 for one call: the <code>$0.03500</code> in the table.</li>
+<li>The input is $0.020 of $0.035, which is the 57% in the last column.</li>
+</ul>
+<p>The other two rows have different prices, but the same 5x ratio, so their input share is the same 57%. The last line puts the two halves side by side: 600 output tokens are 13% of the tokens and 43% of the bill.</p>
+<p><strong>Output is five times input, on every tier.</strong> A <em>tier</em> is one of the model sizes: Opus, Sonnet or Haiku. That ratio holds across the catalogue. It means that anything that shortens responses is working on the expensive side, such as §5.2's effort parameter (a setting for how much work the model puts into an answer) and §4's structured output.</p>
+<p>Note also that the <strong>cost per token</strong> is the only price there is:</p>
+<ul>
+<li>There is no per-request fee and no minimum.</li>
+<li>There is no charge for a request that returns a refusal, the model declining to answer, before any output (§14.6).</li>
+<li>The cost per token differs between input and output, and again for cache reads and writes (§9.3), which come up just below.</li>
+</ul>
+<p>So a single blended "price per call", one average figure for every request, is always an approximation. It holds only for one particular traffic shape: one particular mix of short and long requests.</p>
+<p><strong>A newer model is not always more expensive.</strong> Claude Sonnet 5 costs less than the Sonnet 4.6 it succeeded (§2.2). Never assume that newer is dearer; look the price up.</p>
+<p>The same call, split two ways:</p>
 <!-- fig:ai-bill -->
 <figure id="fig-ai-bill" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 300" role="img" aria-labelledby="t-ai-bill d-ai-bill" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-bill">Output is a small share of the tokens and a large share of the bill</title><desc id="d-ai-bill">Two stacked bars for a call with 4,000 input tokens and 600 output tokens. By tokens, output is 13%. By cost, at five times the input price, output is 43%.</desc><defs><marker id="ah-ai-bill" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="50" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">BY TOKENS</text><rect x="20" y="60" width="573.913" height="46" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><rect x="593.913" y="60" width="86.087" height="46" rx="2" style="fill:#d9a441;fill-opacity:0.35;stroke:#d9a441;stroke-width:1.2"/><text x="306.957" y="89" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">input  4,000  (87%)</text><text x="636.957" y="89" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">600  (13%)</text><text x="20" y="150" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">BY COST</text><rect x="20" y="160" width="377.143" height="46" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><rect x="397.143" y="160" width="282.857" height="46" rx="2" style="fill:#d9a441;fill-opacity:0.35;stroke:#d9a441;stroke-width:1.2"/><text x="208.571" y="189" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">input  (57%)</text><text x="538.571" y="189" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">output  (43%)</text><rect x="20" y="244" width="54.375" height="23.5" rx="11.75" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="47.1875" y="258" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">input</text><rect x="96" y="244" width="61.25" height="23.5" rx="11.75" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="126.625" y="258" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">output</text><text x="190" y="260" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">output is priced at five times input, on every tier</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Output costs five times input on every model. Here 600 output tokens are 13% of the tokens and 43% of the bill.</figcaption></figure>
 <!-- /fig:ai-bill -->
 
-<p>There are three more meters that token arithmetic misses entirely, and §15.1 assembles all of them. The first is <strong>cache reads and writes</strong> (§9.3), which cost 0.1× and 1.25× the input price respectively. The second is <strong>server-tool fees</strong> (§7.1), because web search is billed per search and not per token.</p>
+<p>Tokens are not the whole bill. There are three more meters that token arithmetic misses entirely, and §15.1 assembles all of them.</p>
+<p>The first two are <strong>cache reads and writes</strong> (§9.3). A <em>prompt cache</em> keeps the start of a request that you send again and again, such as a long handbook, so the model does not have to work through it from scratch every time. In the picture, it is the long standard opening the office keeps on file. Reading from the cache costs 0.1× the input price, a tenth. Writing to it costs 1.25× the input price, for the standard cache that lasts five minutes. Reads and writes are two separate lines on the bill.</p>
+<p>The third is <strong>server-tool fees</strong> (§7.1). A <em>server tool</em> is a tool that Anthropic runs for you, such as web search. Web search is billed per search, and not per token, so no token count will ever show it.</p>
 <h2 id="section-0-14-what-changes-about-engineering">1.4 What Changes About Engineering</h2>
-<p>The properties in §1.1 break several habits that are correct everywhere else in this collection.</p>
+<p>The properties in §1.1 break several habits that are correct everywhere else in this collection. Here are four sentences engineers say every day, and what each one means once a model is involved:</p>
 <div style="display:grid;grid-template-columns:200px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#e06c75">"It worked when I ran it"</div><div><strong>Is one sample from a distribution.</strong> §13.1 shows that a genuinely 80%-correct prompt looks anywhere between perfect and broken across three trials — and that a 30-case eval comparing two prompts is close to a coin flip.</div>
 <div style="font-weight:600;color:#e06c75">"The tests pass"</div><div><strong>Requires a different kind of test.</strong> There is no assertion for "is this summary faithful". §13.4 grades what code can grade; §13.5 uses a model for the rest, and §13.6 validates that model against humans.</div>
@@ -919,11 +1099,42 @@ output costs 5x input on every model.
 <div style="font-weight:600;color:#e06c75">"Adding context helps"</div><div><strong>Up to a point, then it hurts.</strong> Both cost and accuracy degrade as the window fills with material the model must sift. §9 is about deciding what is present.</div>
 </div>
 
+<p>A few words in that table need a meaning:</p>
+<ul>
+<li>An <em>eval</em>, short for evaluation, is a fixed set of test questions with known good answers, run against your prompt and scored. A <em>30-case eval</em> has thirty questions. With so few, the better of two prompts wins the comparison only a little more often than chance.</li>
+<li>An <em>assertion</em> is a line in a test that checks one exact fact, such as "the total is 42". "This summary is faithful to the document" cannot be checked that way.</li>
+<li>A <em>control</em> is something that makes an action impossible, such as a permission check in your code. An instruction in a prompt only makes the action less likely.</li>
+<li>The <em>window</em>, or <em>context window</em>, is all the text the model is shown in one request.</li>
+</ul>
+<p>In the picture, "it worked when I ran it" is one good reply from the writer. It says nothing about the next telegram.</p>
 <p>Two habits <em>do</em> transfer, and they carry more weight here than usual.</p>
-<p><strong>Determinism where you can get it.</strong> You cannot make the model deterministic, but you can fix the test set, the ordering, the seeds and the clock. Then, when a number moves, you know it was the model. Every runnable example in this course does this, which is why they produce the same output every time.</p>
-<p><strong>Layers that fail closed.</strong> "Fail closed" means that when a layer breaks, it blocks and does not let things through. §14.8's argument is ordinary defence in depth, applied to a component that can be talked into things.</p>
+<p><strong>Determinism where you can get it.</strong> You cannot make the model deterministic, but you can fix the test set, the ordering, the seeds and the clock. Then, when a number moves, you know it was the model.</p>
+<p>A seed, from §1.1, is the starting number of a random-number generator. The same seed gives the same "random" numbers every time, and a different seed gives different ones:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="n">first</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span>
+<span class="n">second</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="mi">7</span><span class="p">)</span>
+<span class="n">other</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">([</span><span class="nb">round</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">random</span><span class="p">(),</span> <span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)])</span>
+<span class="nb">print</span><span class="p">([</span><span class="nb">round</span><span class="p">(</span><span class="n">second</span><span class="o">.</span><span class="n">random</span><span class="p">(),</span> <span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)])</span>
+<span class="nb">print</span><span class="p">([</span><span class="nb">round</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">random</span><span class="p">(),</span> <span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)])</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>[0.324, 0.151, 0.651]
+[0.324, 0.151, 0.651]
+[0.227, 0.962, 0.126]
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><code>first</code> and <code>second</code> both start from seed 7, so they print the same three numbers: <code>0.324</code>, <code>0.151</code> and <code>0.651</code>.</li>
+<li><code>other</code> starts from seed 8, so its numbers are different.</li>
+</ul>
+<p>Every runnable example in this course does this, which is why they produce the same output every time. The toy model in §1.1 printed exactly 31.1% for "the dog" here, and it prints exactly that on your machine.</p>
+<p><strong>Layers that fail closed.</strong> "Fail closed" means that when a layer breaks, it blocks, and does not let things through. Think of a door lock that stays locked when its battery dies, instead of springing open. <em>Defence in depth</em> means several independent layers, each able to stop a bad action on its own, so that one failure does not let everything through. §14.8's argument is ordinary defence in depth, applied to a component that can be talked into things: text the model reads can contain instructions, and it may follow them (§14).</p>
 <h2 id="section-0-15-the-shape-of-a-real-system">1.5 The Shape of a Real System</h2>
-<p>It is worth seeing, once, how little of a production LLM application is the model call.</p>
+<p>It is worth seeing, once, how little of a production LLM application is the model call. <em>Production</em> means the live system that real users depend on, as opposed to a demo on your laptop.</p>
+<p>This program lists the ten parts that a request passes through in a typical application, who builds each one, and the section of this course that teaches it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">COMPONENTS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"input validation and screening"</span><span class="p">,</span> <span class="s2">"yours"</span><span class="p">,</span> <span class="s2">"§14.3"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"retrieval: search, rank, assemble"</span><span class="p">,</span> <span class="s2">"yours"</span><span class="p">,</span> <span class="s2">"§10"</span><span class="p">),</span>
@@ -963,14 +1174,36 @@ evaluation, offline and on live traffic   yours       §13, §15.7
 the model call is one line. Everything around it is the engineering.
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>Only one row belongs to Anthropic: the model call itself (§2). It is one line of code.</li>
+<li>The other nine are yours. In order: checking what users send in, finding the documents to show the model, building the prompt, handling the <em>stop reason</em> (the API's note on why the model stopped writing, for example because it finished or because it reached the length limit you set), running tools and deciding whether each one is allowed, checking the reply, checking its citations, logging what each request cost, and evaluation.</li>
+</ul>
+<p>In the picture, the writer is one person at the far end of the line. Your office is everyone else: the clerks who sort the post, check each reply, keep the ledger and act on the instructions.</p>
+<p>The same ten parts, in the order a request meets them:</p>
 <!-- fig:ai-shape -->
 <figure id="fig-ai-shape" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 590" role="img" aria-labelledby="t-ai-shape d-ai-shape" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-shape">How little of a production system is the model call</title><desc id="d-ai-shape">Ten components in the order a request meets them: input screening, retrieval, prompt construction, the model call, stop reason handling, tool execution, output validation, citation checks, logging and evaluation. 9 of the ten are yours to build; only the model call is Anthropic’s.</desc><defs><marker id="ah-ai-shape" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="28" y="24" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">IN THE ORDER A REQUEST MEETS THEM</text><text x="500" y="24" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">OWNED BY</text><text x="610" y="24" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">WHERE</text><rect x="12" y="36" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="58" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="63" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">1</text><text x="64" y="63" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">input validation and screening</text><rect x="496" y="45" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="62.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="63" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§14.3</text><rect x="12" y="90" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="112" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="117" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">2</text><text x="64" y="117" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">retrieval: search, rank, assemble</text><rect x="496" y="99" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="116.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="117" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§10</text><rect x="12" y="144" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="166" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="171" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">3</text><text x="64" y="171" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">prompt construction and caching</text><rect x="496" y="153" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="170.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="171" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§3, §9.3</text><rect x="12" y="198" width="696" height="44" rx="8" style="fill:#35b37e;fill-opacity:0.16"/><circle cx="38" cy="220" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="225" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">4</text><text x="64" y="225" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">THE MODEL CALL</text><rect x="496" y="207" width="96" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="544" y="224.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">Anthropic</text><text x="610" y="225" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§2</text><rect x="12" y="252" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="274" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="279" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">5</text><text x="64" y="279" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">stop-reason handling</text><rect x="496" y="261" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="278.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="279" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§2.6</text><rect x="12" y="306" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="328" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="333" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">6</text><text x="64" y="333" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">tool execution and authorisation</text><rect x="496" y="315" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="332.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="333" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§6.5, §14.4</text><rect x="12" y="360" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="382" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="387" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">7</text><text x="64" y="387" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">output validation</text><rect x="496" y="369" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="386.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="387" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§4.3</text><rect x="12" y="414" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="436" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="441" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">8</text><text x="64" y="441" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">citation and faithfulness checks</text><rect x="496" y="423" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="440.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="441" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§8.5, §10.7</text><rect x="12" y="468" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="490" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="495" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">9</text><text x="64" y="495" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">logging and cost accounting</text><rect x="496" y="477" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="494.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="495" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§15.5</text><rect x="12" y="522" width="696" height="44" rx="8" style="fill:#4a9eda;fill-opacity:0.07"/><circle cx="38" cy="544" r="12" style="fill:none;stroke:var(--text-dim);stroke-width:1.3"/><text x="38" y="549" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">10</text><text x="64" y="549" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:400;fill:var(--text);opacity:1">evaluation, offline and live</text><rect x="496" y="531" width="96" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="544" y="548.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">yours</text><text x="610" y="549" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">§13, §15.7</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">9 of 10 components are yours to build. The model call is one line; everything around it is the engineering.</figcaption></figure>
 <!-- /fig:ai-shape -->
 
-<p>That list is also the shape of this course. <strong>Sections 2–5 are about the model call itself</strong>, §6–8 add capability, §9–10 decide what is in the window, §11–12 build agents, and §13–15 are the discipline that makes it operable. §16 assembles one system out of all of it.</p>
+<p>That list is also the shape of this course:</p>
+<ul>
+<li><strong>Sections 2–5 are about the model call itself</strong>: sending a request, writing the prompt, getting answers in a fixed shape, and letting the model think first.</li>
+<li>§6–8 add capability: tools, tools Anthropic runs for you, and images and documents.</li>
+<li>§9–10 decide what is in the window, including retrieval.</li>
+<li>§11–12 build agents.</li>
+<li>§13–15 are the discipline that makes it operable: measuring quality, guarding against misuse, and running it day to day.</li>
+<li>§16 assembles one system out of all of it.</li>
+</ul>
 <h2 id="section-0-16-what-success-looks-like">1.6 What Success Looks Like</h2>
 <p>A last framing before the mechanics, because it determines what you build.</p>
-<p>The question "is the model good enough?" has no answer. The answerable version names a metric, a population and a threshold, such as <em>"F1 of at least 0.85 on a held-out set of 10,000 tickets"</em>. (F1 is a single score that balances how many right answers you found against how many wrong ones you included.) §13.2 is about turning the first question into the second.</p>
+<p>The question "is the model good enough?" has no answer. The answerable version names three things:</p>
+<ul>
+<li>a <em>metric</em>, the number you measure;</li>
+<li>a <em>population</em>, the cases you measure it on;</li>
+<li>a <em>threshold</em>, the value it must reach.</li>
+</ul>
+<p>For example: <em>"F1 of at least 0.85 on a held-out set of 10,000 tickets"</em>. A <em>held-out</em> set is kept aside, and never used while writing the prompt, so it cannot have been tuned to. (F1 is a single score that balances how many right answers you found against how many wrong ones you included.) In the picture, "is the writer any good?" has no answer, but "of these 100 letters, at least 85 replies must be right" does. §13.2 is about turning the first question into the second.</p>
+<p>This program sorts six success criteria into the usable and the unusable, with the reason for each:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">CRITERIA</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"is the model good enough?"</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">"no metric, no population, no threshold"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"it should be accurate and fast"</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">"two undefined words"</span><span class="p">),</span>
@@ -1001,8 +1234,17 @@ p95 time to first token &lt; 900 ms          yes       a percentile, a metric, a
 4 of 6 could be handed to a colleague who would produce the same number you would.
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>The first two are NO. Neither names a number anyone could measure, so two people would argue about them forever.</li>
+<li>"F1 &gt;= 0.85 on 10,000 held-out tickets" names a metric, a population and a threshold. Someone else can run it.</li>
+<li>"p95 time to first token &lt; 900 ms" uses a <em>percentile</em>: p95 is the time that 95 of every 100 requests beat. <em>Time to first token</em> is how long you wait before the first piece of the reply arrives. And 900 ms, milliseconds, is the bound.</li>
+<li>"&lt; $0.012 per resolved conversation" stands or falls on its last words. A cost <em>per request</em> and a cost <em>per resolved conversation</em> are very different numbers, because one conversation can take many requests.</li>
+<li>"0 outputs contain an email address" can be checked by a <em>regex</em>, a text pattern that a program searches for.</li>
+</ul>
 <p><strong>That last test is the whole definition.</strong> A criterion is usable when someone else can measure it and get your number. Everything else is a preference wearing a metric's clothes.</p>
-<p>And a note on ordering that most projects get wrong. It is tempting to build the application first and add evaluation when there is something to evaluate. The trouble is that without a measurement you cannot tell whether any of your changes helped. You then spend the early weeks flying blind, when the prompt is changing fastest and the improvements are largest. <strong>Build the smallest honest eval before the second prompt change</strong>, and not after the tenth.</p>
+<p>And a note on ordering that most projects get wrong. It is tempting to build the application first, and add evaluation once there is something to evaluate. The trouble is that without a measurement, you cannot tell whether any of your changes helped. You then spend the early weeks flying blind, which is exactly when the prompt is changing fastest and the improvements are largest. <strong>Build the smallest honest eval before the second prompt change</strong>, and not after the tenth.</p>
+<p>Back to the puzzle at the start: one input, a thousand runs, five different sentences. A model is that, on a much larger scale. You will never make it give one answer. What you can do is measure, over many runs, how often its answers meet a criterion that someone else could check. Every section that follows is a way of moving that number.</p>
 <h2 id="section-0-exercises">Exercises</h2>
 <p><strong>Exercise 1.1 — Estimate before you build.</strong> A support assistant answers from a 40,000-token handbook. 8,000 conversations a day, 3 turns each, 400-token answers. Estimate the monthly cost three ways — naive, cached, and cached on Sonnet 5 — and say what you would check before trusting any of them.</p>
 <details>
