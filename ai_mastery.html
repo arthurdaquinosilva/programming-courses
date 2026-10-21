@@ -5275,14 +5275,15 @@ final answer: Lisbon is warmer.
 <li>a token budget;</li>
 <li>a rule for what to do when either is hit.</li>
 </ul>
-<p>Here is one shortcut worth knowing before you write this loop a second time. The SDK ships a <strong>tool runner</strong>, <code>client.beta.messages.tool_runner</code>. Given your tools and their implementations, it drives exactly this loop for you, with a <code>max_iterations</code> cap built in. It is the right default for a straightforward loop.</p>
-<p>Write the loop by hand when you need any of these:</p>
+<p>Here is one shortcut worth knowing before you write this loop a second time. The SDK ships a <strong>tool runner</strong>, <code>client.beta.messages.tool_runner</code>. Given your tools and their implementations, it drives exactly this loop for you, with a <code>max_iterations</code> cap built in. It is the right default for a straightforward loop, and for most others too.</p>
+<p>What it does not do is decide your rules. Whoever drives the loop, three things are still yours to write:</p>
 <ul>
 <li>a gate, a check that can stop a call before it runs;</li>
 <li>a budget beyond iterations;</li>
 <li>a trace, a record of every step.</li>
 </ul>
-<p>§11 does that, and it is why the loop is worth understanding and not merely calling. The tool runner is the right shortcut once you understand what it is doing on your behalf, and the wrong one before.</p>
+<p>They fit inside the tool runner. A gate can live in the tool function itself, returning "declined" in place of running. And the runner lets you step through the loop one turn at a time, so your code can log each turn, or stop. Write the whole loop by hand only when you want to own all of it, for example to avoid depending on a beta feature, which the runner still is.</p>
+<p>§11 builds the gate, the budget and the trace by hand, so you can see each one, and it is why the loop is worth understanding and not merely calling. The tool runner is the right shortcut once you understand what it is doing on your behalf, and the wrong one before.</p>
 <p><strong>The conversation grows by two messages per tool round trip</strong>, and you resend all of it every time, as §2.3 showed. A <em>round trip</em> is one request and its reply. In the picture, the file gets thicker with every slip and report, and the writer rereads all of it each time. That is the arithmetic that makes §9 necessary.</p>
 <h2 id="section-5-65-returning-results-and-returning-failures">6.5 Returning Results, and Returning Failures</h2>
 <p>A <code>tool_result</code> block has three fields that matter:</p>
@@ -10093,11 +10094,152 @@ reranking costs ~220 ms and saves 1,500 tokens per query
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-8">← Back</button><button class="btn-next" data-next="section-10">Next: Building Agents →</button></div>
 </section>
-<section class="course-section" id="section-10" data-section-id="section-10"><div class="section-header-meta">  <span class="section-tag">SECTION 11</span>  <button class="btn-complete" data-complete="section-10"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Building Agents</h1><p>Section 6 built a loop and pointed out that it has no stop condition. Section 9 explained why its context grows and what to do about that. This section turns the loop into something you would let near production. It has to be bounded, observable and recoverable. It also has to be scoped to a job it can actually do, and that part takes judgement and not code.</p>
+<section class="course-section" id="section-10" data-section-id="section-10"><div class="section-header-meta">  <span class="section-tag">SECTION 11</span>  <button class="btn-complete" data-complete="section-10"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Building Agents</h1><p>Start with a puzzle. You give a program that runs a model in a loop a strict budget: at most $1.00, and at most 200,000 tokens. Before every turn, the program checks the budget. The run lasts seven turns and ends with the words "finished normally". Its final bill is $1.343, and it used 250,530 tokens. Nothing crashed, no check was skipped, and no line of code has a bug in the usual sense. So how did it spend a third more than its limit? Guess before you read on. §11.3 runs that exact loop and answers it, and the answer changes where you put every limit in this section.</p>
+<p>To see why this matters, recall where §6 and §9 left off:</p>
+<ul>
+<li>Section 6 built a loop that lets the model call tools again and again. It pointed out that the loop has no stop condition.</li>
+<li>Section 9 explained why the conversation inside that loop keeps growing, and what to do about it.</li>
+</ul>
+<p>This section turns that loop into something you would let near production, meaning near real customers, real money and real data. To get there, the loop needs four properties:</p>
+<ul>
+<li><strong>bounded</strong>: it stops, always, and you know in advance the most it can spend;</li>
+<li><strong>observable</strong>: you can see afterwards what it did, and why;</li>
+<li><strong>recoverable</strong>: when it goes wrong, the damage can be caught and undone;</li>
+<li><strong>scoped</strong>: it is aimed at a job it can actually do.</li>
+</ul>
+<p>The first three are code, and most of this section writes that code. The fourth takes judgement, not code, and it comes first.</p>
+<p>Here is the picture for the whole section. Since §1 the model has been a ghostwriter you can only reach by telegram. In §6 the writer learned to hand request slips out of the window, and you decided whether a clerk ran each errand. Until now you read every slip yourself. In this section you stop doing that. You let the writer decide which errands to send, one after another, while you are away. That only works if you first build <strong>the office around the writer</strong>: the rulebook, the locks, the ledger and the logbook. Every part of this section has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>In the telegram office</th>
+<th>In this section</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A list of errands you wrote down in advance</td>
+<td>a chain or a workflow</td>
+<td>§11.1</td>
+</tr>
+<tr>
+<td>Letting the writer choose the next errand, with nobody reading the slips</td>
+<td>an agent</td>
+<td>§11.1</td>
+</tr>
+<tr>
+<td>The office around the writer: rules, locks, ledger, logbook</td>
+<td>the harness</td>
+<td>§11.2</td>
+</tr>
+<tr>
+<td>A spending limit, a shift length and a cap on the number of errands</td>
+<td>the loop's bounds</td>
+<td>§11.3</td>
+</tr>
+<tr>
+<td>A note on the desk: "you have this many words for the whole job"</td>
+<td>a task budget</td>
+<td>§11.3</td>
+</tr>
+<tr>
+<td>Which errands the clerks will run at all</td>
+<td>the tool surface</td>
+<td>§11.4</td>
+</tr>
+<tr>
+<td>Everything those errands together could break</td>
+<td>the blast radius</td>
+<td>§11.4</td>
+</tr>
+<tr>
+<td>A clerk who checks each slip against the rulebook first</td>
+<td>the gate</td>
+<td>§11.5</td>
+</tr>
+<tr>
+<td>A bank that refuses any cheque over the limit, whoever signed it</td>
+<td>a check inside the tool's own code</td>
+<td>§11.5</td>
+</tr>
+<tr>
+<td>A manager who must countersign some slips</td>
+<td>human in the loop</td>
+<td>§11.6</td>
+</tr>
+<tr>
+<td>A logbook of every slip, every report and every signature</td>
+<td>the trace</td>
+<td>§11.7</td>
+</tr>
+<tr>
+<td>Junior readers who read the files and send back one-page notes</td>
+<td>sub-agents</td>
+<td>§11.8</td>
+</tr>
+<tr>
+<td>A clerk who notices the same slip coming back for the third time</td>
+<td>stall detection</td>
+<td>§11.9</td>
+</tr>
+</tbody>
+</table>
 <p>It starts with the question most projects skip.</p>
 <h2 id="section-10-111-should-this-be-an-agent">11.1 Should This Be an Agent?</h2>
-<p>An agent is a loop in which <strong>the model decides what happens next</strong>. That degree of <strong>autonomy</strong> is the definition, and it is also the entire cost. You have given up control of the control flow (which step runs next), and every later design decision is about bounding what that autonomy can reach. Everything that makes agents attractive and everything that makes them expensive comes from that one trade.</p>
-<p>Most tasks do not need it. There is a ladder, and the right answer is usually the lowest rung that works.</p>
+<p>Start with what the word means. An agent is a loop in which <strong>the model decides what happens next</strong>. In ordinary code, you decide the order of the steps: first this, then that. In an agent, the model reads what has happened so far and picks the next step itself.</p>
+<p>Here is that difference in a few lines. The <code>pick_next_step</code> function stands in for the model. It is plain code, so the output is the same on every run, but it plays the model's role: it looks at what has happened and chooses. Two orders go through two designs:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">ORDERS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"ord_1"</span><span class="p">:</span> <span class="s2">"delivered"</span><span class="p">,</span> <span class="s2">"ord_2"</span><span class="p">:</span> <span class="s2">"lost in transit"</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">chain</span><span class="p">(</span><span class="n">order_id</span><span class="p">):</span>
+    <span class="c1"># You wrote the steps down. The same three run for every order.</span>
+    <span class="k">return</span> <span class="p">[</span><span class="s2">"get_order"</span><span class="p">,</span> <span class="s2">"check_refund_policy"</span><span class="p">,</span> <span class="s2">"write_reply"</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">pick_next_step</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="n">done</span><span class="p">):</span>
+    <span class="c1"># Stands in for the model: it looks at what has happened so far and chooses.</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">done</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"get_order"</span>
+    <span class="k">if</span> <span class="n">done</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"get_order"</span> <span class="ow">and</span> <span class="n">ORDERS</span><span class="p">[</span><span class="n">order_id</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"lost in transit"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"open_courier_claim"</span>
+    <span class="k">if</span> <span class="s2">"check_refund_policy"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">done</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"check_refund_policy"</span>
+    <span class="k">if</span> <span class="s2">"write_reply"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">done</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"write_reply"</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">agent</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="n">max_steps</span><span class="o">=</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">done</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">done</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">max_steps</span> <span class="ow">and</span> <span class="p">(</span><span class="n">step</span> <span class="o">:=</span> <span class="n">pick_next_step</span><span class="p">(</span><span class="n">order_id</span><span class="p">,</span> <span class="n">done</span><span class="p">)):</span>
+        <span class="n">done</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">done</span>
+
+
+<span class="k">for</span> <span class="n">order_id</span><span class="p">,</span> <span class="n">status</span> <span class="ow">in</span> <span class="n">ORDERS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">order_id</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"  chain:"</span><span class="p">,</span> <span class="s2">" -&gt; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">chain</span><span class="p">(</span><span class="n">order_id</span><span class="p">)))</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"  agent:"</span><span class="p">,</span> <span class="s2">" -&gt; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">agent</span><span class="p">(</span><span class="n">order_id</span><span class="p">)))</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>ord_1 (delivered)
+  chain: get_order -&gt; check_refund_policy -&gt; write_reply
+  agent: get_order -&gt; check_refund_policy -&gt; write_reply
+ord_2 (lost in transit)
+  chain: get_order -&gt; check_refund_policy -&gt; write_reply
+  agent: get_order -&gt; open_courier_claim -&gt; check_refund_policy -&gt; write_reply
+</code></pre></div>
+
+<p>Read the output line by line:</p>
+<ul>
+<li>For <code>ord_1</code>, the order that arrived, both designs run the same three steps.</li>
+<li>For <code>ord_2</code>, the parcel lost in transit, the chain still runs its three steps. It cannot do anything else, because you wrote the list.</li>
+<li>The agent, for the same order, adds <code>open_courier_claim</code>. That step is in no list. It was chosen at run time, after the agent saw the order's status.</li>
+</ul>
+<p>That one extra step is the whole story of agents, in both directions. The agent handled a case you did not plan for, which is the attraction. It also ran a step nobody wrote down, which is the risk. If <code>open_courier_claim</code> had been <code>create_refund</code>, the agent would have moved money on its own judgement.</p>
+<p>That freedom has a name: <strong>autonomy</strong>. It is the definition of an agent, and it is also the entire cost. You have given up control of the control flow, which means the decision of which step runs next. Every later design decision in this section is about bounding what that autonomy can reach. Everything that makes agents attractive, and everything that makes them expensive, comes from that one trade.</p>
+<p>Most tasks do not need it. Think of a ladder with four rungs. Each rung up gives the model more control and costs you more predictability. The right answer is usually the lowest rung that works:</p>
 <div style="display:grid;grid-template-columns:170px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">One call</div><div><strong>Classification, extraction, summarisation, a question with an answer.</strong> One request, one response, predictable cost, testable with §13's machinery. Most production LLM traffic is this and should be.</div>
 <div style="font-weight:600;color:#35b37e">A chain</div><div><strong>Several calls in an order you decide.</strong> Extract, then validate, then draft. The control flow is yours; the model fills in steps. Debuggable, cheap, and covers far more than people expect.</div>
@@ -10109,11 +10251,16 @@ reranking costs ~220 ms and saves 1,500 tokens per query
 <figure id="fig-ai-ladder" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 470" role="img" aria-labelledby="t-ai-ladder d-ai-ladder" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-ladder">The autonomy ladder</title><desc id="d-ai-ladder">Four rungs from one call, through a chain and a workflow with tools, to an agent. Who chooses the plan moves from you to the model as you climb, and so do cost variance, latency variance and the difficulty of testing. Use the lowest rung that works. Four questions must all be answered yes to justify the last rung: complexity, value, viability and cost of error.</desc><defs><marker id="ah-ai-ladder" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="13" y="190" width="154" height="96" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="90" y="225.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">One call</text><text x="90" y="244.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">classify, extract,</text><text x="90" y="259.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">summarise</text><rect x="193" y="134" width="154" height="96" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="270" y="169.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">A chain</text><text x="270" y="188.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">calls in an order</text><text x="270" y="203.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">you decide</text><rect x="373" y="78" width="154" height="96" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="450" y="104.85" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">A workflow</text><text x="450" y="122.35" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">with tools</text><text x="450" y="141.3" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">a loop you drive,</text><text x="450" y="156.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">a small tool set</text><rect x="553" y="22" width="154" height="96" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="630" y="57.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">An agent</text><text x="630" y="76.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">open-ended plan,</text><text x="630" y="91.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">variable cost</text><text x="20" y="32" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">more autonomy, more variance, harder to test  →</text><text x="360" y="322" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">THE LAST RUNG NEEDS FOUR YES ANSWERS</text><rect x="13" y="338" width="154" height="84" rx="10" style="fill:#cf4b6c;fill-opacity:0.08;stroke:#cf4b6c;stroke-width:1.6"/><text x="90" y="367.438" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Complexity</text><text x="90" y="386.387" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">hard to specify</text><text x="90" y="401.337" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">in advance?</text><rect x="193" y="338" width="154" height="84" rx="10" style="fill:#cf4b6c;fill-opacity:0.08;stroke:#cf4b6c;stroke-width:1.6"/><text x="270" y="367.438" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Value</text><text x="270" y="386.387" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">worth a variable</text><text x="270" y="401.337" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">bill?</text><rect x="373" y="338" width="154" height="84" rx="10" style="fill:#cf4b6c;fill-opacity:0.08;stroke:#cf4b6c;stroke-width:1.6"/><text x="450" y="367.438" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Viability</text><text x="450" y="386.387" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">is the model</text><text x="450" y="401.337" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">good at it?</text><rect x="553" y="338" width="154" height="84" rx="10" style="fill:#cf4b6c;fill-opacity:0.08;stroke:#cf4b6c;stroke-width:1.6"/><text x="630" y="367.438" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Cost of error</text><text x="630" y="386.387" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">can mistakes</text><text x="630" y="401.337" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">be undone?</text><text x="360" y="452" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">a chain of three calls beats an agent that rediscovers the same three steps</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The right answer is usually the lowest rung that works. A no to any of the four questions means stop.</figcaption></figure>
 <!-- /fig:ai-ladder -->
 
-<p>Four questions decide whether the last rung is justified, and a "no" to any one of them means stop.</p>
-<p><strong>Complexity.</strong> Is the task genuinely hard to specify in advance? "Turn this design document into a pull request" is. "Extract the title from this PDF" is not. If you can write the steps down, write them down, because a chain of three calls beats an agent that rediscovers your process every run.</p>
-<p><strong>Value.</strong> Does the outcome justify a variable bill and variable latency? An agent that takes 40 seconds and $0.30 to do something a single call does in 2 seconds for $0.004 has to be <em>much</em> better to be worth it.</p>
-<p><strong>Viability.</strong> Is the model actually good at this task? An agent amplifies capability and does not create it. If a single call cannot do a step, a loop that calls it eleven times will not either. It will just be wrong at greater length.</p>
-<p><strong>Cost of error.</strong> Can mistakes be caught and undone? This is the one people weigh last and should weigh first. An agent that writes code you review is safe because the review is a gate. An agent that issues refunds is safe only if you built the gate. §11.6 builds it.</p>
+<p>Before you leave the third rung for the fourth, ask four questions. A "no" to any one of them means stop.</p>
+<p><strong>Complexity.</strong> Is the task genuinely hard to specify in advance? To <em>specify</em> a task is to write down its steps. "Turn this design document into a pull request" is hard to specify, because nobody can list the steps before reading the document. "Extract the title from this PDF" is easy. If you can write the steps down, write them down. A chain of three calls beats an agent that rediscovers your process on every run.</p>
+<p><strong>Value.</strong> Does the outcome justify a bill and a wait that change from run to run? Picture an agent that takes 40 seconds and $0.30 to do something a single call does in 2 seconds for $0.004. It has to be <em>much</em> better to be worth it.</p>
+<p><strong>Viability.</strong> Is the model actually good at this task? An agent amplifies what the model can do. It does not create new ability. If a single call cannot do a step, a loop that calls it eleven times will not either. It will just be wrong at greater length.</p>
+<p><strong>Cost of error.</strong> Can mistakes be caught and undone? This is the question people weigh last, and it should be weighed first. Compare two agents:</p>
+<ul>
+<li>An agent that writes code you review is safe, because the review is a gate: nothing happens until a person says yes.</li>
+<li>An agent that issues refunds is safe only if you built the gate. §11.6 builds it.</li>
+</ul>
+<p>The block below runs the four questions over five candidate tasks. Each task is a row of answers: can the steps be specified, how valuable is it, can the model do it, and can mistakes be undone. The <code>if</code> chain applies the questions in order and stops at the first one that fails:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">CANDIDATES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="c1"># (task, specifiable, value, viable, recoverable)</span>
     <span class="p">(</span><span class="s2">"extract invoice totals from PDFs"</span><span class="p">,</span>      <span class="kc">True</span><span class="p">,</span>  <span class="s2">"high"</span><span class="p">,</span>   <span class="kc">True</span><span class="p">,</span>  <span class="kc">True</span><span class="p">),</span>
@@ -10146,9 +10293,20 @@ tidy variable names across the repo     no — the value does not justify the va
 investigate a failing test and fix it   YES — this is what agents are for
 </code></pre></div>
 
-<p>Each row fails on a different question, which is the useful part. A "no" arrives for four distinct reasons, and only the last row survives all four. That ratio is roughly right in practice too.</p>
+<p>Each row fails on a different question, and that is the useful part. Read it top to bottom:</p>
+<ul>
+<li>invoice totals fail on complexity: the steps can be written down, so a chain does it.</li>
+<li>supplier negotiation fails on viability: the model cannot do the underlying job well enough.</li>
+<li>payment reconciliation passes, but only with a person approving every step that cannot be undone.</li>
+<li>renaming variables fails on value: it is not worth a variable bill.</li>
+<li>fixing a failing test survives all four.</li>
+</ul>
+<p>So a "no" arrives for four distinct reasons, and only the last row survives every question. That ratio is roughly right in practice too.</p>
 <h2 id="section-10-112-the-harness">11.2 The Harness</h2>
-<p>An agent is a loop plus the scaffolding that makes the loop safe. That scaffolding has a name, the <strong>agent harness</strong>, and it is the part you actually write. The model is a component, and the agent harness is the system. Everything that makes an agent trustworthy lives in the harness and not in the model.</p>
+<p>Now suppose the answer was yes. What do you actually build?</p>
+<p>Think back to the office. The writer is talented, but the writer is one part of the office. The locks on the doors, the spending limits, the countersigning rules and the logbook are what make it safe to leave the writer alone overnight. None of those live in the writer's head. They live in the building.</p>
+<p>An agent is the same. It is a loop plus the scaffolding that makes the loop safe. That scaffolding has a name, the <strong>agent harness</strong>, and it is the part you actually write. The model is a component, and the agent harness is the system. Everything that makes an agent trustworthy lives in the harness and not in the model.</p>
+<p>The harness has five parts. Each row names one, says what it holds, and points to where this course builds it:</p>
 <div style="display:grid;grid-template-columns:165px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">Budget</div><div><strong>Turns, tokens, wall-clock, money.</strong> Every one of them bounded, and every bound producing a defined outcome rather than an exception. §11.3.</div>
 <div style="font-weight:600;color:#35b37e">Execution</div><div><strong>Dispatch, authorisation, error shaping.</strong> The only place with the session, the permissions and the real world. §6.5 and §6.10 built most of this.</div>
@@ -10161,9 +10319,11 @@ investigate a failing test and fix it   YES — this is what agents are for
 <figure id="fig-ai-harness" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 460" role="img" aria-labelledby="t-ai-harness d-ai-harness" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-harness">The agent is a loop plus a harness</title><desc id="d-ai-harness">The model is one component inside a harness that you write. The harness has five parts: a budget of turns, tokens, time and money; execution, which dispatches and authorises tools; a context policy of what is cached, cleared, compacted and remembered; gates that require a human; and observability, a record of every turn and call.</desc><defs><marker id="ah-ai-harness" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="12" y="12" width="696" height="428" rx="14" style="fill:none;stroke:#4a9eda;stroke-width:1.4"/><text x="26" y="32" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#4a9eda;opacity:1">THE HARNESS: THE PART YOU ACTUALLY WRITE</text><rect x="272" y="158" width="176" height="104" rx="10" style="fill:#7c8cff;fill-opacity:0.13;stroke:#7c8cff;stroke-width:1.6"/><text x="360" y="197.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">The model</text><text x="360" y="216.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">a component that</text><text x="360" y="232.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">proposes</text><rect x="36" y="56" width="190" height="84" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="131" y="85.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">Budget</text><text x="131" y="104.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">turns, tokens,</text><text x="131" y="119.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">seconds, money</text><rect x="494" y="56" width="190" height="84" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="589" y="85.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">Execution</text><text x="589" y="104.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">dispatch, authorise,</text><text x="589" y="119.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">shape errors</text><rect x="36" y="190" width="190" height="84" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="131" y="219.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">Context policy</text><text x="131" y="238.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">cached, cleared,</text><text x="131" y="253.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">compacted, remembered</text><rect x="494" y="190" width="190" height="84" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="589" y="219.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">Gates</text><text x="589" y="238.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">what needs</text><text x="589" y="253.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">a human</text><rect x="265" y="322" width="190" height="84" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="351.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">Observability</text><text x="360" y="370.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">every turn, call</text><text x="360" y="385.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">and argument</text><path d="M230,130 L276,170" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-harness)"/><path d="M490,130 L444,170" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-harness)"/><path d="M230,232 L266,218" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-harness)"/><path d="M490,232 L454,218" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-harness)"/><path d="M360,322 L360,268" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-harness)"/></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The system prompt is guidance to a component that produces text, not a control. Enforcement belongs in the harness.</figcaption></figure>
 <!-- /fig:ai-harness -->
 
-<p>The mistake worth naming early is <strong>treating the system prompt as the harness.</strong> Instructions like <em>"never refund more than €100 without approval"</em> are guidance to a component that produces text. They are not a control. The €100 check belongs in <code>create_refund</code>, where it is code, and where no amount of clever input can talk it out of firing.</p>
+<p>The mistake worth naming early is <strong>treating the system prompt as the harness.</strong> The system prompt (§2.4) is the instruction text you send with every request. Suppose it says <em>"never refund more than €100 without approval"</em>. That sentence is guidance to a component that produces text. It is not a control. In office terms, it is a sign on the writer's wall. A persuasive letter can talk the writer past a sign.</p>
+<p>The €100 check belongs in <code>create_refund</code>, the function that actually moves the money. There it is code. Code runs the same way every time, and no amount of clever input can talk it out of firing.</p>
 <h2 id="section-10-113-bounding-the-loop">11.3 Bounding the Loop</h2>
-<p>Here is §6.4's loop with the missing half. Every bound is explicit, and, the part that matters, every bound has a defined outcome.</p>
+<p>A <em>bound</em> is a limit with an action attached: when you reach this, stop. Here is §6.4's loop with the missing half added. It has four bounds: turns, tokens, seconds and money.</p>
+<p>To keep the run repeatable, the model is replaced by a fixed list, <code>TURN_COST</code>. Each entry is what one turn would really use: input tokens read and output tokens written. The cost uses Opus 5's prices from §2, $5 per million input tokens and $25 per million output. One more design choice matters later: the clock is a parameter, <code>now</code>, so the example can use a fake clock that moves exactly 9.5 seconds per turn:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 
 
@@ -10227,10 +10387,77 @@ turn  7  tokens 250,530  cost $1.343  elapsed  66.5s
 finished normally after 7 turns ($1.343, 250,530 tokens)
 </code></pre></div>
 
-<p><strong>Four bounds, not one</strong>, because they fail in different ways. A turn cap does not stop one turn that reads a 400,000-token file. A token cap does not stop an agent waiting on a slow tool. A time cap does not stop something cheap and fast that loops forever within budget. Money is the one your finance team cares about and the one nobody adds until an incident.</p>
-<p><strong>A bound must produce an outcome, not an exception.</strong> <code>stopped: turn_limit</code> is a state your caller can handle: show partial results, escalate to a human, or resume with a raised budget. A raised <code>RuntimeError</code> in the middle of a loop that has already issued a refund is not a state. It is a mess.</p>
-<p><strong>Inject the clock.</strong> The <code>now</code> parameter is what makes this testable and what makes the output above identical on every run. §13 cannot evaluate an agent whose time limit depends on how busy the machine was.</p>
-<p>There is a related feature worth knowing about, and it solves a different problem: <strong>task budgets</strong>. A <strong>task budget</strong> differs from every bound above in one respect that changes how it behaves. A <code>task_budget</code> inside <code>output_config</code> tells the <em>model</em> how many tokens it has for the whole job, so it paces itself and finishes gracefully and is not cut off mid-thought. It is advisory, and it complements the hard bounds above and does not replace them.</p>
+<p>This is the puzzle from the start of the section. Look at the last two lines. The budget allowed $1.00 and 200,000 tokens, and the run ended at $1.343 and 250,530 tokens, with the words "finished normally". How?</p>
+<p>Follow the numbers turn by turn:</p>
+<ol>
+<li>Before turn 7, <code>exhausted()</code> runs. The totals so far are 175,930 tokens and $0.958. Both are under the limits, so the check passes, correctly.</li>
+<li>Turn 7 runs. On its own it reads 74,000 tokens and writes 600, which costs about $0.385. A turn cannot be stopped halfway. Once the request is sent, it is spent.</li>
+<li>The list of turns ends, so the loop's <code>else</code> branch prints "finished normally". Nothing checks the budget again.</li>
+</ol>
+<p>So nothing was broken. The check only looks <em>backwards</em>. It can judge the turns already paid for, and it knows nothing about the turn it is about to allow. Think of a shop assistant who checks your card balance <em>after</em> each purchase. Every check is honest, and the last purchase can still take you over.</p>
+<p>The fix is to look <em>forwards</em>. Before you send a turn, work out the worst it could cost. Half of that is known exactly: the input is the conversation you are about to send, and §9.2 showed how to count its tokens before sending. The other half has a ceiling: the reply can be no longer than the <code>max_tokens</code> you put in the request (§2.1). Add both to what you have already spent, and refuse the turn if the total would cross a limit:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">TURN_COST</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">4_000</span><span class="p">,</span> <span class="mi">300</span><span class="p">),</span> <span class="p">(</span><span class="mi">9_000</span><span class="p">,</span> <span class="mi">450</span><span class="p">),</span> <span class="p">(</span><span class="mi">16_000</span><span class="p">,</span> <span class="mi">380</span><span class="p">),</span> <span class="p">(</span><span class="mi">30_000</span><span class="p">,</span> <span class="mi">900</span><span class="p">),</span>
+             <span class="p">(</span><span class="mi">52_000</span><span class="p">,</span> <span class="mi">700</span><span class="p">),</span> <span class="p">(</span><span class="mi">61_000</span><span class="p">,</span> <span class="mi">1_200</span><span class="p">),</span> <span class="p">(</span><span class="mi">74_000</span><span class="p">,</span> <span class="mi">600</span><span class="p">)]</span>
+<span class="n">MAX_TOKENS</span><span class="p">,</span> <span class="n">MAX_COST</span> <span class="o">=</span> <span class="mi">200_000</span><span class="p">,</span> <span class="mf">1.00</span>
+<span class="n">MAX_OUTPUT</span> <span class="o">=</span> <span class="mi">1_500</span>          <span class="c1"># the max_tokens you send: no reply can be longer</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">price</span><span class="p">(</span><span class="n">input_tokens</span><span class="p">,</span> <span class="n">output_tokens</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">input_tokens</span> <span class="o">/</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="mf">5.0</span> <span class="o">+</span> <span class="n">output_tokens</span> <span class="o">/</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="mf">25.0</span>
+
+
+<span class="n">tokens</span><span class="p">,</span> <span class="n">cost</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">0.0</span>
+<span class="k">for</span> <span class="n">turn</span><span class="p">,</span> <span class="p">(</span><span class="n">input_tokens</span><span class="p">,</span> <span class="n">output_tokens</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">TURN_COST</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+    <span class="c1"># Before sending: the input is known (§9.2 counts it), the output is not,</span>
+    <span class="c1"># so assume the worst reply the request allows.</span>
+    <span class="n">worst_tokens</span> <span class="o">=</span> <span class="n">tokens</span> <span class="o">+</span> <span class="n">input_tokens</span> <span class="o">+</span> <span class="n">MAX_OUTPUT</span>
+    <span class="n">worst_cost</span> <span class="o">=</span> <span class="n">cost</span> <span class="o">+</span> <span class="n">price</span><span class="p">(</span><span class="n">input_tokens</span><span class="p">,</span> <span class="n">MAX_OUTPUT</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">worst_tokens</span> <span class="o">&gt;</span> <span class="n">MAX_TOKENS</span> <span class="ow">or</span> <span class="n">worst_cost</span> <span class="o">&gt;</span> <span class="n">MAX_COST</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"refused turn </span><span class="si">{</span><span class="n">turn</span><span class="si">}</span><span class="s2">: it could reach </span><span class="si">{</span><span class="n">worst_tokens</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> tokens "</span>
+              <span class="sa">f</span><span class="s2">"and $</span><span class="si">{</span><span class="n">worst_cost</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">break</span>
+    <span class="n">tokens</span> <span class="o">+=</span> <span class="n">input_tokens</span> <span class="o">+</span> <span class="n">output_tokens</span>
+    <span class="n">cost</span> <span class="o">+=</span> <span class="n">price</span><span class="p">(</span><span class="n">input_tokens</span><span class="p">,</span> <span class="n">output_tokens</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"turn </span><span class="si">{</span><span class="n">turn</span><span class="si">}</span><span class="s2">  tokens </span><span class="si">{</span><span class="n">tokens</span><span class="si">:</span><span class="s2">&gt;7,</span><span class="si">}</span><span class="s2">  cost $</span><span class="si">{</span><span class="n">cost</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"final: </span><span class="si">{</span><span class="n">tokens</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> tokens, $</span><span class="si">{</span><span class="n">cost</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, both under the limits"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>turn 1  tokens   4,300  cost $0.028
+turn 2  tokens  13,750  cost $0.084
+turn 3  tokens  30,130  cost $0.173
+turn 4  tokens  61,030  cost $0.346
+turn 5  tokens 113,730  cost $0.623
+turn 6  tokens 175,930  cost $0.958
+refused turn 7: it could reach 251,430 tokens and $1.366
+final: 175,930 tokens, $0.958, both under the limits
+</code></pre></div>
+
+<p>This time the run stops <em>before</em> turn 7, because that turn could have reached 251,430 tokens and $1.366. The final totals stay under both limits. That is what a bound should mean: the limit is never crossed, not merely noticed afterwards.</p>
+<p>With that in place, here are the three rules the <code>Budget</code> class encodes.</p>
+<p><strong>Four bounds, not one</strong>, because they fail in different ways:</p>
+<ul>
+<li>A turn cap does not stop one turn that reads a 400,000-token file.</li>
+<li>A token cap does not stop an agent waiting on a slow tool.</li>
+<li>A time cap does not stop something cheap and fast that loops forever within budget.</li>
+<li>Money is the one your finance team cares about, and the one nobody adds until an incident.</li>
+</ul>
+<p><strong>A bound must produce an outcome, not an exception.</strong> An <em>exception</em> is Python's way of stopping with an error, such as <code>RuntimeError</code>. Compare two endings:</p>
+<ul>
+<li><code>stopped: turn_limit</code> is a state your caller can handle. It can show partial results, escalate to a human, or resume with a raised budget.</li>
+<li>A raised <code>RuntimeError</code> in the middle of a loop that has already issued a refund is not a state. It is a mess: the money has moved, and the code that knew why has crashed.</li>
+</ul>
+<p><strong>Inject the clock.</strong> To <em>inject</em> something is to pass it in as a parameter, and not let the code reach for it itself. The <code>now</code> parameter is what makes this testable, and it is what makes the output above identical on every run. A real clock would make the time limit depend on how busy the machine was. §13 cannot evaluate an agent like that.</p>
+<p>There is a related feature worth knowing about, and it solves a different problem: <strong>task budgets</strong>. Back in the office, every bound above is a rule the <em>office</em> enforces: the ledger stops paying, the door locks at six. The writer does not see them coming. A task budget is a note on the writer's desk instead: "you have this many words for the whole job". The writer can see it, and plan around it.</p>
+<p>A <strong>task budget</strong> differs from every bound above in exactly that respect, and it changes how it behaves. A <code>task_budget</code> inside <code>output_config</code> tells the <em>model</em> how many tokens it has for the whole job. So the model paces itself and finishes gracefully, and is not cut off mid-thought. It is advisory: the model aims for it, and nothing enforces it. It complements the hard bounds above and does not replace them.</p>
+<p>A few facts from the documentation, before the example:</p>
+<ul>
+<li>It is a beta feature, switched on with the <code>task-budgets-2026-03-13</code> beta flag. A <em>beta</em> feature is released for use but still allowed to change, as §7.7 explained.</li>
+<li>It takes three fields: <code>type</code>, always <code>"tokens"</code>; <code>total</code>, which must be at least 20,000; and an optional <code>remaining</code>, which you leave out in a normal loop because the server keeps the countdown itself.</li>
+<li>It counts what the model writes and the tool results it reads. It does not count the history you resend on every turn.</li>
+<li>It works on Opus 5 and several other current models, but not on Sonnet 5.</li>
+</ul>
+<p>Here it is on a request with one tool:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -10258,12 +10485,24 @@ finished normally after 7 turns ($1.343, 250,530 tokens)
 output tokens: 11840
 </code></pre></div>
 
-<p>Note the streaming. A <code>max_tokens</code> that large on a non-streaming request risks an HTTP timeout, which is why the budget example uses <code>.stream()</code> and <code>get_final_message()</code> and not <code>create()</code>.</p>
-<p><strong><code>max_tokens</code> and <code>task_budget</code> are not the same thing, and the difference matters.</strong> <code>max_tokens</code> is a hard ceiling on one response that the model does not know about, so hitting it gives you a sentence cut in half. <code>task_budget</code> is a figure the model can see and pace against across the whole loop. Use both: the task budget so the model lands the plane, and the ceiling so it cannot run away.</p>
+<p>Read the output first. The response ended with <code>end_turn</code>, the model's own choice to stop, and it wrote 11,840 tokens against a budget of 40,000. That is a single-response run; in a loop you would add up <code>output_tokens</code> across turns to watch the budget being used.</p>
+<p>Note the streaming. <em>Streaming</em> means receiving the response piece by piece as it is written (§2.7). A <code>max_tokens</code> that large on a non-streaming request risks an HTTP timeout: the connection gives up before the long reply is finished. That is why the budget example uses <code>.stream()</code> and <code>get_final_message()</code>, and not <code>create()</code>.</p>
+<p><strong><code>max_tokens</code> and <code>task_budget</code> are not the same thing, and the difference matters.</strong></p>
+<ul>
+<li><code>max_tokens</code> is a hard ceiling on one response, and the model does not know about it. Hitting it gives you a sentence cut in half.</li>
+<li><code>task_budget</code> is a figure the model can see and pace against across the whole loop.</li>
+</ul>
+<p>Use both. The task budget is there so the model lands the plane. The ceiling is there so it cannot run away.</p>
 <h2 id="section-10-114-designing-the-tool-surface-for-an-agent">11.4 Designing the Tool Surface for an Agent</h2>
-<p>§6.10 covered tool design in general. Agents add one question that single-call systems never face: <strong>how much of the world should this loop be able to touch?</strong></p>
-<p>The instinct is to give the agent everything it might need. The better instinct is the opposite, and there is a concrete rule that captures it.</p>
-<p><strong>An agent's blast radius is everything all its tools together can do.</strong> (Blast radius is a term borrowed from explosives: how much damage spreads if something goes wrong.) It should be sized to the worst plausible sequence and not the intended one. A tool set of <code>read_file</code>, <code>write_file</code> and <code>run_shell</code> is, whatever the system prompt says, an agent that can do anything to that machine.</p>
+<p>A <em>tool surface</em> is the full set of tools an agent can call. §6.10 covered tool design in general. Agents add one question that single-call systems never face: <strong>how much of the world should this loop be able to touch?</strong></p>
+<p>The instinct is to give the agent everything it might need. The better instinct is the opposite. In the office, you would not hand a new clerk every key in the building on day one. You would hand over the keys for the rooms the job needs.</p>
+<p>There is a concrete rule that captures this. <strong>An agent's blast radius is everything all its tools together can do.</strong> Blast radius is a term borrowed from explosives: how far the damage spreads if something goes wrong. Two words in that rule matter:</p>
+<ul>
+<li><em>together</em>: the tools combine. Each tool may look harmless alone.</li>
+<li><em>can</em>: the rule is about what is possible, not what is intended.</li>
+</ul>
+<p>So size the blast radius to the worst plausible sequence of calls, not the intended one. A tool set of <code>read_file</code>, <code>write_file</code> and <code>run_shell</code> is, whatever the system prompt says, an agent that can do anything to that machine.</p>
+<p>The block below makes the rule mechanical. <code>TOOLSETS</code> lists three agents and their tools. <code>CAPABILITY</code> labels every tool with two things: its <em>kind</em> (does it read, write, or execute?) and its <em>reach</em> (what does it touch?). The loop then lists, for each agent, every tool that reaches money, sends something out, or runs commands on the host machine, because those are the calls that cannot be taken back:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">TOOLSETS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"reader"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"search_docs"</span><span class="p">,</span> <span class="s2">"read_file"</span><span class="p">],</span>
     <span class="s2">"support"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"get_order"</span><span class="p">,</span> <span class="s2">"check_refund_policy"</span><span class="p">,</span> <span class="s2">"create_refund"</span><span class="p">,</span>
@@ -10297,12 +10536,32 @@ dev       kinds=execute,read,write   reach=host,repo,sandbox
           needs a gate: ['run_shell']
 </code></pre></div>
 
-<p>The <code>reader</code> agent can be run unattended on a schedule, and nobody needs to think about it again. The other two cannot, and the reason is visible in one line and not buried in a system prompt.</p>
+<p>Read it one agent at a time:</p>
+<ul>
+<li><code>reader</code> only reads, and only public documents and the repository. Nothing on its list needs a gate.</li>
+<li><code>support</code> can move money and send email. Two tools need a gate.</li>
+<li><code>dev</code> can run shell commands on the host. One tool needs a gate, and it is the one that makes the other three irrelevant.</li>
+</ul>
+<p>The <code>reader</code> agent can be run unattended on a schedule, and nobody needs to think about it again. The other two cannot. The reason is visible in one line of output, not buried in a system prompt.</p>
 <p>Two agent-specific tool design rules follow.</p>
-<p><strong>Split read from write, and make the write tools narrow.</strong> A single <code>update_order(fields)</code> tool that accepts arbitrary fields has a much larger blast radius than <code>cancel_order(id)</code> and <code>change_address(id, address)</code>. Narrow tools are also easier for the model to call correctly, so this is not purely a safety trade.</p>
-<p><strong>Give the agent a way to finish.</strong> An explicit <code>done(summary)</code> tool is often better than relying on the model to stop calling tools, because it makes completion an observable event you can log, gate and evaluate. Without it, "the agent finished" and "the agent gave up" look identical from outside.</p>
+<p><strong>Split read from write, and make the write tools narrow.</strong> Compare one wide tool with two narrow ones:</p>
+<ul>
+<li><code>update_order(fields)</code> accepts arbitrary fields. It can change the price, the status, the customer, anything.</li>
+<li><code>cancel_order(id)</code> and <code>change_address(id, address)</code> can each do one thing.</li>
+</ul>
+<p>The single wide tool has a much larger blast radius. Narrow tools are also easier for the model to call correctly, so this is not purely a safety trade.</p>
+<p><strong>Give the agent a way to finish.</strong> An explicit <code>done(summary)</code> tool is often better than relying on the model to simply stop calling tools. It makes completion an observable event: something you can log, gate and evaluate. Without it, "the agent finished" and "the agent gave up" look identical from outside.</p>
 <h2 id="section-10-115-a-complete-harness">11.5 A Complete Harness</h2>
-<p>Here is the whole thing, assembled. It is longer than the loop in §6.4 by roughly the amount of scaffolding a production system needs, which is the point.</p>
+<p>Here is the whole thing, assembled. It is longer than the loop in §6.4 by roughly the amount of scaffolding a production system needs, and that is the point.</p>
+<p>One note before the code. The SDK's tool runner, from §6.4, can drive this loop for you, and its per-turn hooks are a place to put a gate or a log line. Whoever drives the loop, the pieces below are still yours to write. Here they are written out by hand, so you can see each one.</p>
+<p>The block is long, so read it in four parts:</p>
+<ol>
+<li><code>Halt</code> is a custom exception. A tool raises it to say "this call must not go ahead".</li>
+<li><code>Agent._execute</code> runs one tool call, checking in this order: does the tool exist, does the gate allow it, does the tool itself refuse with <code>Halt</code>, does anything else go wrong. Every failure becomes a sentence and an error flag, never a crash.</li>
+<li><code>Agent.run</code> is the loop. To keep the run repeatable, it takes a scripted list of what the model asks for on each turn. Replacing that list with real API calls changes nothing else. Every step is reported through <code>on_event</code>, which here appends to a list.</li>
+<li>The setup at the bottom gives the agent two tools and a gate, then plays out six turns: one lookup, three refunds of different sizes, one tool that does not exist, and "done".</li>
+</ol>
+<p>The two refund rules are in different places on purpose. The gate asks for approval for refunds above 5,000 cents (€50) and up to 10,000 (€100). The hard ceiling of €100 lives inside <code>create_refund</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Halt</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Raised by the executor when a call must not proceed. Never reaches the model."""</span>
 
@@ -10410,14 +10669,16 @@ outcome: finished
 refunds actually made: {'ord_1': 4250}
 </code></pre></div>
 
-<p>Read what each of the four <code>create_refund</code> attempts did.</p>
-<p><strong>The first succeeded</strong>, because it was under both limits.</p>
-<p><strong>The second was declined by the gate</strong>, because it was over €50 and under the hard limit. The model is told, in a sentence it can act on, that the call was <em>not executed</em> and what to do next. It is not told "error". It is told the shape of the constraint.</p>
-<p><strong>The third hit <code>Halt</code> inside the implementation.</strong> This is the layer that matters, because it fires whether or not the gate exists, whether or not the system prompt said anything, and whether or not the model was persuaded by something it read in a tool result. <strong>The gate is policy, and <code>Halt</code> is the law.</strong></p>
-<p><strong>The fourth was a tool that does not exist</strong>, which is returned as an error and does not crash the loop. Models occasionally invent tool names, especially with large surfaces, and a harness that dies on one is a harness that dies in production.</p>
+<p>After the lookup on turn 1, read the four calls that followed:</p>
+<p><strong>The first succeeded</strong>, because €42.50 was under both limits.</p>
+<p><strong>The second was declined by the gate</strong>, because €75.00 was over €50 and under the hard limit. Look at what the model is told: in a sentence it can act on, that the call was <em>not executed</em>, and what to do next. It is not just told "error". It is told the shape of the constraint, so its next move can be sensible.</p>
+<p><strong>The third hit <code>Halt</code> inside the implementation.</strong> This is the layer that matters most. It fires whether or not the gate exists, whether or not the system prompt said anything, and whether or not the model was persuaded by something it read in a tool result. In the office, the gate is the clerk who checks slips against the rulebook. <code>Halt</code> is the bank, which refuses the cheque whoever signed it. <strong>The gate is policy, and <code>Halt</code> is the law.</strong></p>
+<p><strong>The fourth was a tool that does not exist</strong>, <code>delete_everything</code>. It is returned as an error and does not crash the loop. Models occasionally invent tool names, especially when they have many tools to choose from. A harness that dies on one is a harness that dies in production.</p>
+<p>The last line is the one to check: of three refund attempts, exactly one became money, <code>{'ord_1': 4250}</code>.</p>
 <p>And the whole run is in <code>events</code>, which is §11.7's subject.</p>
 <h2 id="section-10-116-human-gates">11.6 Human Gates</h2>
-<p><strong>Human in the loop</strong> is the name for what §11.5's gate implements. The gate there is a function returning a boolean. In a real system it is a workflow, and the design question is <em>where</em> the approval gate goes and not whether there is one.</p>
+<p><strong>Human in the loop</strong> is the name for what §11.5's gate implements: a person who must approve certain steps before they happen. In the office, it is the manager who countersigns some slips. The gate in §11.5 is a function returning <code>True</code> or <code>False</code>. In a real system it is a workflow: a message to a person, a button, a wait. So the design question is not whether there is an approval gate. It is <em>where</em> the approval gate goes.</p>
+<p>There are four places, from earliest to latest:</p>
 <div style="display:grid;grid-template-columns:160px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">Before the loop</div><div><strong>Approve the plan.</strong> Ask the model what it intends, show it, get a yes. Cheap and popular, and it protects less than it appears to — plans drift once tool results start arriving.</div>
 <div style="font-weight:600;color:#35b37e">At the call</div><div><strong>Approve this specific action with these specific arguments.</strong> The strongest form of human in the loop, and the only approval gate that sees the actual amount, the actual recipient, the actual file. Use it for anything irreversible.</div>
@@ -10429,7 +10690,16 @@ refunds actually made: {'ord_1': 4250}
 <figure id="fig-ai-gates" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 470" role="img" aria-labelledby="t-ai-gates d-ai-gates" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-gates">Where the human approval gate goes</title><desc id="d-ai-gates">Along a run, a gate can sit before the loop, approving the plan, which protects less than it appears because plans drift; at the call, approving this specific action with these specific arguments, which is the strongest form; or after the fact, reviewing what happened, adequate when the action is reversible. For read-only agents the right answer is no gate, because gating everything trains people to click approve.</desc><defs><marker id="ah-ai-gates" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><path d="M30,60 L690,60" style="fill:none;stroke:var(--text-dim);stroke-width:2" marker-end="url(#ah-ai-gates)"/><circle cx="110" cy="60" r="7" style="fill:var(--bg-elevated);stroke:var(--text-dim);stroke-width:2"/><text x="110" y="44" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">plan</text><circle cx="360" cy="60" r="7" style="fill:var(--bg-elevated);stroke:var(--text-dim);stroke-width:2"/><text x="360" y="44" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">tool call</text><circle cx="610" cy="60" r="7" style="fill:var(--bg-elevated);stroke:var(--text-dim);stroke-width:2"/><text x="610" y="44" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">result</text><rect x="13" y="100" width="214" height="84" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="120" y="137.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">Before the loop</text><text x="120" y="156.025" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">approve the plan</text><text x="120" y="214" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">protects less than it</text><text x="120" y="230" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">appears: plans drift</text><rect x="253" y="100" width="214" height="84" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="360" y="129.6" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">At the call</text><text x="360" y="148.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">approve this action,</text><text x="360" y="163.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">with these arguments</text><text x="360" y="214" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">the strongest form: it sees</text><text x="360" y="230" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">the real amount and recipient</text><rect x="493" y="100" width="214" height="84" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="600" y="137.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">After the fact</text><text x="600" y="156.025" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">review what happened</text><text x="600" y="214" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">adequate when reversible:</text><text x="600" y="230" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">the pull request is the gate</text><rect x="13" y="280" width="694" height="92" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6" stroke-dasharray="5 4"/><text x="360" y="313.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Never, for a read-only agent</text><text x="360" y="332.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">its whole tool surface is reads within a boundary: gating those</text><text x="360" y="348.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">trains people to click approve, which is worse than not gating</text><text x="360" y="418" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">the gate belongs where a person can see what is about to happen</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">An approval gate that fires on everything is a gate nobody reads, and human in the loop stops meaning review the moment that happens.</figcaption></figure>
 <!-- /fig:ai-gates -->
 
-<p>That last row is the one teams get wrong in the safe direction and pay for anyway. <strong>An approval gate that fires on everything is an approval gate nobody reads</strong>, and human in the loop stops meaning review the moment that happens. Approval fatigue is a real failure mode. After the fortieth approval prompt for a file read, the forty-first, the one asking to delete a directory, gets the same reflexive yes. Gate the irreversible, and log the rest.</p>
+<p>That last row is the one teams get wrong in the safe direction, and they pay for it anyway. <strong>An approval gate that fires on everything is an approval gate nobody reads</strong>, and human in the loop stops meaning review the moment that happens.</p>
+<p>This failure has a name, <em>approval fatigue</em>, and it is real. Picture the prompts arriving one after another. After the fortieth approval prompt for a file read, the forty-first gets the same reflexive yes, even when it is the one asking to delete a directory. The person did not stop caring. They were trained, by forty harmless prompts, to stop reading.</p>
+<p>So gate the irreversible, and log the rest.</p>
+<p>A good way to express that is a <em>policy table</em>: a list of rules, read top to bottom. Each rule has three parts: the tool name, a condition on the call's arguments, and a decision. There are three decisions:</p>
+<ul>
+<li><code>allow</code>: run it, no question asked;</li>
+<li><code>ask</code>: stop and get a person's approval;</li>
+<li><code>deny</code>: refuse outright.</li>
+</ul>
+<p>Each condition is written as a <code>lambda</code>, a small function written in one line, which takes the call's arguments <code>a</code> and returns <code>True</code> or <code>False</code>. The function <code>decide</code> walks the table and returns the first decision whose rule matches. The block then tries eight calls against it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">POLICY</span> <span class="o">=</span> <span class="p">[</span>
     <span class="c1"># (tool, condition, decision)</span>
     <span class="p">(</span><span class="s2">"read_file"</span><span class="p">,</span>     <span class="k">lambda</span> <span class="n">a</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>                          <span class="s2">"allow"</span><span class="p">),</span>
@@ -10470,7 +10740,7 @@ refunds actually made: {'ord_1': 4250}
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="se">\n</span><span class="si">{</span><span class="n">asks</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ATTEMPTS</span><span class="p">)</span><span class="si">}</span><span class="s2"> attempts interrupt a human"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>allow  read_file      {'path': 'src/auth.py'}
+<div class="highlight" data-lang="text"><pre><span></span><code>  allow  read_file      {'path': 'src/auth.py'}
   allow  write_file     {'path': 'src/auth.py'}
 ? ask    write_file     {'path': '/etc/hosts'}
   allow  create_refund  {'amount_cents': 1500}
@@ -10482,11 +10752,28 @@ refunds actually made: {'ord_1': 4250}
 2 of 8 attempts interrupt a human
 </code></pre></div>
 
-<p><strong>The default is deny, and <code>send_email</code> proves it.</strong> A tool with no policy entry is refused and not allowed, so adding a tool without thinking about its policy fails closed. Reversing that default is how an agent acquires a capability nobody reviewed.</p>
-<p><strong>Ordering encodes precedence.</strong> The three <code>create_refund</code> rules read as a ladder, where small amounts pass, medium ones ask and large ones are refused, because the first match wins. Written in the other order, everything would be denied.</p>
+<p>Each output line starts with a marker so you can scan it: two spaces for <code>allow</code>, <code>?</code> for <code>ask</code>, <code>!</code> for <code>deny</code>. Three rules are worth reading out of it.</p>
+<p><strong>The default is deny, and <code>send_email</code> proves it.</strong> There is no rule for <code>send_email</code> at all, so <code>decide</code> reaches the end of the table and returns <code>"deny"</code>. That means a new tool added without a policy entry is refused, not allowed. Adding a tool without thinking about its policy <em>fails closed</em>: the safe outcome happens by default. Reversing that default is how an agent acquires a capability nobody reviewed.</p>
+<p><strong>Ordering encodes precedence.</strong> <em>Precedence</em> means which rule wins when several match. The three <code>create_refund</code> rules read as a ladder, because the first match wins:</p>
+<ul>
+<li>€20 or less: allow;</li>
+<li>up to €100: ask;</li>
+<li>anything more: deny.</li>
+</ul>
+<p>Written in the other order, the last rule, which matches everything, would come first, and every refund would be denied.</p>
 <p><strong>Two of eight attempts interrupt a human.</strong> That ratio is the thing to tune. If it approaches one in two, people stop reading. If it is zero on an agent that spends money, you have no gate at all.</p>
 <h2 id="section-10-117-observability">11.7 Observability</h2>
-<p>An agent that misbehaves once and cannot be reconstructed is an agent you cannot fix. The record (the trace) has to be complete enough to answer <em>why did it do that</em>, which means capturing the inputs to the decision and not only the decision.</p>
+<p><em>Observability</em> means being able to see, afterwards, what a system did and why. An agent that misbehaves once and cannot be reconstructed is an agent you cannot fix.</p>
+<p>The record of a run is called a <em>trace</em>. In the office, it is the logbook: every slip, every report, every signature, with times. The trace has to be complete enough to answer <em>why did it do that</em>. That means capturing the inputs to each decision, and not only the decision.</p>
+<p>The block below is a small trace, written as a list of events. Each event is one thing that happened, with the turn it happened on:</p>
+<ul>
+<li><code>request</code>: a call to the model, with how many input tokens it carried;</li>
+<li><code>tool_use</code>: the model asked for a tool, with the full arguments;</li>
+<li><code>gate</code>: an approval decision, with who approved and how long it took;</li>
+<li><code>tool_result</code>: the tool ran, with how long it took and how big the result was;</li>
+<li><code>finished</code>: the run ended, and why.</li>
+</ul>
+<p>The code then adds the events up into the summary an engineer would want first:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 
 <span class="n">TRACE</span> <span class="o">=</span> <span class="p">[</span>
@@ -10534,18 +10821,55 @@ the one line an incident review needs:
 {"turn": 2, "kind": "gate", "id": "toolu_b", "decision": "ask", "approved_by": "ana@example.com", "ms": 41200}
 </code></pre></div>
 
-<p><strong>Human approval dominates the latency</strong>, and it is invisible to any measurement that only times the API. That is worth knowing before somebody spends a week optimising model latency in a system whose real bottleneck is a person's inbox.</p>
-<p>Five fields make a trace usable, and each is missing from somebody's production system right now:</p>
+<p>Read the summary from the bottom up, because the surprise is in the fifth line. The tools took 352 ms in total. The person who approved the refund took 41,200 ms, about 41 seconds.</p>
+<p><strong>Human approval dominates the latency</strong>: here it is 99% of the measured waiting. <em>Latency</em> is the time a user waits for an answer. And that wait is invisible to any measurement that only times the API. It is worth knowing before somebody spends a week making the model faster, in a system whose real bottleneck is a person's inbox.</p>
+<p>The last line shows the single event an incident review needs: who approved what, and when. Five fields make a trace usable like that, and each one is missing from somebody's production system right now:</p>
 <p><strong>The arguments, in full.</strong> "Called <code>create_refund</code>" tells you nothing. "Called <code>create_refund(ord_1, 4250)</code>" is the incident report.</p>
-<p><strong>The tool result, or at least its size and a hash.</strong> Results are often large and sometimes sensitive. Log the size and a digest at minimum, because "the model did something strange after this call" needs the call's <em>output</em> to explain it.</p>
+<p><strong>The tool result, or at least its size and a hash.</strong> Results are often large, and sometimes sensitive. A <em>hash</em> is a short fingerprint computed from the content: the same content always gives the same hash, so you can later prove which result the model saw without storing it. Log the size and the hash at minimum. "The model did something strange after this call" needs the call's <em>output</em> to explain it.</p>
 <p><strong>The gate decision and who made it.</strong> This is the audit trail. If a refund is disputed, <code>approved_by</code> is the answer.</p>
-<p><strong>Token counts per turn.</strong> Growth in <code>in_tokens</code> is how you notice a context problem before the bill does.</p>
-<p><strong>A correlation id across turns.</strong> It is omitted above for brevity and is mandatory in practice, because without it you cannot reconstruct a single run out of a log containing thousands.</p>
-<p>One caution: <strong>traces contain everything the model saw</strong>, which means everything the user typed and everything your tools returned. That is a data-protection surface, and it deserves the same retention and redaction rules as any other log of customer content.</p>
+<p><strong>Token counts per turn.</strong> Growth in <code>in_tokens</code> is how you notice a context problem (§9) before the bill does.</p>
+<p><strong>A correlation id across turns.</strong> A <em>correlation id</em> is one id stamped on every event of one run, so the events can be gathered back together. It is left out of the trace above to keep it short, and it is mandatory in practice. A real log holds thousands of runs, written at the same time, so their lines interleave. Here are two runs, as they land in one log:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">LOG</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">"run_a"</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"get_order"</span><span class="p">,</span>     <span class="s2">"ord_1"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"run_b"</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"get_order"</span><span class="p">,</span>     <span class="s2">"ord_8"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"run_a"</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"create_refund"</span><span class="p">,</span> <span class="s2">"ord_1"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"run_b"</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"get_order"</span><span class="p">,</span>     <span class="s2">"ord_8"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"run_b"</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">"get_order"</span><span class="p">,</span>     <span class="s2">"ord_8"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"run_a"</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">"done"</span><span class="p">,</span>          <span class="s2">""</span><span class="p">),</span>
+<span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"the log as it was written:"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">tool</span><span class="p">,</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">LOG</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  turn </span><span class="si">{</span><span class="n">turn</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">tool</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2">"</span><span class="o">.</span><span class="n">rstrip</span><span class="p">())</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">the same log, grouped by run id:"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">({</span><span class="n">run</span> <span class="k">for</span> <span class="n">run</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="ow">in</span> <span class="n">LOG</span><span class="p">}):</span>
+    <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">tool</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">arg</span><span class="si">}</span><span class="s2">"</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">r</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">tool</span><span class="p">,</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">LOG</span> <span class="k">if</span> <span class="n">r</span> <span class="o">==</span> <span class="n">run</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  </span><span class="si">{</span><span class="n">run</span><span class="si">}</span><span class="s2">: "</span> <span class="o">+</span> <span class="s2">" -&gt; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">steps</span><span class="p">))</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>the log as it was written:
+  turn 1  get_order ord_1
+  turn 1  get_order ord_8
+  turn 2  create_refund ord_1
+  turn 2  get_order ord_8
+  turn 3  get_order ord_8
+  turn 3  done
+
+the same log, grouped by run id:
+  run_a: get_order ord_1 -&gt; create_refund ord_1 -&gt; done
+  run_b: get_order ord_8 -&gt; get_order ord_8 -&gt; get_order ord_8
+</code></pre></div>
+
+<p>In the first listing you cannot tell which <code>get_order</code> belongs to which run. Grouped by id, the story is plain: <code>run_a</code> did its job, and <code>run_b</code> looked up the same order three times and never moved on, which is the stall that §11.9 detects. Without the id, you cannot reconstruct a single run out of a log containing thousands.</p>
+<p>One caution: <strong>traces contain everything the model saw</strong>. That means everything the user typed, and everything your tools returned: names, addresses, order histories. A trace is a data-protection surface. It deserves the same retention and redaction rules as any other log of customer content. <em>Retention</em> is how long you keep it; <em>redaction</em> is blanking out sensitive parts before you store it.</p>
 <h2 id="section-10-118-multiple-agents">11.8 Multiple Agents</h2>
-<p>Once one agent works, the temptation is several. Sometimes that is right, but more often it is a way to turn one debuggable system into three that communicate by prose.</p>
-<p><strong>The case for splitting is context, not specialisation.</strong> A single agent that must read forty documents and then reason about them fills its window with reading. Handing each document to a sub-agent that returns a paragraph keeps the orchestrator's context small and its reasoning sharp. (The orchestrator is the main agent that hands out the work.) That is a real architectural gain, and it is the main one.</p>
-<p>The case <em>against</em> is that every hand-off is lossy. Sub-agents communicate in natural language, so the orchestrator receives a summary and not the evidence, and errors compound quietly.</p>
+<p>Once one agent works, the temptation is several. Sometimes that is right. More often it is a way to turn one debuggable system into three that talk to each other in prose.</p>
+<p>Back in the office: suppose the writer must answer a question that needs forty files. The writer could read all forty, and by the end the desk is buried and the question is half forgotten. Or the writer could send junior readers, one file each, and ask each for a one-page note.</p>
+<p>That is the pattern. A <em>sub-agent</em> is an agent started by another agent to do one piece of the job. The main agent that hands out the work is the <em>orchestrator</em>. Splitting work this way is called <em>fan-out</em>.</p>
+<p><strong>The case for splitting is context, not specialisation.</strong> A single agent that must read forty documents and then reason about them fills its window with reading. Handing each document to a sub-agent that returns a paragraph keeps the orchestrator's context small and its reasoning sharp. That is a real architectural gain, and it is the main one.</p>
+<p>The case <em>against</em> is that every hand-off is lossy: something is lost in it. Sub-agents communicate in natural language, so the orchestrator receives a summary and not the evidence. A junior reader's note can miss the one sentence that mattered, and nobody notices, because the orchestrator never sees the file. Errors compound quietly.</p>
+<p>The block below puts numbers on the gain. Six documents of different sizes, a 320-token summary from each worker, and an orchestrator whose own instructions take 2,400 tokens. It compares one agent reading everything against an orchestrator with six workers:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">DOCUMENTS</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"d1"</span><span class="p">,</span> <span class="mi">8200</span><span class="p">),</span> <span class="p">(</span><span class="s2">"d2"</span><span class="p">,</span> <span class="mi">12400</span><span class="p">),</span> <span class="p">(</span><span class="s2">"d3"</span><span class="p">,</span> <span class="mi">6100</span><span class="p">),</span> <span class="p">(</span><span class="s2">"d4"</span><span class="p">,</span> <span class="mi">19800</span><span class="p">),</span>
              <span class="p">(</span><span class="s2">"d5"</span><span class="p">,</span> <span class="mi">9300</span><span class="p">),</span> <span class="p">(</span><span class="s2">"d6"</span><span class="p">,</span> <span class="mi">15200</span><span class="p">)]</span>
 <span class="n">SUMMARY_TOKENS</span> <span class="o">=</span> <span class="mi">320</span>
@@ -10583,14 +10907,59 @@ the orchestrator's window shrinks 94%; the total bill grows 5%
 <figure id="fig-ai-fanout" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 420" role="img" aria-labelledby="t-ai-fanout d-ai-fanout" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-fanout">Fan-out moves the reading out of the orchestrator’s window</title><desc id="d-ai-fanout">Reading six documents in one agent needs 73,400 tokens in one window. With an orchestrator and six workers the orchestrator’s window holds 4,320 tokens, 94% less. The work does not vanish: total tokens billed rise from 73,400 to 77,240, +3,840, about 5%.</desc><defs><marker id="ah-ai-fanout" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="26" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">TOKENS IN THE ORCHESTRATOR’S WINDOW</text><text x="20" y="64" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">one agent reads all six</text><rect x="220" y="44" width="440" height="32" rx="2" style="fill:#cf4b6c;fill-opacity:0.3;stroke:#cf4b6c;stroke-width:1.2"/><text x="670" y="66" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">73,400</text><text x="20" y="122" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">orchestrator + 6 workers</text><rect x="220" y="102" width="25.8965" height="32" rx="2" style="fill:#35b37e;fill-opacity:0.3;stroke:#35b37e;stroke-width:1.2"/><text x="255.896" y="124" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">4,320</text><text x="20" y="190" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">TOTAL TOKENS BILLED</text><text x="20" y="228" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">single agent</text><rect x="220" y="208" width="418.125" height="32" rx="2" style="fill:#cf4b6c;fill-opacity:0.3;stroke:#cf4b6c;stroke-width:1.2"/><text x="648.125" y="230" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">73,400</text><text x="20" y="286" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">fanned out</text><rect x="220" y="266" width="440" height="32" rx="2" style="fill:#d9a441;fill-opacity:0.3;stroke:#d9a441;stroke-width:1.2"/><text x="670" y="288" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">77,240</text><rect x="12" y="336" width="696" height="48" rx="8" style="fill:#35b37e;fill-opacity:0.12"/><text x="360" y="366" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">window 94% smaller,  bill 5% larger</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The orchestrator’s window shrinks 94% while the total bill grows 5%. Workers on a cheaper model make that an upper bound.</figcaption></figure>
 <!-- /fig:ai-fanout -->
 
-<p><strong>Fan-out trades a little money for a great deal of context.</strong> The orchestrator's window drops by 94% while the total token spend rises by only 5%. Every document is still read, and each summary is written once and read once, which is nearly free next to the documents themselves. That is a much better trade than the framing "multi-agent costs more" suggests, and the parallelism usually buys latency back as well.</p>
-<p>The 5% is also an upper bound and not the likely outcome, because the workers need not run on the orchestrator's model. Six document-reading workers on Claude Haiku 4.5 at $1 per million input tokens, against an orchestrator on Opus 5 at $5, turns the increase into a substantial <em>decrease</em>. That is the standard shape, and §11.8's rules below assume it.</p>
+<p><strong>Fan-out trades a little money for a great deal of context.</strong> The orchestrator's window drops by 94%, while the total token count rises by only 5%. Every document is still read, once, by a worker. Each summary is written once and read once, which is nearly free next to the documents themselves. That is a much better trade than the slogan "multi-agent costs more" suggests, and running the workers in parallel usually wins back time as well.</p>
+<p>Tokens are not dollars, though. The 5% counts every token the same, and the summaries are <em>output</em> tokens, which cost five times as much as input on Opus 5. Here is the same job priced in dollars, with the workers on three different models. Opus 5 is $5 per million input tokens and $25 output. Claude Haiku 4.5 is $1 and $5. Claude Haiku 5.5, the current Haiku, is $0.10 and $0.50 for prompts up to 100,000 tokens:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">DOCUMENTS</span> <span class="o">=</span> <span class="p">[</span><span class="mi">8200</span><span class="p">,</span> <span class="mi">12400</span><span class="p">,</span> <span class="mi">6100</span><span class="p">,</span> <span class="mi">19800</span><span class="p">,</span> <span class="mi">9300</span><span class="p">,</span> <span class="mi">15200</span><span class="p">]</span>
+<span class="n">SUMMARY_TOKENS</span><span class="p">,</span> <span class="n">ORCHESTRATOR_BASE</span> <span class="o">=</span> <span class="mi">320</span><span class="p">,</span> <span class="mi">2_400</span>
+<span class="n">OPUS_5</span> <span class="o">=</span> <span class="p">(</span><span class="mf">5.00</span><span class="p">,</span> <span class="mf">25.00</span><span class="p">)</span>                    <span class="c1"># $ per million input, output tokens</span>
+<span class="n">WORKERS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"Opus 5"</span><span class="p">:</span> <span class="p">(</span><span class="mf">5.00</span><span class="p">,</span> <span class="mf">25.00</span><span class="p">),</span>
+           <span class="s2">"Haiku 4.5"</span><span class="p">:</span> <span class="p">(</span><span class="mf">1.00</span><span class="p">,</span> <span class="mf">5.00</span><span class="p">),</span>
+           <span class="s2">"Haiku 5.5"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.10</span><span class="p">,</span> <span class="mf">0.50</span><span class="p">)}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">dollars</span><span class="p">(</span><span class="n">tokens</span><span class="p">,</span> <span class="n">per_million</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">tokens</span> <span class="o">/</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="n">per_million</span>
+
+
+<span class="n">single</span> <span class="o">=</span> <span class="n">dollars</span><span class="p">(</span><span class="n">ORCHESTRATOR_BASE</span> <span class="o">+</span> <span class="nb">sum</span><span class="p">(</span><span class="n">DOCUMENTS</span><span class="p">),</span> <span class="n">OPUS_5</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"one Opus 5 agent reads everything : $</span><span class="si">{</span><span class="n">single</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="n">orchestrator</span> <span class="o">=</span> <span class="n">dollars</span><span class="p">(</span><span class="n">ORCHESTRATOR_BASE</span> <span class="o">+</span> <span class="n">SUMMARY_TOKENS</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">DOCUMENTS</span><span class="p">),</span> <span class="n">OPUS_5</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="n">price_in</span><span class="p">,</span> <span class="n">price_out</span><span class="p">)</span> <span class="ow">in</span> <span class="n">WORKERS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">workers</span> <span class="o">=</span> <span class="p">(</span><span class="n">dollars</span><span class="p">(</span><span class="nb">sum</span><span class="p">(</span><span class="n">DOCUMENTS</span><span class="p">),</span> <span class="n">price_in</span><span class="p">)</span>
+               <span class="o">+</span> <span class="n">dollars</span><span class="p">(</span><span class="n">SUMMARY_TOKENS</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">DOCUMENTS</span><span class="p">),</span> <span class="n">price_out</span><span class="p">))</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="n">orchestrator</span> <span class="o">+</span> <span class="n">workers</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"fan-out, workers on </span><span class="si">{</span><span class="n">name</span><span class="si">:</span><span class="s2">&lt;10</span><span class="si">}</span><span class="s2">    : $</span><span class="si">{</span><span class="n">total</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">  "</span>
+          <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">total</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">single</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">:</span><span class="s2">+.0%</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>one Opus 5 agent reads everything : $0.3670
+fan-out, workers on Opus 5        : $0.4246  (+16%)
+fan-out, workers on Haiku 4.5     : $0.1022  (-72%)
+fan-out, workers on Haiku 5.5     : $0.0297  (-92%)
+</code></pre></div>
+
+<p>Read it line by line:</p>
+<ul>
+<li>On the orchestrator's own model, fan-out costs 16% more in dollars, not 5%, because the summaries are written at the output price.</li>
+<li>With the workers on Claude Haiku 4.5, at $1 per million input tokens against Opus 5's $5, the increase becomes a 72% <em>decrease</em>.</li>
+<li>On Claude Haiku 5.5 it is a 92% decrease.</li>
+</ul>
+<p>So the 5% is not the likely outcome. The workers need not run on the orchestrator's model, and usually should not. That is the standard shape, and the rules of §11.8 below assume it.</p>
+<p>One honest caution about the toy. Each worker here reads its document once and writes once. Real sub-agents search, reread, think and retry. Anthropic's engineering team measured its own research system in June 2025: agents used about 4× the tokens of a chat, and its multi-agent system about 15×. Treat the 5% as the floor of a tidy job, not a forecast. Measure your own.</p>
+<p>The same write-up names where fan-out fits badly: tasks whose value does not cover the spend, work where every agent needs the same context, and work with many dependencies between the pieces. It notes that most coding tasks have fewer truly parallel parts than research does.</p>
 <p>Two rules keep multi-agent systems debuggable.</p>
-<p><strong>One orchestrator, one level deep, wherever possible.</strong> Sub-agents that spawn sub-agents produce traces nobody can follow and costs nobody predicted.</p>
-<p><strong>Use a cheaper model for the reading.</strong> Workers that summarise do not need the orchestrator's capability. A worker on Claude Haiku 4.5 reading documents and an orchestrator on Opus 5 reasoning about the summaries is the standard shape, and it changes the arithmetic above substantially.</p>
+<p><strong>One orchestrator, one level deep, wherever possible.</strong> Sub-agents that start sub-agents of their own produce traces nobody can follow and costs nobody predicted.</p>
+<p><strong>Use a cheaper model for the reading.</strong> Workers that summarise do not need the orchestrator's capability. A worker on a Haiku model reading documents, and an orchestrator on Opus 5 reasoning about the summaries, is the standard shape. As the dollars above show, it changes the arithmetic substantially.</p>
 <h2 id="section-10-119-failure-modes-to-design-against">11.9 Failure Modes to Design Against</h2>
 <p>Four failure modes recur across every agent that reaches production. All four are harness problems, and none is fixed by prompting.</p>
-<p><strong>The loop that will not stop.</strong> A tool fails, the model retries, and the tool fails again. §11.3's bounds are the answer, plus one refinement: detect <em>repetition</em> and do not just count. Three identical calls in a row is a loop regardless of how much budget is left.</p>
+<p><strong>The loop that will not stop.</strong> A tool fails, the model retries, and the tool fails again, forever. §11.3's bounds are the answer, plus one refinement: detect <em>repetition</em>, and do not just count. Three identical calls in a row is a loop, however much budget is left. In the office, it is the clerk who sees the same slip come back for the third time and says "wait".</p>
+<p>The function below looks at the last three calls, each a pair of tool name and argument. It reports two shapes of stall:</p>
+<ul>
+<li>three identical calls: the same thing, again and again;</li>
+<li><em>oscillation</em>: A, then B, then A again, bouncing between two calls without progress.</li>
+</ul>
+<p>It runs over three short call histories:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">detect_stall</span><span class="p">(</span><span class="n">calls</span><span class="p">,</span> <span class="n">window</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""A repeated identical call is a stall even when the budget is healthy."""</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">calls</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">window</span><span class="p">:</span>
@@ -10626,9 +10995,20 @@ oscillating   oscillating between ('read_file', 'a.py') and ('write_file', 'a.py
 <figure id="fig-ai-stall" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 380" role="img" aria-labelledby="t-ai-stall d-ai-stall" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-stall">Detecting a stall by repetition, not just budget</title><desc id="d-ai-stall">Three runs of three tool calls each. The healthy run makes three different calls and is progressing. The retry loop makes the same get_order call three times and is flagged as three identical calls. The oscillating run alternates between read_file and write_file on the same file and is flagged as oscillating.</desc><defs><marker id="ah-ai-stall" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="56" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">healthy</text><rect x="150" y="26" width="132" height="58" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="216" y="49.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">get_order</text><text x="216" y="68.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">ord_1</text><path d="M286,55 L308,55" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-stall)"/><rect x="310" y="26" width="132" height="58" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="376" y="49.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">check_policy</text><text x="376" y="68.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">std</text><path d="M446,55 L468,55" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-stall)"/><rect x="470" y="26" width="132" height="58" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="536" y="49.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">create_refund</text><text x="536" y="68.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">ord_1</text><rect x="150" y="92" width="130" height="24" rx="12" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="215" y="108.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">progressing</text><text x="20" y="156" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">retry loop</text><rect x="150" y="126" width="132" height="58" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="216" y="149.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">get_order</text><text x="216" y="168.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">ord_1</text><path d="M286,155 L308,155" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-stall)"/><rect x="310" y="126" width="132" height="58" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="376" y="149.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">get_order</text><text x="376" y="168.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">ord_1</text><path d="M446,155 L468,155" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-stall)"/><rect x="470" y="126" width="132" height="58" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="536" y="149.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">get_order</text><text x="536" y="168.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">ord_1</text><rect x="150" y="192" width="300" height="24" rx="12" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="300" y="208.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">3 identical calls</text><text x="20" y="256" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">oscillating</text><rect x="150" y="226" width="132" height="58" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="216" y="249.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">read_file</text><text x="216" y="268.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">a.py</text><path d="M286,255 L308,255" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-stall)"/><rect x="310" y="226" width="132" height="58" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="376" y="249.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">write_file</text><text x="376" y="268.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">a.py</text><path d="M446,255 L468,255" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-stall)"/><rect x="470" y="226" width="132" height="58" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="536" y="249.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">read_file</text><text x="536" y="268.05" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:400;fill:var(--text-dim);opacity:1">a.py</text><rect x="150" y="292" width="300" height="24" rx="12" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="300" y="308.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">oscillating between two calls</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Three identical calls in a row is a loop however much budget is left. Detect repetition as well as counting turns.</figcaption></figure>
 <!-- /fig:ai-stall -->
 
-<p><strong>Over-eagerness.</strong> The agent does more than asked. It refactors the file it was told to read, or emails the customer it was told to look up. The fix is a narrower tool surface (§11.4) and, where prompting is the right lever, an explicit statement of scope in the system prompt. Note the ordering: remove the capability first, then ask nicely.</p>
-<p><strong>Getting stuck in the wrong plan.</strong> Long-horizon agents commit to an approach and then interpret every later result as confirmation. A checkpoint helps. That is a turn, on a fixed cadence, whose prompt is "restate the goal and say whether the current approach is working". So does surfacing failures plainly in tool results and not smoothing them over (§6.5 again).</p>
-<p><strong>Silent partial success.</strong> The agent completes three of four steps and reports success, because from inside the loop the last tool call returned something. This is why §11.4 recommends an explicit <code>done</code> tool and §13.10 evaluates required calls. "Finished" has to be a claim your harness can check, and not one the model makes.</p>
+<p>The healthy run does three different things and passes. The retry loop asks for the same order three times. The oscillating run reads a file, writes it, and reads it again: the write never satisfied whatever the read was checking.</p>
+<p><strong>Over-eagerness.</strong> The agent does more than asked. It refactors the file it was told to read, or emails the customer it was told to look up. The fix comes in two parts, and the order matters:</p>
+<ol>
+<li>Narrow the tool surface (§11.4), so the extra action is impossible.</li>
+<li>Where prompting is the right lever, state the scope explicitly in the system prompt.</li>
+</ol>
+<p>Remove the capability first, then ask nicely.</p>
+<p><strong>Getting stuck in the wrong plan.</strong> Agents on long tasks commit to an approach early, then read every later result as confirmation. Two things help:</p>
+<ul>
+<li>A <em>checkpoint</em>: a turn, on a fixed schedule, whose prompt is "restate the goal and say whether the current approach is working".</li>
+<li>Plain failures: tool results that say clearly what went wrong, not smoothed over (§6.5 again).</li>
+</ul>
+<p><strong>Silent partial success.</strong> The agent completes three of four steps and reports success, because from inside the loop the last tool call returned something. This is why §11.4 recommends an explicit <code>done</code> tool, and why §13.10 checks that the required calls were made.</p>
+<p>You have already seen a cousin of this failure in this section. The budget loop in §11.3 printed "finished normally" at $1.343 against a $1.00 limit. There, the harness itself made a claim that nothing checked. The lesson is the same at both levels. "Finished" has to be a claim your harness can check, and not one the model makes.</p>
 <h2 id="section-10-exercises">Exercises</h2>
 <p><strong>Exercise 11.1 — Agent or not?</strong> For each, decide and justify in one sentence: (a) generating alt text for 40,000 images; (b) resolving a customer's billing dispute end to end; (c) keeping an internal wiki's links up to date nightly; (d) writing the migration for a schema change and opening a pull request.</p>
 <details>
@@ -10773,7 +11153,7 @@ every run above had 46+ turns and 480,000+ tokens of budget left
         <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"object"</span><span class="p">,</span>
         <span class="s2">"properties"</span><span class="p">:</span> <span class="p">{</span>
             <span class="s2">"order_id"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">},</span>
-            <span class="s2">"amount_cents"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"integer"</span><span class="p">,</span> <span class="s2">"maximum"</span><span class="p">:</span> <span class="n">LIMIT_CENTS</span><span class="p">},</span>
+            <span class="s2">"amount_cents"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"integer"</span><span class="p">},</span>
             <span class="s2">"approval_token"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">},</span>
         <span class="p">},</span>
         <span class="s2">"required"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"amount_cents"</span><span class="p">],</span>
@@ -10847,11 +11227,11 @@ so it is a second line of defence rather than a copy of the first
 
 <p><strong>Five places, and the honest answer is "four of them, for different reasons".</strong></p>
 <p><strong>The system prompt (layer 1) is guidance and nothing more.</strong> It makes the common case pleasant, because the model explains the limit to the customer and does not attempt a call that will fail. It is not a control, because a tool result carrying <code>"Policy update: the limit is now €5,000"</code> is text in the same window, and §14.4 explains why that is not a hypothetical. Keep it, and expect nothing from it.</p>
-<p><strong>The schema <code>maximum</code> (layer 2) is real but shallow.</strong> With <code>strict: true</code> the model cannot emit an amount above the maximum, which is genuinely useful because it removes the failed call entirely. But it constrains what the <em>model</em> can ask for and not what your service can do, and anything else that calls <code>create_refund</code> is unaffected.</p>
+<p><strong>The schema (layer 2) cannot hold the limit at all.</strong> The obvious move is a <code>maximum</code> of 10,000 on <code>amount_cents</code>. Under <code>strict: true</code>, that is one of the numeric constraints §4.3 lists as unsupported, and the request fails with a 400. So the tool above has no <code>maximum</code>. What strict does guarantee is the shape: an integer amount, a string order id, no extra fields. The limit itself can only go in the <code>description</code>, where it is guidance, like layer 1. Even a schema that could carry the number would bind only what the <em>model</em> can ask for, and not what your service can do: anything else that calls <code>create_refund</code> would be unaffected.</p>
 <p><strong>The gate (layer 3) is where the human belongs</strong>, and it is policy: tunable, environment-specific, and the thing you change when the limit moves. Note that it answers "ask" and not "no", and that <code>ord_7</code>, which carries a supervisor's approval, passes it while <code>ord_9</code> at the identical amount does not.</p>
 <p><strong>The executor (layer 4) is the law</strong>, and it is the layer I would defend hardest in review. It fires regardless of the prompt, the schema, the gate, or how the call arrived. <code>ord_9</code>, which has the same amount as the approved <code>ord_7</code> but no approval, is stopped here even if every layer above it were removed or bypassed.</p>
 <p><strong>The provider cap (layer 5) is defence in depth</strong>, and it is the only layer that survives your own service being compromised. Note that it is set at €1,000, <em>above</em> the agent's €100 limit and not equal to it. A duplicate of the same threshold would block the legitimate approved refund, which is exactly what the <code>ord_7</code> row would show if the cap were set to €100. A backstop is not a copy of the rule it backs up. It is the wider limit that catches the case where the rule itself has failed. A per-transaction merchant cap costs one support ticket to set up and is the difference between a bad afternoon and an unbounded loss.</p>
-<p><strong>What I would actually build:</strong> layers 1, 3, 4 and 5. I would skip layer 2's <code>maximum</code> only because the executor already covers it, and a schema constraint that silently clamps behaviour can make debugging confusing. It is a defensible choice, though, and with <code>strict: true</code> it costs nothing. <strong>The rule to take away: put the enforcement in the layer that has no incentive to be persuaded, and put the explanation in the layer the user reads.</strong></p>
+<p><strong>What I would actually build:</strong> layers 1, 3, 4 and 5 hold the rule; those are the four. Layer 2 stays too, because strict mode's shape guarantee is worth having on any tool that moves money, but it holds the €100 rule only as words in a description, so it is not one of the four. <strong>The rule to take away: put the enforcement in the layer that has no incentive to be persuaded, and put the explanation in the layer the user reads.</strong></p>
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-9">← Back</button><button class="btn-next" data-next="section-11">Next: Managed Agents →</button></div>
 </section>
