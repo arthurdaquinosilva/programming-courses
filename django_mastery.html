@@ -17979,9 +17979,34 @@ ORDER BY month
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-4">← Back</button><button class="btn-next" data-next="section-6">Next: Transactions and Concurrency →</button></div>
 </section>
-<section class="course-section" id="section-6" data-section-id="section-6"><div class="section-header-meta">  <span class="section-tag">SECTION 7</span>  <button class="btn-complete" data-complete="section-6"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Transactions and Concurrency</h1><p>A web application is a concurrent program, whether or not its author thinks of it as one. Gunicorn runs several worker processes, each worker may run several threads, and every one of them talks to the same database at the same moment. Two customers can press "Buy" on the last mug within the same millisecond. Two browser tabs can save the same form. A background job can run while a request edits the same row.</p>
-<p>Code that is correct when one request runs at a time can be wrong when two run together. This kind of bug does not show up in development, does not show up in tests that run one request at a time, and does show up on a busy day in production as a negative stock count, a double charge, or money that appeared from nowhere.</p>
-<p>This section covers the tools Django gives you to make that code correct:</p>
+<section class="course-section" id="section-6" data-section-id="section-6"><div class="section-header-meta">  <span class="section-tag">SECTION 7</span>  <button class="btn-complete" data-complete="section-6"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Transactions and Concurrency</h1><p>Start with a puzzle. A shop has 10 mugs in stock, and the code for "buy one mug" is three lines:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">mug</span> <span class="o">=</span> <span class="n">Product</span><span class="o">.</span><span class="n">objects</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">sku</span><span class="o">=</span><span class="s2">"MUG"</span><span class="p">)</span>
+<span class="n">mug</span><span class="o">.</span><span class="n">stock</span> <span class="o">-=</span> <span class="mi">1</span>
+<span class="n">mug</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</code></pre></div>
+
+<p>One customer buys a mug, and the stock goes from 10 to 9. Correct. Now two customers press "Buy" in the same instant. Two mugs leave the shop, and the stock goes from 10 to <strong>9</strong>. One sale has vanished from the count.</p>
+<p>Nothing in those three lines is wrong. Run either purchase on its own and it is perfect. The bug only exists when the two run <strong>at the same time</strong>, and §7.9 runs exactly this race, with two real database connections, and prints the 9. Then §7.10, §7.11 and §7.13 fix it in three different ways.</p>
+<p>That puzzle is the main idea of this section. A web application is a concurrent program, whether or not its author thinks of it as one. (<em>Concurrent</em> means several things happening at the same moment.)</p>
+<ul>
+<li>Gunicorn, the program that runs Django in production, starts several <strong>worker processes</strong>: separate copies of your Django program running side by side.</li>
+<li>Each worker may run several <strong>threads</strong>: separate lines of work inside one process.</li>
+<li>Every one of them talks to the same database at the same moment.</li>
+</ul>
+<p>So two customers can press "Buy" on the last mug within the same millisecond (a thousandth of a second). Two browser tabs can save the same form. A background job can run while a request edits the same row.</p>
+<p>Code that is correct when one request runs at a time can be wrong when two run together. This kind of bug:</p>
+<ul>
+<li>does not show up in development;</li>
+<li>does not show up in tests that run one request at a time;</li>
+<li>does show up on a busy day in production, as a negative stock count, a double charge, or money that appeared from nowhere.</li>
+</ul>
+<p>Here is a picture to keep in mind. It continues the <strong>filing office</strong> of §3 to §6: each table is a drawer of paper forms, and a manager such as <code>Product.objects</code> is an archive clerk. What changes in this section is that there is <strong>more than one clerk</strong>. Every worker process and every thread is its own clerk, and all of them work in the same drawers at the same time.</p>
+<p>Two tools appear again and again:</p>
+<ul>
+<li>A <strong>transaction</strong> is a folder on a clerk's desk. The clerk collects changes in it, and then either files the whole folder into the drawers at once (that is called <em>committing</em>) or shreds it (<em>rolling back</em>). Other clerks never see half a folder.</li>
+<li>A <strong>lock</strong> is a "reserved" flag a clerk puts on a form, so that other clerks who want to change it must wait.</li>
+</ul>
+<p>This section covers the tools Django gives you to make concurrent code correct:</p>
 <ul>
 <li><strong>Transactions</strong>, which make a group of writes succeed or fail as one unit.</li>
 <li><strong>Savepoints</strong>, which let part of a transaction fail without losing the rest.</li>
@@ -17990,16 +18015,108 @@ ORDER BY month
 <li><strong>Row locks</strong> (<code>select_for_update</code>), <strong>version columns</strong> and <strong>advisory locks</strong>, three ways to stop two writers from working on the same thing at once.</li>
 <li><strong>Isolation levels and retries</strong>, for the rules that span several rows.</li>
 </ul>
-<p>Every concurrency example below really runs two database connections at once, using two Python threads, and every printed result was produced by running it against PostgreSQL 18. The examples use a <code>threading.Barrier</code> to force the dangerous timing. Without it, the race would happen only sometimes, and an example that fails only sometimes proves nothing.</p>
-<p>SQL Mastery §14 and §15 explain the database side of this in depth: what PostgreSQL's MVCC is, what each isolation level allows, and how its lock modes interact. This section is about the Django side: what the ORM sends, where it opens and closes transactions for you, and which pattern to choose for which problem.</p>
+<p>Django's tools map onto the picture like this:</p>
+<table>
+<thead>
+<tr>
+<th>In the filing office</th>
+<th>In Django</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Every change filed into the drawer the moment it is written</td>
+<td>autocommit</td>
+<td>§7.2</td>
+</tr>
+<tr>
+<td>A folder of changes, filed all at once or shredded</td>
+<td><code>transaction.atomic</code></td>
+<td>§7.3</td>
+</tr>
+<tr>
+<td>A paperclip in the folder you can go back to without shredding the rest</td>
+<td>a savepoint (a nested <code>atomic</code>)</td>
+<td>§7.4</td>
+</tr>
+<tr>
+<td>A folder that must be filed by you, not slipped into someone else's</td>
+<td><code>atomic(durable=True)</code></td>
+<td>§7.5</td>
+</tr>
+<tr>
+<td>One folder for every customer at the counter</td>
+<td><code>ATOMIC_REQUESTS</code></td>
+<td>§7.6</td>
+</tr>
+<tr>
+<td>A sticky note: "post this letter once the folder is filed"</td>
+<td><code>transaction.on_commit</code></td>
+<td>§7.7</td>
+</tr>
+<tr>
+<td>How much a clerk can see of other clerks' filing while a folder is open</td>
+<td>isolation levels</td>
+<td>§7.8</td>
+</tr>
+<tr>
+<td>Two clerks copy the stock onto a notepad, subtract one, and write it back</td>
+<td>the lost update</td>
+<td>§7.9</td>
+</tr>
+<tr>
+<td>A note to the drawer itself: "subtract one from whatever is written here"</td>
+<td>an <code>F()</code> update</td>
+<td>§7.10</td>
+</tr>
+<tr>
+<td>A "reserved" flag on a form; other clerks wait for it</td>
+<td><code>select_for_update</code></td>
+<td>§7.11</td>
+</tr>
+<tr>
+<td>Two clerks each holding one form and waiting for the other's</td>
+<td>a deadlock</td>
+<td>§7.12</td>
+</tr>
+<tr>
+<td>A form with an edition number: you may only write if it has not changed</td>
+<td>a version column</td>
+<td>§7.13</td>
+</tr>
+<tr>
+<td>Two clerks both check that no form exists, then both file a new one</td>
+<td>the <code>get_or_create</code> race</td>
+<td>§7.14</td>
+</tr>
+<tr>
+<td>Two clerks each read the duty roster and each take one person off it</td>
+<td>write skew</td>
+<td>§7.15</td>
+</tr>
+<tr>
+<td>A numbered key on a hook board that clerks agree to take first</td>
+<td>an advisory lock</td>
+<td>§7.16</td>
+</tr>
+</tbody>
+</table>
+<p>Every concurrency example below really runs two database connections at once, using two Python threads, and every printed result was produced by running it against PostgreSQL 18. The examples use a <code>threading.Barrier</code> to force the dangerous timing. A barrier is a meeting point: each thread stops there until the others arrive, and then all of them go on together. Without it, the race would happen only sometimes, and an example that fails only sometimes proves nothing.</p>
+<p>SQL Mastery §14 and §15 explain the database side of this in depth: what PostgreSQL's MVCC is (multi-version concurrency control, the way it keeps several versions of a row so readers and writers rarely block each other), what each isolation level allows, and how its lock modes interact. This section is about the Django side: what the ORM sends, where it opens and closes transactions for you, and which pattern to choose for which problem.</p>
 <h2 id="section-6-71-the-project-for-this-section">7.1 The Project for This Section</h2>
-<p>This section builds its own small project, so it can be read on its own. It is a shop with wallets, products and a few supporting tables. Each model exists to demonstrate one concurrency problem, and the comments say which.</p>
+<p>This section builds its own small project, so it can be read on its own. It is a shop with wallets, products and a few supporting tables. Each model exists to demonstrate one concurrency problem, and each model's comment says which.</p>
+<p>The three commands create the project, create an app called <code>shop</code> and create an empty PostgreSQL database called <code>shop</code> (§2 explained the first two):</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">django-admin</span><span class="w"> </span>startproject<span class="w"> </span>config<span class="w"> </span>.
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>startapp<span class="w"> </span>shop
 <span class="cmd">createdb</span><span class="w"> </span>shop
 </code></pre></div>
 
-<p>The settings are written by hand and kept short. Two details matter for this section. First, there are <strong>two database aliases</strong> pointing at the same database. <code>default</code> uses PostgreSQL's default isolation level, and <code>serial</code> asks for <code>SERIALIZABLE</code>, which §7.15 needs. Second, <code>ALLOWED_HOSTS</code> contains <code>"testserver"</code>, the host name Django's test client sends, because §7.6 makes requests with it.</p>
+<p>The settings are written by hand and kept short. Two details matter for this section:</p>
+<ol>
+<li>There are <strong>two database aliases</strong> pointing at the same database. An <em>alias</em> is the name Django uses for one database connection setting. <code>default</code> uses PostgreSQL's default isolation level, and <code>serial</code> asks for <code>SERIALIZABLE</code>, the strictest one, which §7.15 needs. (§7.8 explains isolation levels.)</li>
+<li><strong><code>ALLOWED_HOSTS</code> contains <code>"testserver"</code></strong>, the host name Django's test client sends, because §7.6 makes requests with it. (The <em>test client</em> is a fake browser for requesting pages without a real server, §21.11.)</li>
+</ol>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/settings.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.backends.postgresql.psycopg_any</span><span class="w"> </span><span class="kn">import</span> <span class="n">IsolationLevel</span>
 
@@ -18070,6 +18187,16 @@ ORDER BY month
     <span class="n">on_duty</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
 
+<p>The six models, in the filing-office picture, are six kinds of form:</p>
+<ul>
+<li><code>Wallet</code> holds money. Its check constraint (a rule the database enforces on every row, §8.3) says a balance can never go below zero.</li>
+<li><code>Product</code> has a stock count and a <code>version</code> number, for §7.9 to §7.13.</li>
+<li><code>Order</code> points at a product.</li>
+<li><code>Outbox</code> holds messages waiting to be sent, for §7.7 and §7.11.</li>
+<li><code>Subscriber</code> is deliberately missing a unique rule on <code>email</code>, for §7.14.</li>
+<li><code>Staff</code> says who is on duty, for §7.15.</li>
+</ul>
+<p>Two commands turn the models into tables:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>makemigrations<span class="w"> </span>shop
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>migrate
 </code></pre></div>
@@ -18090,8 +18217,10 @@ Running migrations:
 
 <h2 id="section-6-72-autocommit-djangos-default">7.2 Autocommit: Django's Default</h2>
 <p>Start with what happens when you write no transaction code at all.</p>
-<p><strong>Autocommit</strong> is a database mode in which every SQL statement is its own transaction. The statement runs, and if it succeeds it is saved permanently (committed) straight away. Django turns autocommit on for every connection it opens. The Django documentation calls this its default behaviour: "each query is immediately committed to the database, unless a transaction is active."</p>
+<p><strong>Autocommit</strong> is a database mode in which every SQL statement is its own transaction. The statement runs, and if it succeeds it is saved permanently (committed) straight away. In the filing office, every change a clerk writes is filed into the drawer at once; there is no folder.</p>
+<p>Django turns autocommit on for every connection it opens. The Django documentation calls this its default behaviour: "each query is immediately committed to the database, unless a transaction is active."</p>
 <p>That is the right default for reading, and for a request that makes a single write. It becomes the wrong default the moment one operation needs <strong>two</strong> writes that only make sense together. Moving money is the classic case: take it out of one wallet, put it into another.</p>
+<p>The example creates two wallets, Ana with 100 and Bea with 50, and tries to move 150 from Ana to Bea. The transfer credits Bea first and then debits Ana:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntegrityError</span><span class="p">,</span> <span class="n">connection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">F</span>
@@ -18122,14 +18251,22 @@ ana 100.00
 bea 200.00
 </code></pre></div>
 
-<p>Ana had 100 and tried to send 150. The second <code>UPDATE</code> would have made her balance negative, so the check constraint rejected it. That part worked. But the first <code>UPDATE</code>, the credit to Bea, had already been committed by autocommit before the second one ran. Nothing undid it. The shop now holds 300 where it held 150, and 150 was created from nothing.</p>
+<p>Line by line:</p>
+<ul>
+<li><strong><code>autocommit: True</code></strong>: the connection is in autocommit mode.</li>
+<li><strong>The <code>IntegrityError</code></strong> is Ana's debit being refused: 100 − 150 would be negative, and the check constraint forbids that.</li>
+<li><strong><code>ana 100.00</code></strong>: Ana still has 100. So far, so good.</li>
+<li><strong><code>bea 200.00</code></strong>: Bea has 200, which is 50 + 150.</li>
+</ul>
+<p>Ana had 100 and tried to send 150. The second <code>UPDATE</code> would have made Ana's balance negative, so the check constraint rejected it. That part worked. But the first <code>UPDATE</code>, the credit to Bea, had already been committed by autocommit before the second one ran. Nothing undid it. The shop now holds 300 where it held 150, and 150 was created from nothing.</p>
+<p>In the filing office: the clerk wrote "+150" on Bea's form and filed it at once. Then the drawer refused the "−150" on Ana's form. The first form was already in the drawer, and nobody took it back out.</p>
 <p>Two things about this example are worth noticing.</p>
 <ol>
 <li><strong>The order of the two writes changes the damage, not the bug.</strong> If the debit ran first, Ana would lose 150 that never reached Bea. Either way, a failure between two related writes leaves the data half-changed.</li>
 <li><strong>The constraint did its job, and it was not enough.</strong> A constraint protects one row at a time. It cannot see that two rows were meant to change together. Only a transaction can express "these changes are one unit".</li>
 </ol>
 <p><code>connection.get_autocommit()</code> reports the mode, and there is a matching <code>transaction.set_autocommit(False)</code> that turns it off for manual transaction control. You will almost never need it. Django's documentation steers you to <code>atomic()</code> instead, and the rest of this section does the same.</p>
-<p>Before going on, put the money back:</p>
+<p>Before going on, put the money back, by setting Bea's balance to 50 again:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wallet</span>
 
@@ -18141,8 +18278,14 @@ bea 200.00
 </code></pre></div>
 
 <h2 id="section-6-73-transactionatomic">7.3 transaction.atomic</h2>
-<p><strong><code>transaction.atomic</code></strong> is Django's tool for grouping writes into one transaction. It works as a context manager (a <code>with</code> block) or as a decorator on a function. Everything that runs inside it either all commits, when the block finishes normally, or all rolls back (is undone), when an exception leaves the block.</p>
-<p>Here is the same transfer, now decorated:</p>
+<p><strong><code>transaction.atomic</code></strong> is Django's tool for grouping writes into one transaction. In the filing office, it is the folder: the clerk collects every change in it, and nothing reaches the drawers until the folder is finished.</p>
+<p>You can use it in two ways:</p>
+<ul>
+<li>as a <strong>context manager</strong>, a <code>with transaction.atomic():</code> block around some code;</li>
+<li>as a <strong>decorator</strong>, the line <code>@transaction.atomic</code> above a function, which wraps the whole function the same way.</li>
+</ul>
+<p>Everything that runs inside it either all commits, when the block finishes normally, or all rolls back (is undone), when an exception leaves the block.</p>
+<p>Here is the same transfer, now decorated. The function's body is exactly the same as in §7.2:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntegrityError</span><span class="p">,</span> <span class="n">transaction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">F</span>
@@ -18173,9 +18316,21 @@ bea 50.00
 [('ana', Decimal('70.00')), ('bea', Decimal('80.00'))]
 </code></pre></div>
 
-<p>The failing transfer raised the same error as before, but this time Bea's credit was rolled back with it. The successful transfer of 30 committed both halves. The function's code did not change at all; only its transaction boundary did.</p>
+<p>Line by line:</p>
+<ul>
+<li><strong>The <code>IntegrityError</code></strong> is the same refusal as before.</li>
+<li><strong><code>ana 100.00</code> and <code>bea 50.00</code></strong>: this time Bea's credit was rolled back too. Nothing changed.</li>
+<li><strong><code>[('ana', Decimal('70.00')), ('bea', Decimal('80.00'))]</code></strong>: a transfer of 30 that can succeed did succeed, both halves at once.</li>
+</ul>
+<p>The failing transfer raised the same error as before, but this time Bea's credit was rolled back with it. The successful transfer of 30 committed both halves. The function's code did not change at all; only its transaction boundary did. In the filing office, the folder with "+150 for Bea" was shredded the moment Ana's form refused "−150".</p>
 <h3 id="section-6-what-atomic-actually-sends">What atomic actually sends</h3>
-<p>It helps to see that <code>atomic</code> is not magic: it is a <code>BEGIN</code> before the block and a <code>COMMIT</code> or <code>ROLLBACK</code> after it. PostgreSQL can show this indirectly. Every transaction that writes gets a transaction id, and <code>pg_current_xact_id()</code> returns the current one. Two statements in autocommit mode are two transactions, so they get two ids. Two statements inside one <code>atomic</code> block share one.</p>
+<p>It helps to see that <code>atomic</code> is not magic: it is a <code>BEGIN</code> before the block and a <code>COMMIT</code> or <code>ROLLBACK</code> after it. These are the three SQL statements that start a transaction, file it, and shred it.</p>
+<p>PostgreSQL can show this indirectly. Every transaction that writes gets a transaction id, a number, and <code>pg_current_xact_id()</code> returns the current one. So:</p>
+<ul>
+<li>Two statements in autocommit mode are two transactions, so they get two ids.</li>
+<li>Two statements inside one <code>atomic</code> block share one transaction, so they get the same id.</li>
+</ul>
+<p>The example asks for the id twice in each mode, and also prints <code>connection.in_atomic_block</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span><span class="p">,</span> <span class="n">transaction</span>
 
@@ -18199,17 +18354,31 @@ in_atomic_block: True
 after the block: False
 </code></pre></div>
 
-<p><code>connection.in_atomic_block</code> tells your code whether it is currently inside an <code>atomic</code> block. It is mostly useful in assertions, for code that must never run outside one.</p>
-<p>Django does not send <code>BEGIN</code> as an SQL statement of its own. When <code>atomic</code> starts the outermost block, it switches the connection's autocommit off, and the database driver (psycopg) sends <code>BEGIN</code> before the next statement. When the block ends, Django calls the driver's <code>commit()</code> or <code>rollback()</code> method and switches autocommit back on. Since Django 4.2 it still <strong>records</strong> these steps: <code>BEGIN</code>, <code>COMMIT</code> and <code>ROLLBACK</code> appear in <code>connection.queries</code> and in the <code>django.db.backends</code> debug log next to the real queries, which is what lets §7.4 print a whole transaction.</p>
+<p>The two ids differ in autocommit mode and match inside the block, exactly as predicted. <code>in_atomic_block</code> is <code>True</code> inside the block and <code>False</code> again after it.</p>
+<p><code>connection.in_atomic_block</code> tells your code whether it is currently inside an <code>atomic</code> block. It is mostly useful in assertions (checks that stop the program if something that must be true is not), for code that must never run outside one.</p>
+<p>Django does not send <code>BEGIN</code> as an SQL statement of its own. Here is what really happens:</p>
+<ol>
+<li>When <code>atomic</code> starts the outermost block, Django switches the connection's autocommit off.</li>
+<li>The database driver, psycopg (the library that talks to PostgreSQL), sends <code>BEGIN</code> before the next statement.</li>
+<li>When the block ends, Django calls the driver's <code>commit()</code> or <code>rollback()</code> method, and switches autocommit back on.</li>
+</ol>
+<p>Since Django 4.2 it still <strong>records</strong> these steps: <code>BEGIN</code>, <code>COMMIT</code> and <code>ROLLBACK</code> appear in <code>connection.queries</code> and in the <code>django.db.backends</code> debug log next to the real queries, which is what lets §7.4 print a whole transaction.</p>
 <h3 id="section-6-rules-for-using-atomic-well">Rules for using atomic well</h3>
 <ul>
-<li><strong>Keep the block short.</strong> A transaction holds its row locks until it ends (§7.11 shows what that costs another request), and an open transaction stops PostgreSQL from cleaning up old row versions. Never make an HTTP call, send an email, or wait for a user inside one.</li>
+<li><strong>Keep the block short.</strong> A transaction holds its row locks until it ends (§7.11 shows what that costs another request), and an open transaction stops PostgreSQL from cleaning up old row versions. Never make an HTTP call, send an email, or wait for a user inside one. In the filing office, a clerk with an open folder is holding up everyone who needs the forms in it.</li>
 <li><strong>Let exceptions leave the block.</strong> The rollback happens because the exception passes through <code>atomic</code>'s exit. Catching it inside the block is the most common way to break this, and §7.4 shows exactly what happens.</li>
 <li><strong>Put the boundary at the level of the business operation.</strong> "Place an order" is one unit. The function that writes one row of it is not.</li>
 </ul>
 <h2 id="section-6-74-nested-atomic-blocks-and-savepoints">7.4 Nested atomic Blocks and Savepoints</h2>
-<p><code>atomic</code> blocks can be nested, and they nest the way a careful reader would hope. The outermost block opens a real transaction. Each inner block creates a <strong>savepoint</strong>: a named marker inside the transaction that the database can roll back to without abandoning the whole transaction. If the inner block exits normally, the savepoint is released (kept). If an exception leaves it, the database rolls back to the savepoint, undoing only the inner block's work, and the outer transaction carries on.</p>
-<p>This is what makes the following code correct. It creates a wallet for Cy and also tries to create a second wallet for Ana, which violates the <code>unique</code> constraint on <code>owner</code>:</p>
+<p><code>atomic</code> blocks can be nested: one <code>with transaction.atomic():</code> inside another. They nest the way a careful reader would hope:</p>
+<ul>
+<li>The outermost block opens a real transaction.</li>
+<li>Each inner block creates a <strong>savepoint</strong>: a named marker inside the transaction that the database can roll back to without abandoning the whole transaction.</li>
+<li>If the inner block exits normally, the savepoint is released (kept).</li>
+<li>If an exception leaves it, the database rolls back to the savepoint, undoing only the inner block's work, and the outer transaction carries on.</li>
+</ul>
+<p>In the filing office, a savepoint is a paperclip in the folder. If the pages after the paperclip go wrong, the clerk tears them out and keeps everything before it.</p>
+<p>This is what makes the following code correct. It creates a wallet for Cy, and also tries to create a second wallet for Ana, which violates the <code>unique</code> constraint on <code>owner</code>. The second attempt sits in its own inner <code>atomic</code> block, with the <code>try</code> outside it. The example records every query sent, and prints the first few words of each:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntegrityError</span><span class="p">,</span> <span class="n">connection</span><span class="p">,</span> <span class="n">transaction</span>
@@ -18250,9 +18419,10 @@ COMMIT
 <li>Django sends <code>ROLLBACK TO SAVEPOINT</code>, which undoes the inner block and returns the transaction to a healthy state, then <code>RELEASE SAVEPOINT</code> to discard the marker.</li>
 <li>The count runs normally, and <code>COMMIT</code> saves Cy's wallet. (The savepoint's name contains the current thread's id, which changes on every run, so the example replaces it with <code>…</code>.)</li>
 </ol>
+<p>The count says 3: Ana, Bea and Cy. In the filing office, the clerk tore out the pages after the paperclip (the failed second Ana) and filed the rest of the folder.</p>
 <p><code>CaptureQueriesContext</code> is the test-suite tool that records every query Django sends on a connection, even when <code>DEBUG</code> is off. §21 uses it in tests through <code>assertNumQueries</code>.</p>
 <h3 id="section-6-the-mistake-catching-the-error-inside-the-block">The mistake: catching the error inside the block</h3>
-<p>Now remove the inner <code>atomic</code>, and catch the error directly inside the outer block. This is the most common transaction bug in Django code, because it looks reasonable:</p>
+<p>Now remove the inner <code>atomic</code>, and catch the error directly inside the outer block. This is the most common transaction bug in Django code, because it looks reasonable. The example creates a wallet for Dee, then tries the duplicate Ana again with a plain <code>try</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntegrityError</span><span class="p">,</span> <span class="n">transaction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wallet</span>
@@ -18270,7 +18440,9 @@ COMMIT
 django.db.transaction.TransactionManagementError: An error occurred in the current transaction. You can't execute queries until the end of the 'atomic' block.
 </code></pre></div>
 
+<p>The <code>except</code> clause ran and printed its message. Then the next query, the count, failed with a <code>TransactionManagementError</code>. Here is why.</p>
 <p>PostgreSQL has a strict rule: once a statement inside a transaction fails, the whole transaction is <strong>aborted</strong>, and the database refuses every further statement until the transaction ends. The <code>except</code> clause hid the error from Python, but it could not hide it from the database. Django tracks this state too. It knows the transaction is broken, and it raises <strong><code>TransactionManagementError</code></strong> on the next query instead of sending a statement that would fail anyway.</p>
+<p>In the filing office: once one page in a folder is refused, the drawers refuse the whole folder. Without a paperclip there is nothing to tear back to.</p>
 <p>And the damage is larger than one refused query. The exception left the outer block, so the outer block rolled back, and Dee's wallet, which was created successfully, is gone:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wallet</span>
@@ -18283,7 +18455,8 @@ django.db.transaction.TransactionManagementError: An error occurred in the curre
 
 <p>The rule that follows is short: <strong>if you need to catch a database error and continue, wrap the statement that may fail in its own <code>atomic</code> block, and put the <code>try</code> outside it.</strong> The savepoint is what makes continuing legal.</p>
 <h3 id="section-6-choosing-to-roll-back-without-an-exception">Choosing to roll back without an exception</h3>
-<p>Sometimes code wants to undo a block without raising. A "dry run" mode is the typical case: do all the work, report what would have changed, and keep nothing. <code>transaction.set_rollback(True)</code> marks the current block so that it rolls back when it exits normally:</p>
+<p>Sometimes code wants to undo a block without raising. A "dry run" mode is the typical case: do all the work, report what would have changed, and keep nothing. In the filing office, the clerk prepares the whole folder, reads it out, and shreds it on purpose.</p>
+<p><code>transaction.set_rollback(True)</code> marks the current block so that it rolls back when it exits normally. The example "closes" every wallet with less than 20 in it, in dry-run mode:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wallet</span>
@@ -18307,13 +18480,15 @@ django.db.transaction.TransactionManagementError: An error occurred in the curre
 still there: ['ana', 'bea', 'cy']
 </code></pre></div>
 
+<p>Cy's wallet (10) was deleted inside the block, the name was reported, and the deletion was rolled back: all three wallets are still there.</p>
 <p><code>transaction.get_rollback()</code> reads the same flag. Use <code>set_rollback(True)</code> only for a deliberate rollback like this one. Setting it to <code>False</code> to "un-break" a transaction after an error is possible, and it is a lie: the database still considers the transaction aborted.</p>
 <h3 id="section-6-lower-level-controls">Lower-level controls</h3>
 <p>You will rarely need these, but you should recognise them in other people's code:</p>
 <ul>
-<li><strong><code>atomic(savepoint=False)</code></strong> makes an inner block skip its savepoint. It is slightly cheaper, but an error inside it can no longer be rolled back on its own: it marks the <em>outer</em> block for rollback instead. Use it only in hot loops where you know nothing inside can fail and be caught.</li>
-<li><strong><code>transaction.savepoint_create()</code></strong>, <strong><code>savepoint_commit(sid)</code></strong> and <strong><code>savepoint_rollback(sid)</code></strong> manage savepoints by hand, inside an existing transaction. <code>savepoint_create()</code> is new in Django 6.1; it is the new name of <code>transaction.savepoint()</code>, which still works but is deprecated. A nested <code>atomic</code> does the same job with less room for mistakes.</li>
+<li><strong><code>atomic(savepoint=False)</code></strong> makes an inner block skip its savepoint. It is slightly cheaper, but an error inside it can no longer be rolled back on its own: it marks the <em>outer</em> block for rollback instead. Use it only in hot loops (code that runs many times in a row) where you know nothing inside can fail and be caught.</li>
+<li><strong><code>transaction.savepoint_create()</code></strong>, <strong><code>savepoint_commit(sid)</code></strong> and <strong><code>savepoint_rollback(sid)</code></strong> manage savepoints by hand, inside an existing transaction. <code>savepoint_create()</code> is new in Django 6.1; it is the new name of <code>transaction.savepoint()</code>, which still works but is deprecated (kept for now, scheduled for removal). A nested <code>atomic</code> does the same job with less room for mistakes.</li>
 </ul>
+<p>The example sets a paperclip by hand, sets Cy's balance to 0, and tears back to the paperclip:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wallet</span>
@@ -18329,8 +18504,15 @@ still there: ['ana', 'bea', 'cy']
 </code></pre></div>
 
 <h2 id="section-6-75-durable-blocks">7.5 Durable Blocks</h2>
-<p>Nesting is usually what you want. Sometimes it is a bug. Consider a function that charges a card and must be <strong>sure</strong> its record is committed when it returns, because the next step tells the customer "paid". If someone calls it from inside their own <code>atomic</code> block, its block becomes a savepoint, and nothing is committed until the caller's transaction ends. If the caller's code then fails, the payment record is rolled back after the customer was told they paid.</p>
-<p><code>atomic(durable=True)</code> turns that mistake into an error. A <strong>durable</strong> block must be the outermost one, so when it ends, its work really is committed:</p>
+<p>Nesting is usually what you want. Sometimes it is a bug.</p>
+<p>Consider a function that charges a card and must be <strong>sure</strong> its record is committed when it returns, because the next step tells the customer "paid". Here is what can go wrong:</p>
+<ol>
+<li>Someone calls it from inside their own <code>atomic</code> block.</li>
+<li>Its block becomes a savepoint, and nothing is committed until the caller's transaction ends.</li>
+<li>The caller's code then fails, and the payment record is rolled back after the customer was told they paid.</li>
+</ol>
+<p>In the filing office: the clerk handling the payment thought they were filing a folder, but their pages were slipped into someone else's folder, and that folder was shredded.</p>
+<p><code>atomic(durable=True)</code> turns that mistake into an error. A <strong>durable</strong> block must be the outermost one, so when it ends, its work really is committed. The example calls a durable function once on its own and once from inside another block:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Wallet</span>
@@ -18352,10 +18534,20 @@ still there: ['ana', 'bea', 'cy']
 RuntimeError: A durable atomic block cannot be nested within another atomic block.
 </code></pre></div>
 
-<p>The check happens when the block starts, so the nested call raises <strong>before</strong> it writes anything. Mark a function durable when the correctness of its callers depends on its write being final the moment it returns.</p>
+<p>Line by line:</p>
+<ul>
+<li><strong><code>standalone call committed: 15.00</code></strong>: called on its own, the durable block is the outermost one, and its write is committed.</li>
+<li><strong>The <code>RuntimeError</code></strong>: called inside another <code>atomic</code>, it refuses to run.</li>
+</ul>
+<p>The check happens when the block starts, so the nested call raises <strong>before</strong> it writes anything. Cy's balance is still 15, not 99. Mark a function durable when the correctness of its callers depends on its write being final the moment it returns.</p>
 <h2 id="section-6-76-one-transaction-per-request-atomic-requests">7.6 One Transaction per Request: ATOMIC_REQUESTS</h2>
-<p>Wrapping each view by hand is repetitive, so Django can do it for you. Setting <strong><code>ATOMIC_REQUESTS</code></strong> to <code>True</code> on a database alias wraps every view in a transaction on that database: the transaction commits when the view returns a response, and rolls back when the view raises an exception.</p>
-<p>Here is the setting added to the project, along with two views that make a write and then fail. The second view opts out with the <strong><code>non_atomic_requests</code></strong> decorator:</p>
+<p>Wrapping each view by hand is repetitive, so Django can do it for you. In the filing office, it is a rule that every customer at the counter gets their own folder, filed when they leave happy and shredded if anything goes wrong.</p>
+<p>Setting <strong><code>ATOMIC_REQUESTS</code></strong> to <code>True</code> on a database alias wraps every view in a transaction on that database:</p>
+<ul>
+<li>the transaction commits when the view returns a response;</li>
+<li>it rolls back when the view raises an exception.</li>
+</ul>
+<p>Here is the setting added to the project, along with two views that make a write and then fail, as if a payment provider timed out. The second view opts out with the <strong><code>non_atomic_requests</code></strong> decorator:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/settings.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.backends.postgresql.psycopg_any</span><span class="w"> </span><span class="kn">import</span> <span class="n">IsolationLevel</span>
 
@@ -18409,6 +18601,7 @@ RuntimeError: A durable atomic block cannot be nested within another atomic bloc
 <span class="p">]</span>
 </code></pre></div>
 
+<p>The shell session requests both pages with the test client and prints Ana's balance before and after each. <code>raise_request_exception=False</code> makes the client return the 500 error page instead of raising the view's exception, the way a real browser would see it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
@@ -18432,11 +18625,17 @@ RuntimeError: A durable atomic block cannot be nested within another atomic bloc
 /refund-unsafe/ -&gt; 500 ana: 75.00
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong><code>before: 70.00</code></strong>: Ana's balance, after §7.3's transfer of 30.</li>
+<li><strong><code>/refund/ -&gt; 500 ana: 70.00</code></strong>: the first view failed, and its +5 was rolled back.</li>
+<li><strong><code>/refund-unsafe/ -&gt; 500 ana: 75.00</code></strong>: the second view failed too, but its +5 stayed.</li>
+</ul>
 <p>Both requests failed with a 500. The first view's write was rolled back with its transaction. The second view ran in autocommit, so its <code>UPDATE</code> committed the moment it ran, and the failure afterwards could not undo it.</p>
 <p><code>ATOMIC_REQUESTS</code> is a sound default for small applications, and it is easy to reason about. It has three costs that matter on a larger one, and a senior engineer should be able to name them:</p>
 <ol>
 <li><strong>The transaction lasts as long as the view.</strong> If the view calls a payment API, renders a large template or streams a file, every lock it took is held for all of that time.</li>
-<li><strong>Only the view is wrapped.</strong> Middleware and the template rendering of a <code>TemplateResponse</code> run outside the transaction, and a <code>StreamingHttpResponse</code> produces its content after the transaction has already committed.</li>
+<li><strong>Only the view is wrapped.</strong> Middleware (code that runs around every request, §1.9) and the template rendering of a <code>TemplateResponse</code> run outside the transaction, and a <code>StreamingHttpResponse</code> produces its content after the transaction has already committed.</li>
 <li><strong>It wraps reads too.</strong> Every request pays for a transaction, even one that only reads.</li>
 </ol>
 <p>Many teams therefore leave it off and put <code>@transaction.atomic</code> on the specific operations that need it. That is more work, and it puts each boundary where someone thought about it.</p>
@@ -18446,7 +18645,8 @@ RuntimeError: A durable atomic block cannot be nested within another atomic bloc
 <li>If the transaction later rolls back, the email has already gone out, describing an order that does not exist.</li>
 <li>A worker that receives the job may run <strong>before</strong> the commit. It looks up the order, and the order is not there yet, because it is still invisible to every other connection.</li>
 </ul>
-<p><strong><code>transaction.on_commit(func)</code></strong> registers a function to be called after the current transaction commits. If the transaction rolls back, the function is thrown away and never called.</p>
+<p><strong><code>transaction.on_commit(func)</code></strong> registers a function to be called after the current transaction commits. If the transaction rolls back, the function is thrown away and never called. In the filing office, it is a sticky note on the folder: "post this letter once the folder is filed". If the folder is shredded, the sticky note goes with it.</p>
+<p>The example registers a callback that appends to a list, in a transaction that commits, in one that rolls back, and outside any transaction:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Outbox</span>
@@ -18478,9 +18678,16 @@ after rollback: ['receipt:ana']
 outside any block: ['receipt:ana', 'no transaction']
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong><code>inside the block: []</code></strong>: nothing has run yet; the folder is still open.</li>
+<li><strong><code>after commit: ['receipt:ana']</code></strong>: the commit ran Ana's callback.</li>
+<li><strong><code>after rollback: ['receipt:ana']</code></strong>: Bea's transaction rolled back, so Bea's callback was thrown away.</li>
+<li><strong><code>outside any block: [..., 'no transaction']</code></strong>: with no transaction open, the callback ran at once.</li>
+</ul>
 <p>The last line shows a rule worth knowing: in autocommit mode there is no transaction to wait for, so <code>on_commit</code> calls the function immediately.</p>
 <h3 id="section-6-callbacks-and-savepoints">Callbacks and savepoints</h3>
-<p>A callback registered inside a nested block belongs to that block's savepoint. If the savepoint rolls back, its callbacks are dropped, even though the outer transaction commits:</p>
+<p>A callback registered inside a nested block belongs to that block's savepoint. If the savepoint rolls back, its callbacks are dropped, even though the outer transaction commits. In the filing office, a sticky note on a page after the paperclip is torn out with that page:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
 
@@ -18499,8 +18706,10 @@ outside any block: ['receipt:ana', 'no transaction']
 <div class="highlight" data-lang="text"><pre><span></span><code>['outer']
 </code></pre></div>
 
+<p>Only <code>outer</code> ran. The <code>inner</code> callback was attached to the savepoint that rolled back.</p>
 <h3 id="section-6-robusttrue">robust=True</h3>
-<p>Callbacks run one after another, in the order they were registered. By default, if one raises an exception, the exception propagates and the remaining callbacks never run. The transaction has already committed by then, so the data is fine, but the later side effects silently do not happen. <strong><code>on_commit(func, robust=True)</code></strong> catches and logs the exception from that callback, so the ones after it still run:</p>
+<p>Callbacks run one after another, in the order they were registered. By default, if one raises an exception, the exception propagates and the remaining callbacks never run. The transaction has already committed by then, so the data is fine, but the later side effects silently do not happen.</p>
+<p><strong><code>on_commit(func, robust=True)</code></strong> catches and logs the exception from that callback, so the ones after it still run. The example registers a callback that always fails, with <code>robust=True</code>, and a second one after it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
@@ -18522,18 +18731,25 @@ outside any block: ['receipt:ana', 'no transaction']
 <div class="highlight" data-lang="text"><pre><span></span><code>['invoice']
 </code></pre></div>
 
+<p>The failing callback was caught, and the second one still ran: <code>['invoice']</code>.</p>
 <p>The logged error goes to the <code>django.db.backends.base</code> logger, so in production it reaches your error reporting rather than vanishing.</p>
 <h3 id="section-6-what-on-commit-does-not-promise">What on_commit does not promise</h3>
-<p><code>on_commit</code> runs in the same process, after the commit. If that process crashes, is killed by a deployment, or loses its network in the gap, the commit has happened and the callback never runs. The order exists and the confirmation email is never sent.</p>
-<p>When losing the side effect is not acceptable, use the <strong>transactional outbox pattern</strong> instead. Write a row describing the side effect into an outbox table <strong>inside the same transaction</strong> as the data. The two then commit or roll back together, by definition. A separate worker reads pending outbox rows and performs them, marking each one done. This section's <code>Outbox</code> model is that table, and §7.11 builds the worker's safe "claim the next rows" query. A worker can crash too, so it may perform a side effect twice. The receiving end must therefore treat a repeated message as harmless (be <strong>idempotent</strong>). §19 covers this in Django's task framework.</p>
+<p><code>on_commit</code> runs in the same process, after the commit. If that process crashes, is killed by a deployment, or loses its network in the gap, the commit has happened and the callback never runs. The order exists and the confirmation email is never sent. In the filing office, the clerk filed the folder and then went home before posting the letter.</p>
+<p>When losing the side effect is not acceptable, use the <strong>transactional outbox pattern</strong> instead:</p>
+<ol>
+<li>Write a row describing the side effect into an outbox table <strong>inside the same transaction</strong> as the data. The two then commit or roll back together, by definition.</li>
+<li>A separate worker reads pending outbox rows and performs them, marking each one done.</li>
+</ol>
+<p>This section's <code>Outbox</code> model is that table, and §7.11 builds the worker's safe "claim the next rows" query. A worker can crash too, so it may perform a side effect twice. The receiving end must therefore treat a repeated message as harmless (be <strong>idempotent</strong>). §19 covers this in Django's task framework (§19.13 and §19.14).</p>
 <h2 id="section-6-78-isolation-levels-in-django">7.8 Isolation Levels in Django</h2>
-<p>A transaction's <strong>isolation level</strong> decides what it can see of other transactions running at the same time. PostgreSQL offers three distinct levels:</p>
+<p>A transaction's <strong>isolation level</strong> decides what it can see of other transactions running at the same time. In the filing office, it decides how much a clerk with an open folder can see of the filing other clerks finish meanwhile. PostgreSQL offers three distinct levels:</p>
 <ul>
 <li><strong>Read Committed</strong> (the default): each statement sees the data committed before that statement began. Two <code>SELECT</code>s in one transaction can see different data, if another transaction committed in between.</li>
-<li><strong>Repeatable Read</strong>: the whole transaction sees one snapshot, taken at its first statement.</li>
+<li><strong>Repeatable Read</strong>: the whole transaction sees one snapshot (a frozen picture of the data), taken at its first statement.</li>
 <li><strong>Serializable</strong>: like Repeatable Read, and PostgreSQL also refuses any combination of concurrent transactions that could not have happened one after the other.</li>
 </ul>
-<p>SQL Mastery §14.9-§14.14 demonstrates each of these in SQL. On the Django side there is one decision, and it is made per database alias, in <code>OPTIONS</code>. With the psycopg 3 driver the value is a member of <code>psycopg.IsolationLevel</code>. This project set it on the <code>serial</code> alias:</p>
+<p>SQL Mastery §14.9-§14.14 demonstrates each of these in SQL. On the Django side there is one decision, and it is made per database alias, in <code>OPTIONS</code>. With the psycopg 3 driver the value is a member of <code>psycopg.IsolationLevel</code>. This project set it on the <code>serial</code> alias.</p>
+<p>The example asks PostgreSQL which level each alias really uses, inside a transaction and outside one:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connections</span>
 
@@ -18557,11 +18773,22 @@ serial in a transaction -&gt; serializable
 serial in autocommit -&gt; read committed
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong><code>default in a transaction -&gt; read committed</code></strong>: the default alias uses PostgreSQL's default.</li>
+<li><strong><code>serial in a transaction -&gt; serializable</code></strong>: the <code>serial</code> alias's setting took effect.</li>
+<li><strong><code>serial in autocommit -&gt; read committed</code></strong>: outside a transaction, the same alias did not.</li>
+</ul>
 <p>The last line is a detail worth understanding. psycopg applies the setting when it <strong>begins a transaction</strong>, by sending <code>BEGIN ISOLATION LEVEL SERIALIZABLE</code>. A query made in autocommit mode never begins one, so it runs at the server's default. The isolation level of an alias only matters inside <code>atomic(using=...)</code>.</p>
-<p>Two aliases on one database is a useful pattern. Most of the application runs at Read Committed, which is fast and rarely surprising. The few operations that enforce rules across several rows run on the stricter alias, with <code>atomic(using="serial")</code> and <code>.using("serial")</code>, and are written to retry. §7.15 shows why they need to.</p>
+<p>Two aliases on one database is a useful pattern:</p>
+<ul>
+<li>Most of the application runs at Read Committed, which is fast and rarely surprising.</li>
+<li>The few operations that enforce rules across several rows run on the stricter alias, with <code>atomic(using="serial")</code> and <code>.using("serial")</code>, and are written to retry. §7.15 shows why they need to.</li>
+</ul>
 <p>"Like PostgreSQL itself, Django defaults to the READ COMMITTED isolation level," says Django's database documentation, and it adds a warning to anyone who raises it: under higher levels, "your application should be prepared to handle exceptions raised on serialization failures." Raising the level for the whole project is therefore a decision with consequences, not a free safety upgrade.</p>
 <h2 id="section-6-79-the-lost-update">7.9 The Lost Update</h2>
-<p>Now the most common concurrency bug in web applications. Two customers buy the same mug at the same moment. Each request reads the product, subtracts one, and saves it.</p>
+<p>Now the most common concurrency bug in web applications, and the puzzle from the top of the section. Two customers buy the same mug at the same moment. Each request reads the product, subtracts one, and saves it.</p>
+<p>The example runs <code>buy()</code> in two threads, which Django gives two separate database connections, like two Gunicorn workers. The barrier holds each thread after its read, until both have read:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
@@ -18590,20 +18817,30 @@ serial in autocommit -&gt; read committed
 <div class="highlight" data-lang="text"><pre><span></span><code>stock after two sales: 9
 </code></pre></div>
 
+<p>Ten mugs, two sales, and the stock says 9. The figure shows the order of events:</p>
 <!-- fig:dj-lostupdate -->
 <figure id="fig-dj-lostupdate" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 560" role="img" aria-labelledby="t-dj-lostupdate d-dj-lostupdate" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-dj-lostupdate">A lost update: two sales, one decrement</title><desc id="d-dj-lostupdate">Two requests buy the same mug. Request A reads stock 10, then request B reads stock 10. A computes 10 minus 1 in Python and writes 9. B also computes 10 minus 1 from its stale read and writes 9, overwriting A’s write. Two mugs were sold and the stock fell by one.</desc><defs><marker id="ah-dj-lostupdate" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="134" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">REQUEST A</text><text x="360" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">DATABASE ROW</text><text x="586" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">REQUEST B</text><path d="M360,146 L360,170" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5"/><path d="M360,242 L360,266" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5"/><path d="M360,338 L360,362" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5"/><rect x="24" y="78" width="220" height="64" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="134" y="104.588" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">SELECT stock</text><text x="134" y="124.188" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">reads 10</text><rect x="280" y="78" width="160" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.08;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="114.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 10</text><path d="M250,110 L274,110" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lostupdate)"/><rect x="476" y="174" width="220" height="64" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="586" y="200.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">SELECT stock</text><text x="586" y="220.187" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">reads 10</text><rect x="280" y="174" width="160" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.08;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="210.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 10</text><path d="M470,206 L446,206" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lostupdate)"/><rect x="24" y="270" width="220" height="64" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="134" y="296.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">UPDATE stock = 9</text><text x="134" y="316.188" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">10 − 1, computed in Python</text><rect x="280" y="270" width="160" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.08;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="306.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 9</text><path d="M250,302 L274,302" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lostupdate)"/><rect x="476" y="366" width="220" height="64" rx="10" style="fill:red;fill-opacity:0.13;stroke:red;stroke-width:1.6"/><text x="586" y="392.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">UPDATE stock = 9</text><text x="586" y="412.188" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">10 − 1, from a stale read</text><rect x="280" y="366" width="160" height="64" rx="10" style="fill:red;fill-opacity:0.08;stroke:red;stroke-width:1.6"/><text x="360" y="402.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 9</text><path d="M470,398 L446,398" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-lostupdate)"/><text x="360" y="484" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text-dim);opacity:1">two sales, but the stock fell by one:</text><text x="360" y="504.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text-dim);opacity:1">B’s write replaced A’s instead of building on it</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Both reads happen before either write, so the second write is computed from a value that is already out of date and overwrites the first. This is the run printed above: stock 9 after two sales.</figcaption></figure>
 <!-- /fig:dj-lostupdate -->
 
 <p>Two mugs were sold and the stock dropped by one. This is a <strong>race condition</strong>: a bug whose result depends on the timing of two operations running at once. This particular race has a name of its own, the <strong>lost update</strong>: the second write was based on a value that was already out of date, so it overwrote the first write instead of building on it.</p>
+<p>In the filing office: two clerks each copied "stock: 10" from the form onto their notepads. Each subtracted one on the notepad and wrote "9" back on the form. The second clerk's 9 replaced the first clerk's 9, and one sale disappeared.</p>
 <p>Some notes on how the example works, because every concurrent example below uses the same pattern:</p>
 <ul>
 <li><strong>Django gives each thread its own database connection.</strong> <code>django.db.connection</code> is a per-thread object, so the two threads really are two separate sessions in PostgreSQL, exactly like two Gunicorn workers.</li>
 <li><strong>A thread should close its connection when it finishes</strong>, which is what <code>connection.close()</code> does. Django closes request connections for you; it cannot know when your thread is done.</li>
 <li><strong>The barrier forces the bad timing.</strong> Without it, one thread usually finishes before the other starts, and the bug hides. In production, nothing forces the good timing either.</li>
 </ul>
-<p>A race condition is a timing problem, not a logic problem: run either request alone and it is correct. The flaw is the pattern itself: <strong>read a value into Python, compute a new value, write it back</strong>. Nothing stops another request from writing between the read and the write. Note that <code>atomic</code> alone does not fix it. At Read Committed, wrapping <code>buy()</code> in a transaction does not stop the other transaction from reading 10 too. There are three real fixes, and the next three subsections take them in turn, from the cheapest to the most general.</p>
+<p>A race condition is a timing problem, not a logic problem: run either request alone and it is correct. The flaw is the pattern itself: <strong>read a value into Python, compute a new value, write it back</strong>. Nothing stops another request from writing between the read and the write.</p>
+<p>Note that <code>atomic</code> alone does not fix it. At Read Committed, wrapping <code>buy()</code> in a transaction does not stop the other transaction from reading 10 too. There are three real fixes, and the next subsections take them in turn, from the cheapest to the most general:</p>
+<ol>
+<li>an <code>F()</code> update (§7.10);</li>
+<li>a row lock with <code>select_for_update</code> (§7.11);</li>
+<li>a version column (§7.13).</li>
+</ol>
 <h2 id="section-6-710-fix-one-the-f-update-arithmetic-in-the-database">7.10 Fix One: The F() Update, Arithmetic in the Database</h2>
-<p>The read-modify-write gap exists because the arithmetic happens in Python. Move it into the database, and there is no gap. An <strong><code>F()</code> expression</strong> refers to a column's value inside the database, so <code>F("stock") - 1</code> becomes SQL that says "whatever the stock is when this row is updated, minus one".</p>
+<p>The read-modify-write gap exists because the arithmetic happens in Python. Move it into the database, and there is no gap.</p>
+<p>An <strong><code>F()</code> expression</strong> refers to a column's value inside the database (§4.11 introduced it), so <code>F("stock") - 1</code> becomes SQL that says "whatever the stock is when this row is updated, minus one". In the filing office, the clerk no longer copies the number onto a notepad. The clerk hands the drawer a note: "subtract one from whatever is written here".</p>
+<p>The example resets the stock to 10 and runs the race again, with the update written as an <code>F()</code> expression:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
@@ -18631,8 +18868,14 @@ serial in autocommit -&gt; read committed
 <div class="highlight" data-lang="text"><pre><span></span><code>stock after two sales: 8
 </code></pre></div>
 
-<p>Both updates were applied. A statement like this is called an <strong><code>F()</code> update</strong>: the ORM sends one <code>UPDATE</code> whose new value is computed by the database from the row's current value. PostgreSQL makes the second <code>UPDATE</code> wait until the first one's transaction ends, because it needs to change the same row. Then it reads the row again and applies <code>stock - 1</code> to the new value. This is what makes the single statement safe, and it is why the fix costs nothing extra.</p>
-<p>The same idea works with <code>save()</code>, when you already have an instance. Assign an expression to the field, and the <code>UPDATE</code> carries the expression instead of a number:</p>
+<p>Two sales, and the stock is 8. Both updates were applied.</p>
+<p>A statement like this is called an <strong><code>F()</code> update</strong>: the ORM sends one <code>UPDATE</code> whose new value is computed by the database from the row's current value. Here is why two of them at once are safe:</p>
+<ol>
+<li>PostgreSQL makes the second <code>UPDATE</code> wait until the first one's transaction ends, because it needs to change the same row.</li>
+<li>Then it reads the row again, and applies <code>stock - 1</code> to the new value.</li>
+</ol>
+<p>This is what makes the single statement safe, and it is why the fix costs nothing extra.</p>
+<p>The same idea works with <code>save()</code>, when you already have an instance. Assign an expression to the field, and the <code>UPDATE</code> carries the expression instead of a number. The example captures the SQL that <code>save()</code> sends:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">F</span>
@@ -18654,10 +18897,19 @@ in Python: 7
 after refresh: 7
 </code></pre></div>
 
-<p>The captured SQL ends with <code>RETURNING "shop_product"."stock"</code>. Since Django 6.0, on databases that support <code>RETURNING</code> (PostgreSQL, SQLite and Oracle), <code>save()</code> reads back the value of every field that was assigned an expression, so <code>mug.stock</code> holds the new number straight away and the <code>refresh_from_db()</code> returns the same value. Before 6.0, the field kept the <code>F()</code> expression object after the save, and code had to call <code>refresh_from_db()</code> before using it; on MySQL and MariaDB, Django 6.0 marks the field as deferred, so the next access reloads it. You will meet the explicit <code>refresh_from_db()</code> in a lot of existing code, and it is still harmless.</p>
+<p>Line by line:</p>
+<ul>
+<li><strong>The <code>UPDATE</code></strong> says <code>SET "stock" = ("shop_product"."stock" - 1)</code>: the arithmetic is in the SQL.</li>
+<li><strong><code>in Python: 7</code></strong>: right after the save, the instance already holds the new number.</li>
+<li><strong><code>after refresh: 7</code></strong>: reloading from the database gives the same 7.</li>
+</ul>
+<p>The captured SQL ends with <code>RETURNING "shop_product"."stock"</code>, the SQL clause that sends back a value the database computed. Since Django 6.0, on databases that support <code>RETURNING</code> (PostgreSQL, SQLite and Oracle), <code>save()</code> reads back the value of every field that was assigned an expression, so <code>mug.stock</code> holds the new number straight away and the <code>refresh_from_db()</code> returns the same value.</p>
+<p>Before 6.0, the field kept the <code>F()</code> expression object after the save, and code had to call <code>refresh_from_db()</code> before using it; on MySQL and MariaDB, Django 6.0 marks the field as deferred, so the next access reloads it. You will meet the explicit <code>refresh_from_db()</code> in a lot of existing code, and it is still harmless.</p>
 <p><code>update_fields</code> matters here too. A plain <code>save()</code> writes every column, including <code>version</code> and <code>sku</code> from the values Python read earlier, which brings the lost-update problem back for those other fields.</p>
 <h3 id="section-6-a-conditional-update-never-sell-what-you-do-not-have">A conditional update: never sell what you do not have</h3>
-<p>Arithmetic alone still allows the stock to go below zero, if the code subtracts without checking. Checking in Python first (<code>if mug.stock &gt; 0</code>) brings back the gap. Instead, put the condition in the same statement, as a filter. <code>update()</code> returns the number of rows it changed, and that number tells you whether the condition held:</p>
+<p>Arithmetic alone still allows the stock to go below zero, if the code subtracts without checking. Checking in Python first (<code>if mug.stock &gt; 0</code>) brings back the gap.</p>
+<p>Instead, put the condition in the same statement, as a filter. <code>update()</code> returns the number of rows it changed, and that number tells you whether the condition held. In the filing office, the note to the drawer says "subtract one, <strong>but only if there is at least one</strong>", and the drawer replies with how many forms it changed.</p>
+<p>The example sets the stock to 1, the last mug, and lets two buyers race for it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
@@ -18690,7 +18942,7 @@ stock: 0
 </code></pre></div>
 
 <p>One buyer got the last mug, and the other got <code>0</code>, which the view would turn into "sold out". The second <code>UPDATE</code> waited for the first, then <strong>re-checked its <code>WHERE</code> clause against the new row</strong>, found <code>stock</code> was now 0, and skipped the row. That re-check is PostgreSQL's documented Read Committed behaviour for <code>UPDATE</code>, and it is what makes this one-line pattern a correct guard.</p>
-<p>The model has a second line of defence. <code>PositiveIntegerField</code> creates a database check constraint, so even code that forgets the condition cannot store a negative stock:</p>
+<p>The model has a second line of defence. <code>PositiveIntegerField</code> creates a database check constraint, so even code that forgets the condition cannot store a negative stock. The example subtracts one from a stock of 0 without any condition:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">F</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Product</span>
@@ -18702,10 +18954,13 @@ stock: 0
 DETAIL:  Failing row contains (1, MUG, -1, 1).
 </code></pre></div>
 
+<p>The database refused the row <code>(1, MUG, -1, 1)</code>, a stock of −1.</p>
 <p><strong>When an <code>F()</code> update is the right fix:</strong> the new value can be computed from the old value in SQL, and the check (if any) can be written as a filter on the same row. Counters, stock levels, balances and "likes" all qualify. It is the cheapest fix and should be your first choice.</p>
 <h2 id="section-6-711-fix-two-lock-the-row-with-select-for-update">7.11 Fix Two: Lock the Row with select_for_update</h2>
-<p>Some decisions cannot be written as one SQL expression. The code reads a row, calls other functions, perhaps reads other tables, and only then decides what to write. For that, the row must be <strong>locked</strong> while the code thinks. This is called <strong>pessimistic locking</strong>: assume a conflict will happen, and prevent it by making other writers wait. Pessimistic locking costs throughput, because writers queue up one behind another, and that is the price of not needing any retry logic.</p>
-<p><strong><code>select_for_update()</code></strong> adds <code>FOR UPDATE</code> to the <code>SELECT</code>. PostgreSQL then takes a <strong>row lock</strong> on each row it returns. Another transaction that tries to lock, update or delete those rows waits until this transaction ends. Plain reads are not blocked.</p>
+<p>Some decisions cannot be written as one SQL expression. The code reads a row, calls other functions, perhaps reads other tables, and only then decides what to write. For that, the row must be <strong>locked</strong> while the code thinks.</p>
+<p>This is called <strong>pessimistic locking</strong>: assume a conflict will happen, and prevent it by making other writers wait. Pessimistic locking costs throughput (how many requests the system finishes per second), because writers queue up one behind another, and that is the price of not needing any retry logic.</p>
+<p><strong><code>select_for_update()</code></strong> adds <code>FOR UPDATE</code> to the <code>SELECT</code>. PostgreSQL then takes a <strong>row lock</strong> on each row it returns. Another transaction that tries to lock, update or delete those rows waits until this transaction ends. Plain reads are not blocked. In the filing office, the clerk puts a "reserved" flag on the form. Other clerks can still read it, but a clerk who wants to change it, or reserve it too, must wait until the flag comes off.</p>
+<p>The example has two buyers. A locks the mug's row and then takes half a second, as if checking a payment. B tries to lock the same row while A holds it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
@@ -18756,6 +19011,7 @@ B locked the row after waiting over 0.4s: True, read 9
 stock: 8
 </code></pre></div>
 
+<p>B waited more than 0.4 seconds, then read 9, not 10, and the final stock is 8. The figure shows the order:</p>
 <!-- fig:dj-forupdate -->
 <figure id="fig-dj-forupdate" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 560" role="img" aria-labelledby="t-dj-forupdate d-dj-forupdate" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-dj-forupdate">select_for_update: the second reader waits for the first commit</title><desc id="d-dj-forupdate">Request A runs SELECT FOR UPDATE and locks the row, reading stock 10. Request B runs the same query and waits, because the row is locked. A writes 9 and commits, which releases the lock. Only then does B read, and it reads 9, and writes 8. Two sales, two decrements.</desc><defs><marker id="ah-dj-forupdate" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="134" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">REQUEST A</text><text x="360" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">DATABASE ROW</text><text x="586" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text-dim);opacity:1">REQUEST B</text><path d="M360,146 L360,170" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5"/><path d="M360,242 L360,266" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5"/><path d="M360,338 L360,362" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5"/><rect x="24" y="78" width="220" height="64" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="134" y="104.588" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">SELECT … FOR UPDATE</text><text x="134" y="124.188" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">locks the row, reads 10</text><rect x="280" y="78" width="160" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.08;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="105.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 10</text><text x="360" y="124.025" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">locked by A</text><path d="M250,110 L274,110" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-forupdate)"/><rect x="476" y="174" width="220" height="64" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="586" y="200.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">SELECT … FOR UPDATE</text><text x="586" y="220.187" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">waits for A’s lock …</text><rect x="280" y="174" width="160" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.08;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="201.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 10</text><text x="360" y="220.025" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">locked by A</text><path d="M470,206 L446,206" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-forupdate)"/><rect x="24" y="270" width="220" height="64" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="134" y="296.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">UPDATE, COMMIT</text><text x="134" y="316.188" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">writes 9, lock released</text><rect x="280" y="270" width="160" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.08;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="306.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 9</text><path d="M250,302 L274,302" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-forupdate)"/><rect x="476" y="366" width="220" height="64" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="586" y="392.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">reads 9, writes 8</text><text x="586" y="412.188" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">then COMMIT</text><rect x="280" y="366" width="160" height="64" rx="10" style="fill:#8a94a6;fill-opacity:0.08;stroke:#8a94a6;stroke-width:1.6"/><text x="360" y="402.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">stock = 8</text><path d="M470,398 L446,398" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-forupdate)"/><text x="360" y="484" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text-dim);opacity:1">two sales, two decrements:</text><text x="360" y="504.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text-dim);opacity:1">the lock turned two overlapping requests into a queue</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The lock moves B’s read to after A’s commit, so read-modify-write is safe again. The example above printed exactly this order, and stock 8.</figcaption></figure>
 <!-- /fig:dj-forupdate -->
@@ -18776,11 +19032,12 @@ stock: 8
 
 <ol start="2">
 <li><strong>The lock is taken when the QuerySet is evaluated</strong>, not when it is built. A <code>select_for_update()</code> QuerySet that is never iterated locks nothing.</li>
-<li><strong>Everyone who writes the row must take the lock.</strong> A row lock only blocks other lockers and writers. A code path that reads without locking and then saves still causes a lost update.</li>
+<li><strong>Everyone who writes the row must take the lock.</strong> A row lock only blocks other lockers and writers. A code path that reads without locking and then saves still causes a lost update. In the filing office, a clerk who ignores the flags can still overwrite the form.</li>
 </ol>
 <h3 id="section-6-not-waiting-nowait-and-skip-locked">Not waiting: nowait and skip_locked</h3>
 <p>By default a locked row makes the next locker wait, and the wait can be long. Two options change that.</p>
-<p><strong><code>nowait=True</code></strong> fails at once instead of waiting. It suits a request that should answer "someone else is editing this, try again" rather than hang:</p>
+<p><strong><code>nowait=True</code></strong> fails at once instead of waiting. It suits a request that should answer "someone else is editing this, try again" rather than hang. In the filing office, the clerk sees the flag and walks away instead of waiting.</p>
+<p>The example holds the lock in one thread and tries <code>nowait=True</code> in the other:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">OperationalError</span><span class="p">,</span> <span class="n">connection</span><span class="p">,</span> <span class="n">transaction</span>
@@ -18812,7 +19069,9 @@ stock: 8
 <div class="highlight" data-lang="text"><pre><span></span><code>OperationalError: could not obtain lock on row in relation "shop_product"
 </code></pre></div>
 
-<p><strong><code>skip_locked=True</code></strong> silently leaves out rows that are already locked. That is exactly what a job queue needs: several workers each claim the next few pending jobs, and no two workers ever claim the same one. Here worker A claims two outbox messages and is still holding them when worker B asks for two:</p>
+<p>The second locker got an <code>OperationalError</code> straight away, instead of waiting.</p>
+<p><strong><code>skip_locked=True</code></strong> silently leaves out rows that are already locked. In the filing office, the clerk skips the flagged forms and takes the next unflagged ones. That is exactly what a job queue needs: several workers each claim the next few pending jobs, and no two workers ever claim the same one.</p>
+<p>Here worker A claims two outbox messages and is still holding them when worker B asks for two:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span><span class="p">,</span> <span class="n">transaction</span>
@@ -18852,9 +19111,15 @@ stock: 8
 B claims ['email:3', 'email:4']
 </code></pre></div>
 
+<p>A got messages 1 and 2, and B, skipping the two that A had locked, got 3 and 4.</p>
 <p>A real worker would mark its rows <code>status="sent"</code> inside the same transaction, after performing them. If it crashes, its transaction rolls back, the locks disappear, and the rows are pending again for the next worker. This is how the outbox from §7.7 is drained safely by any number of workers, and it is why PostgreSQL is a reasonable job queue for moderate volumes.</p>
 <h3 id="section-6-locking-less-of-and-no-key">Locking less: of and no_key</h3>
-<p>With <code>select_related()</code>, <code>select_for_update()</code> locks the rows of <strong>every</strong> table in the join by default. Locking a product because you are editing an order is usually more than you meant. <strong><code>of=</code></strong> names the tables to lock, with <code>"self"</code> meaning the queryset's own model. <strong><code>no_key=True</code></strong> takes the weaker <code>FOR NO KEY UPDATE</code> lock, which still blocks other writers but does not block another transaction from inserting a row that references this one through a foreign key.</p>
+<p>With <code>select_related()</code>, <code>select_for_update()</code> locks the rows of <strong>every</strong> table in the join by default. Locking a product because you are editing an order is usually more than you meant. Two options lock less:</p>
+<ul>
+<li><strong><code>of=</code></strong> names the tables to lock, with <code>"self"</code> meaning the queryset's own model.</li>
+<li><strong><code>no_key=True</code></strong> takes the weaker <code>FOR NO KEY UPDATE</code> lock, which still blocks other writers but does not block another transaction from inserting a row that references this one through a foreign key.</li>
+</ul>
+<p>The example prints the end of the SQL for an order query that uses both:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">transaction</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Order</span>
@@ -18867,10 +19132,17 @@ B claims ['email:3', 'email:4']
 <div class="highlight" data-lang="text"><pre><span></span><code>"shop_order" INNER JOIN "shop_product" ON ("shop_order"."product_id" = "shop_product"."id") FOR NO KEY UPDATE OF "shop_order"
 </code></pre></div>
 
-<p>There is one more restriction to know: PostgreSQL cannot lock the nullable side of an outer join, so <code>select_for_update()</code> with <code>select_related()</code> over a nullable foreign key fails unless <code>of=</code> leaves that table out.</p>
+<p>The SQL joins the product but ends with <code>FOR NO KEY UPDATE OF "shop_order"</code>: only the order rows are locked, and with the weaker lock.</p>
+<p>There is one more restriction to know: PostgreSQL cannot lock the nullable side of an outer join, so <code>select_for_update()</code> with <code>select_related()</code> over a nullable foreign key fails unless <code>of=</code> leaves that table out. (An outer join keeps rows that have no match on the other side, filling the gap with <code>NULL</code>; there is no real row there to lock.)</p>
 <h2 id="section-6-712-deadlocks">7.12 Deadlocks</h2>
-<p>Locks introduce a new failure. Transaction A locks row 1 and wants row 2. Transaction B has locked row 2 and wants row 1. Each waits for the other, forever. This is a <strong>deadlock</strong>. PostgreSQL checks for one after a waiting statement has waited <code>deadlock_timeout</code> (one second by default), and when it finds one it cancels one of the two transactions so the other can continue.</p>
-<p>Transfers in opposite directions are the classic way to cause one:</p>
+<p>Locks introduce a new failure:</p>
+<ol>
+<li>Transaction A locks row 1 and wants row 2.</li>
+<li>Transaction B has locked row 2 and wants row 1.</li>
+<li>Each waits for the other, forever.</li>
+</ol>
+<p>This is a <strong>deadlock</strong>. In the filing office, two clerks each hold one reserved form, and each is waiting for the other to release theirs. PostgreSQL checks for one after a waiting statement has waited <code>deadlock_timeout</code> (one second by default), and when it finds one it cancels one of the two transactions so the other can continue.</p>
+<p>Transfers in opposite directions are the classic way to cause one. The example runs Ana → Bea and Bea → Ana at the same time. Each transfer locks its source wallet, waits at the barrier, then tries to lock its destination, which the other transfer already holds:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
@@ -18910,7 +19182,8 @@ B claims ['email:3', 'email:4']
 </code></pre></div>
 
 <p>Which of the two transactions is cancelled depends on timing, so the example prints the outcomes sorted. One committed and the other got <code>deadlock detected</code>. Its transaction was rolled back, so no money was lost, but the request failed.</p>
-<p>The fix is to make every transaction take its locks <strong>in the same order</strong>. Then the second transaction waits for the first instead of grabbing a lock the first one needs. With the ORM, lock both rows in one query, ordered by primary key:</p>
+<p>The fix is to make every transaction take its locks <strong>in the same order</strong>. Then the second transaction waits for the first instead of grabbing a lock the first one needs. In the filing office: every clerk agrees to reserve forms in file-number order. Whoever reserves form 1 first gets both; the other waits at form 1 instead of holding form 2.</p>
+<p>With the ORM, lock both rows in one query, ordered by primary key. The example runs the same two opposite transfers that way:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
@@ -18948,11 +19221,25 @@ B claims ['email:3', 'email:4']
 total money: 155.00
 </code></pre></div>
 
-<p>Both transfers committed, and the total in the two wallets is unchanged, as it must be after two transfers between them.</p>
+<p>Both transfers committed, and the total in the two wallets is unchanged, as it must be after two transfers between them. (After §7.6, Ana had 75 and Bea 80, 155 in total. Every transfer since has only moved money between the two, so the total must stay 155.)</p>
 <p><code>order_by("pk")</code> is not decoration. Without it PostgreSQL may return, and therefore lock, the two rows in either order, and the deadlock can come back. Consistent lock ordering is the general rule. Retrying the cancelled transaction is the safety net for the cases you did not foresee.</p>
 <h2 id="section-6-713-fix-three-optimistic-locking-with-a-version-column">7.13 Fix Three: Optimistic Locking with a Version Column</h2>
-<p>Row locks only work while a transaction is open, and a transaction must stay short. Many real conflicts are much slower than that. An editor opens a product page, thinks for five minutes, and saves. Meanwhile a colleague opened the same page and saved first. Holding a lock for five minutes is not an option, and the second save must not silently overwrite the first.</p>
-<p><strong>Optimistic locking</strong> assumes conflicts are rare and detects them at write time instead of preventing them. Each row carries a <strong>version column</strong>. The form remembers the version it loaded. The save says "update this row <strong>only if its version is still the one I loaded</strong>, and increase the version". If another save happened first, the version has moved on, the <code>UPDATE</code> matches no rows, and <code>update()</code> returns 0.</p>
+<p>Row locks only work while a transaction is open, and a transaction must stay short. Many real conflicts are much slower than that:</p>
+<ol>
+<li>An editor opens a product page, and thinks for five minutes.</li>
+<li>Meanwhile a colleague opens the same page and saves first.</li>
+<li>The editor saves.</li>
+</ol>
+<p>Holding a lock for five minutes is not an option, and the second save must not silently overwrite the first.</p>
+<p><strong>Optimistic locking</strong> assumes conflicts are rare and detects them at write time instead of preventing them. It works like this:</p>
+<ul>
+<li>Each row carries a <strong>version column</strong>, a number that goes up on every save.</li>
+<li>The form remembers the version it loaded.</li>
+<li>The save says "update this row <strong>only if its version is still the one I loaded</strong>, and increase the version".</li>
+<li>If another save happened first, the version has moved on, the <code>UPDATE</code> matches no rows, and <code>update()</code> returns 0.</li>
+</ul>
+<p>In the filing office, every form has an edition number in the corner. A clerk may only write on the form if the edition number is still the one they copied, and writing raises it by one.</p>
+<p>The example has two browser tabs load the same product, version 1, and save one after the other:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">F</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Product</span>
@@ -18991,6 +19278,12 @@ tab 2: someone else saved this product first; reload and try again
 stock 25 version 2
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong><code>tab 1 saved</code></strong>: the first save found version 1, wrote stock 25, and raised the version to 2.</li>
+<li><strong><code>tab 2: someone else saved...</code></strong>: the second save looked for version 1, found none, and raised <code>Conflict</code>.</li>
+<li><strong><code>stock 25 version 2</code></strong>: the first edit survived, and was not silently overwritten.</li>
+</ul>
 <p>The version check and the write are one statement, so there is no gap between them, for the same reason as §7.10. In a real view, the version travels in a hidden form field, and a <code>Conflict</code> becomes a message asking the user to reload.</p>
 <h3 id="section-6-choosing-between-the-three-fixes">Choosing between the three fixes</h3>
 <div style="display:grid;grid-template-columns:12rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
@@ -19004,7 +19297,8 @@ stock 25 version 2
 
 <p>HTTP has a standard form of optimistic locking: an <code>ETag</code> header carrying the version and an <code>If-Match</code> header on the update, answered with <code>412 Precondition Failed</code> on a mismatch. The DRF course builds an API with it.</p>
 <h2 id="section-6-714-the-get-or-create-race-and-check-then-act">7.14 The get_or_create Race and Check-Then-Act</h2>
-<p>The lost update has a cousin that concerns rows that do not exist yet. "Look it up, and create it if it is missing" is a <strong>check-then-act</strong> sequence, and two requests can both check, both find nothing, and both create.</p>
+<p>The lost update has a cousin that concerns rows that do not exist yet. "Look it up, and create it if it is missing" is a <strong>check-then-act</strong> sequence, and two requests can both check, both find nothing, and both create. In the filing office, two clerks each look in the drawer for Ana's subscription form, each find none, and each file a new one.</p>
+<p>The example has two threads check whether <code>ana@example.com</code> is subscribed, wait for each other at the barrier, and then subscribe if they found nothing. At this point <code>Subscriber.email</code> has no unique rule:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
@@ -19035,9 +19329,20 @@ stock 25 version 2
 shop.models.Subscriber.MultipleObjectsReturned: get() returned more than one Subscriber -- it returned 2!
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong><code>subscribers: 2</code></strong>: both threads created a row.</li>
+<li><strong><code>MultipleObjectsReturned</code></strong>: the last line of the example, an innocent <code>get_or_create()</code>, then failed.</li>
+</ul>
 <p>The duplicate then breaks code far away from the race. <code>get_or_create()</code> calls <code>get()</code>, and <code>get()</code> refuses to choose between two rows, raising <code>MultipleObjectsReturned</code>.</p>
-<p><strong><code>get_or_create()</code> does not prevent this race on its own.</strong> Django's source makes the dependency plain. It runs <code>get()</code>; if that finds nothing, it runs <code>create()</code> inside its own <code>atomic</code> block (a savepoint); and if <code>create()</code> raises <code>IntegrityError</code>, it assumes a concurrent request created the row and runs <code>get()</code> again. That recovery only happens if something raises <code>IntegrityError</code>, and only a <strong>unique constraint</strong> in the database raises it. Without one, both creates succeed. The documentation says so directly: the fields passed to <code>get_or_create()</code> should be unique.</p>
-<p>So the fix is a constraint. Remove the duplicates first, because a unique index cannot be built over data that violates it, then add <code>unique=True</code>:</p>
+<p><strong><code>get_or_create()</code> does not prevent this race on its own.</strong> Django's source makes the dependency plain. It runs these steps:</p>
+<ol>
+<li>It runs <code>get()</code>.</li>
+<li>If that finds nothing, it runs <code>create()</code> inside its own <code>atomic</code> block (a savepoint).</li>
+<li>If <code>create()</code> raises <code>IntegrityError</code>, it assumes a concurrent request created the row, and runs <code>get()</code> again.</li>
+</ol>
+<p>That recovery only happens if something raises <code>IntegrityError</code>, and only a <strong>unique constraint</strong> in the database raises it. Without one, both creates succeed. The documentation says so directly: the fields passed to <code>get_or_create()</code> should be unique. In the filing office, the fix is a drawer that physically refuses a second form with the same email.</p>
+<p>So the fix is a constraint. Remove the duplicates first, because a unique index cannot be built over data that violates it, then add <code>unique=True</code>. The first step keeps the oldest row and deletes the rest:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">shop.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Subscriber</span>
 
@@ -19049,6 +19354,7 @@ shop.models.Subscriber.MultipleObjectsReturned: get() returned more than one Sub
 <div class="highlight" data-lang="text"><pre><span></span><code>duplicates removed: 1
 </code></pre></div>
 
+<p>Then make <code>email</code> unique in the model. Only the <code>Subscriber</code> model changes; the whole file is shown so it can be copied as it stands:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># shop/models.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span>
 
@@ -19095,6 +19401,7 @@ shop.models.Subscriber.MultipleObjectsReturned: get() returned more than one Sub
     <span class="n">on_duty</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">BooleanField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </code></pre></div>
 
+<p>And make and apply the migration:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>makemigrations<span class="w"> </span>shop<span class="w"> </span><span class="flag">--name</span><span class="w"> </span>subscriber_email_unique
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>migrate<span class="w"> </span>shop
 </code></pre></div>
@@ -19108,7 +19415,7 @@ Running migrations:
   Applying shop.0002_subscriber_email_unique... OK
 </code></pre></div>
 
-<p>Now run the race again, this time through <code>get_or_create()</code>, with both threads released at the same moment:</p>
+<p>Now run the race again, this time through <code>get_or_create()</code>, with both threads released at the same moment, for a new email:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
@@ -19139,12 +19446,31 @@ Running migrations:
 subscribers: 1
 </code></pre></div>
 
-<p>Exactly one thread created the row and the other received it. Depending on timing, the second thread either found the row on its first <code>get()</code>, or lost the <code>INSERT</code> race, caught the <code>IntegrityError</code> inside the savepoint and found the row on its second <code>get()</code>. Both paths give the same correct result, and that is the point of the design.</p>
-<p>The same reasoning applies to your own code. <strong>Any "only one of these may exist" rule must be a unique constraint</strong> (or a <code>UniqueConstraint</code> with a <code>condition</code>, for rules like "one active subscription per user"). Python checks are a convenience for producing a friendly error message; the constraint is the guarantee. When you write the pattern by hand, it looks like <code>get_or_create</code>'s own body, and it is often called a <strong>unique constraint retry</strong>: try the <code>INSERT</code> inside a nested <code>atomic</code>, catch <code>IntegrityError</code>, and fall back to reading the existing row. A unique constraint retry needs no lock and no stricter isolation level, because the database's unique index does the deciding.</p>
+<p>Exactly one thread created the row and the other received it. Depending on timing, the second thread did one of two things:</p>
+<ul>
+<li>it found the row on its first <code>get()</code>; or</li>
+<li>it lost the <code>INSERT</code> race, caught the <code>IntegrityError</code> inside the savepoint, and found the row on its second <code>get()</code>.</li>
+</ul>
+<p>Both paths give the same correct result, and that is the point of the design.</p>
+<p>The same reasoning applies to your own code. <strong>Any "only one of these may exist" rule must be a unique constraint</strong> (or a <code>UniqueConstraint</code> with a <code>condition</code>, for rules like "one active subscription per user"). Python checks are a convenience for producing a friendly error message; the constraint is the guarantee.</p>
+<p>When you write the pattern by hand, it looks like <code>get_or_create</code>'s own body, and it is often called a <strong>unique constraint retry</strong>:</p>
+<ol>
+<li>try the <code>INSERT</code> inside a nested <code>atomic</code>;</li>
+<li>catch <code>IntegrityError</code>;</li>
+<li>fall back to reading the existing row.</li>
+</ol>
+<p>A unique constraint retry needs no lock and no stricter isolation level, because the database's unique index does the deciding.</p>
 <p><code>update_or_create()</code> has the same requirement. It runs inside a transaction and locks the row it finds with <code>select_for_update()</code>, so two concurrent updates of an <strong>existing</strong> row queue up correctly, but the <strong>creation</strong> of a missing row is again protected only by a unique constraint.</p>
 <h2 id="section-6-715-rules-across-rows-write-skew-and-serializable">7.15 Rules Across Rows: Write Skew and SERIALIZABLE</h2>
-<p>Every fix so far protects a single row. Some rules span several rows, and no single-row lock can protect them. The shop's rule is that at least one staff member must stay on duty. Two staff members, both on duty, each ask to go home at the same moment. Each request counts how many are on duty, sees two, decides one may leave, and updates its own row.</p>
-<p>The two transactions update <strong>different</strong> rows, so no row lock ever makes one wait for the other. Each one's decision was correct on the data it read. Together they break the rule. This anomaly is called <strong>write skew</strong>.</p>
+<p>Every fix so far protects a single row. Some rules span several rows, and no single-row lock can protect them.</p>
+<p>The shop's rule is that at least one staff member must stay on duty. Two staff members, both on duty, each ask to go home at the same moment. Each request does this:</p>
+<ol>
+<li>Count how many are on duty, and see two.</li>
+<li>Decide that one may leave.</li>
+<li>Update its own row to "off duty".</li>
+</ol>
+<p>The two transactions update <strong>different</strong> rows, so no row lock ever makes one wait for the other. Each one's decision was correct on the data it read. Together they break the rule. This anomaly is called <strong>write skew</strong>. In the filing office, two clerks each read the duty roster, each see two names, and each cross out a different one.</p>
+<p>The example runs the race twice: once on the <code>default</code> alias (Read Committed), once on the <code>serial</code> alias (Serializable):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">OperationalError</span><span class="p">,</span> <span class="n">connection</span><span class="p">,</span> <span class="n">connections</span><span class="p">,</span> <span class="n">transaction</span>
@@ -19186,10 +19512,15 @@ subscribers: 1
 serial ['could not serialize access due to read/write dependencies among transactions', 'went home'] on duty: 1
 </code></pre></div>
 
-<p>At Read Committed (<code>default</code>), both went home and nobody is on duty. At Serializable (<code>serial</code>), PostgreSQL noticed that the two transactions read data the other one changed, so there is no order in which running them one at a time would give this result. It cancelled one of them with a <strong>serialization failure</strong>, and the rule held.</p>
+<p>Line by line:</p>
+<ul>
+<li><strong><code>default ['went home', 'went home'] on duty: 0</code></strong>: at Read Committed, both went home and nobody is on duty.</li>
+<li><strong><code>serial [...] on duty: 1</code></strong>: at Serializable, one transaction was cancelled, and one person stayed.</li>
+</ul>
+<p>At Read Committed (<code>default</code>), both went home and nobody is on duty. At Serializable (<code>serial</code>), PostgreSQL noticed that the two transactions read data the other one changed, so there is no order in which running them one at a time would give this result. It cancelled one of them with a <strong>serialization failure</strong>, and the rule held. In the filing office, Serializable is a supervisor who watches both clerks and tears up one folder when the two together could not have happened one after the other.</p>
 <h3 id="section-6-the-retry-loop">The retry loop</h3>
 <p>A serialization failure is not a bug in your code. It is the database telling you "this transaction collided with another one; run it again". Code that uses Serializable <strong>must</strong> retry, and the retry must re-run the whole transaction, reading everything again, because the earlier reads are exactly what was out of date. A deadlock (§7.12) is retried the same way.</p>
-<p>Django turns the driver's error into <code>django.db.OperationalError</code> and keeps the original as the exception's <code>__cause__</code>, so the retry can check precisely which error it got:</p>
+<p>Django turns the driver's error into <code>django.db.OperationalError</code> and keeps the original as the exception's <code>__cause__</code>, so the retry can check precisely which error it got. The example wraps the go-home transaction in a <code>with_retries</code> loop that retries only serialization failures and deadlocks, and makes only the first attempt wait at the barrier:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">psycopg</span><span class="w"> </span><span class="kn">import</span> <span class="n">errors</span>
@@ -19241,16 +19572,29 @@ serial ['could not serialize access due to read/write dependencies among transac
 on duty: 1
 </code></pre></div>
 
-<p>The transaction that collided ran again, read the new count of one, and correctly stayed on duty. Note the shape: the loop is <strong>outside</strong> <code>atomic</code>. A retry inside a transaction would be retrying inside the very transaction that PostgreSQL has already aborted. Note also what the retry does not do: it does not catch every <code>OperationalError</code>. A lost connection or a syntax error is not something running the code again will fix.</p>
+<p>Line by line:</p>
+<ul>
+<li><strong><code>must stay after 2 attempt(s)</code></strong>: one transaction collided, ran again, read a count of one, and stayed.</li>
+<li><strong><code>went home after 1 attempt(s)</code></strong>: the other went home on its first try.</li>
+<li><strong><code>on duty: 1</code></strong>: the rule held.</li>
+</ul>
+<p>The transaction that collided ran again, read the new count of one, and correctly stayed on duty. Note the shape: the loop is <strong>outside</strong> <code>atomic</code>. A retry inside a transaction would be retrying inside the very transaction that PostgreSQL has already aborted.</p>
+<p>Note also what the retry does not do: it does not catch every <code>OperationalError</code>. A lost connection or a syntax error is not something running the code again will fix.</p>
 <p>There are other ways to protect a multi-row rule, and each is worth naming in an interview:</p>
 <ul>
 <li><strong>Lock a parent row</strong> that every writer must lock first, such as the shop's row or the shift's row, with <code>select_for_update()</code>. This turns the multi-row rule into a single-row lock, at Read Committed.</li>
-<li><strong>Use a constraint</strong> when the rule can be expressed as one, such as a partial unique index or, for time ranges, PostgreSQL's exclusion constraints.</li>
+<li><strong>Use a constraint</strong> when the rule can be expressed as one, such as a partial unique index or, for time ranges, PostgreSQL's exclusion constraints (§8.10).</li>
 <li><strong>Use an advisory lock</strong> keyed by the thing the rule is about, next.</li>
 </ul>
 <h2 id="section-6-716-advisory-locks">7.16 Advisory Locks</h2>
-<p>Sometimes the thing you need to protect is not a row at all: "only one process may rebuild the search index at a time", or "only one request may run the nightly settlement for merchant 42". PostgreSQL's <strong>advisory locks</strong> are locks on an arbitrary number that you choose. The database attaches no meaning to them. They lock nothing by themselves, and they work only because every piece of code that cares agrees to take the same lock first.</p>
-<p>Django has no ORM API for them, so they are taken with a cursor. The transaction-scoped form, <code>pg_advisory_xact_lock(key)</code>, is released automatically when the transaction ends, which makes it hard to leak. <code>pg_try_advisory_xact_lock(key)</code> returns <code>false</code> immediately instead of waiting:</p>
+<p>Sometimes the thing you need to protect is not a row at all: "only one process may rebuild the search index at a time", or "only one request may run the nightly settlement for merchant 42".</p>
+<p>PostgreSQL's <strong>advisory locks</strong> are locks on an arbitrary number that you choose. The database attaches no meaning to them. They lock nothing by themselves, and they work only because every piece of code that cares agrees to take the same lock first. In the filing office, it is a board of numbered keys on hooks: key 42 opens nothing, but every clerk has agreed not to run settlement 42 without holding it.</p>
+<p>Django has no ORM API for them, so they are taken with a cursor (<code>connection.cursor()</code>, §6.18). Two functions matter:</p>
+<ul>
+<li>The transaction-scoped form, <code>pg_advisory_xact_lock(key)</code>, is released automatically when the transaction ends, which makes it hard to leak.</li>
+<li><code>pg_try_advisory_xact_lock(key)</code> returns <code>false</code> immediately instead of waiting.</li>
+</ul>
+<p>The example has job 1 hold the lock for settlement 42 while job 2 tries it, and tries once more after job 1 commits:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span><span class="p">,</span> <span class="n">transaction</span>
@@ -19289,13 +19633,18 @@ job 2 got the lock: False
 after job 1 committed: True
 </code></pre></div>
 
-<p>Two cautions. First, the session-scoped forms (<code>pg_advisory_lock</code> without <code>xact</code>) stay held until they are explicitly unlocked or the connection closes, and with persistent connections (§23) or a connection pooler in transaction mode, "the connection" may outlive your request or be shared with someone else's. Prefer the transaction-scoped form. Second, the key is just a 64-bit number, so agree on how keys are chosen, for instance a fixed number per job type, or a hash of the job name, so two features do not accidentally share one.</p>
+<p>Job 1 got key 42, job 2 was refused while job 1 held it, and the key was free again once job 1's transaction ended.</p>
+<p>Two cautions:</p>
+<ol>
+<li><strong>Prefer the transaction-scoped form.</strong> The session-scoped forms (<code>pg_advisory_lock</code> without <code>xact</code>) stay held until they are explicitly unlocked or the connection closes. With persistent connections (§23) or a connection pooler in transaction mode, "the connection" may outlive your request or be shared with someone else's.</li>
+<li><strong>Agree on how keys are chosen.</strong> The key is just a 64-bit number, so agree on how keys are chosen, for instance a fixed number per job type, or a hash of the job name, so two features do not accidentally share one.</li>
+</ol>
 <h2 id="section-6-717-transactions-you-do-not-see">7.17 Transactions You Do Not See</h2>
 <p>Several parts of Django open transactions on your behalf. Knowing where they are prevents surprises:</p>
 <ul>
-<li><strong><code>save()</code> on a model with parents</strong> (multi-table inheritance) and <strong><code>delete()</code> with cascades</strong> run their several statements in an internal <code>atomic</code> block, so a half-saved object or a half-deleted tree cannot happen.</li>
+<li><strong><code>save()</code> on a model with parents</strong> (multi-table inheritance, §3.14) and <strong><code>delete()</code> with cascades</strong> run their several statements in an internal <code>atomic</code> block, so a half-saved object or a half-deleted tree cannot happen.</li>
 <li><strong><code>update_or_create()</code></strong> runs in a transaction and uses <code>select_for_update()</code> (§7.14).</li>
-<li><strong>Migrations</strong> run each migration in a transaction on PostgreSQL, which supports transactional DDL. A migration can opt out with <code>atomic = False</code>, which §9 needs for <code>CREATE INDEX CONCURRENTLY</code>.</li>
+<li><strong>Migrations</strong> run each migration in a transaction on PostgreSQL, which supports transactional DDL (table changes inside a transaction). A migration can opt out with <code>atomic = False</code>, which §9 needs for <code>CREATE INDEX CONCURRENTLY</code>.</li>
 <li><strong>The test framework</strong>: <code>TestCase</code> wraps each test in a transaction and rolls it back afterwards, which is fast, but means <code>on_commit</code> callbacks never fire by themselves. §21 shows <code>captureOnCommitCallbacks</code> and <code>TransactionTestCase</code>, which exist for this.</li>
 <li><strong>Django's admin</strong> wraps its change and delete views in <code>atomic</code>.</li>
 </ul>
@@ -19324,6 +19673,7 @@ after job 1 committed: True
 <p>It wraps each view in a transaction, which is simple and correct for small applications (§7.6). But the transaction lasts the whole view, including slow external calls and rendering, so locks are held longer; it does not cover middleware or streamed responses; and every read-only request pays for a transaction. Teams with high traffic often prefer explicit <code>atomic</code> blocks on the operations that need them.</p>
 <h2 id="section-6-what-this-section-established">What This Section Established</h2>
 <ul>
+<li><strong>The picture</strong>: there are many clerks working in the same drawers at once. A transaction is a folder filed all at once or shredded, a lock is a "reserved" flag, and the puzzle at the top, two sales and one decrement, is two clerks copying the same number onto their notepads (§7.9).</li>
 <li>Django runs in <strong>autocommit</strong> mode: each query commits at once, so related writes need <strong><code>transaction.atomic</code></strong>, as a decorator or a context manager.</li>
 <li>Nested <code>atomic</code> blocks are <strong>savepoints</strong>. To catch a database error and continue, wrap the failing statement in its own <code>atomic</code>; catching it directly leads to <strong><code>TransactionManagementError</code></strong> and the loss of the whole block.</li>
 <li><strong><code>set_rollback(True)</code></strong> rolls a block back without an exception; <strong><code>durable=True</code></strong> guarantees a block is the outermost one and really commits.</li>
