@@ -711,38 +711,66 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
   <main class="main" id="main">
 <section class="course-section" id="section-intro" data-section-id="intro"><h1>Django Mastery</h1>
 <blockquote>
-<p>Django is a Python framework for building websites and web services: it turns an HTTP request into a call to your Python code and turns what that code returns into a response, and around that it gives you a database layer, forms, templates, users and permissions, an admin, caching and much more. This course teaches all of it, and then the part that tutorials leave out: what each piece does to the database, what happens when many people use the site at the same moment, and what changes when the site leaves your laptop. It ends by building a complete ticket-selling service and by gathering every interview question of the course into one bank.</p>
+<p>Django is a Python <strong>framework</strong> for building websites and web services: a ready-made skeleton for a web application, where you write the parts that are particular to your site and Django supplies the rest. (A <em>web service</em> is a site that answers other programs with data instead of answering people with pages.) When a browser asks for a page, Django calls a Python function you wrote and sends back whatever that function returns. Around that, it gives you a way to store data in a database, forms, page templates, user accounts and permissions, a ready-made admin site, and much more. This course teaches all of it. Then it teaches the part that tutorials leave out: what each piece does to the database, what happens when many people use the site at the same moment, and what changes when the site leaves your laptop. It ends by building a complete ticket-selling site, and by gathering every interview question of the course into one bank.</p>
 </blockquote>
+<hr />
+<p>Start with a puzzle. A theatre has 40 seats left in the stalls. Twenty people click "buy one seat" at the same instant. The code that sells a seat does the obvious thing, in four steps:</p>
+<ol>
+<li>Read how many seats are left.</li>
+<li>Check that there is at least one.</li>
+<li>Subtract one.</li>
+<li>Save the new number, and record the booking.</li>
+</ol>
+<p>Afterwards, how many seats are left, and how many bookings were made? Guess before reading on.</p>
+<p>§24.5 runs exactly this, with twenty real customers arriving at once, and prints <code>before 40</code> and then <code>after 39 | new bookings 20</code>. Twenty bookings were made, and the counter went down by one.</p>
+<p>Here is why. All twenty customers read the counter before any of them saved. So all twenty saw 40, all twenty subtracted one, and all twenty saved 39. Each save wrote over the one before it with the same out-of-date number. No error appeared anywhere, and the code looks correct when you read it. It <em>is</em> correct for one customer at a time. It is wrong for two.</p>
+<p>That is the kind of problem this course is about. Making a page appear is the easy part, and many tutorials stop there. The hard part is a site that stays correct when many people use it at once, stays fast when the data grows, and keeps running when it is moved from your laptop to the machines the public uses.</p>
+<p>Programmers say a site is <strong>in production</strong> when real people depend on it: a shop's checkout, a clinic's booking page, a theatre's box office. A site in production runs on other machines, serves many people at the same moment, and cannot simply be stopped to fix a mistake. Most of what goes wrong with Django goes wrong there, so most of this course is about it.</p>
+<p>The course keeps coming back to one picture, which §1 introduces: <strong>a large company's post room</strong>. A letter (a <em>request</em>, the message a browser sends asking for a page) arrives at the building. A clerk opens it, desks along a corridor each check or stamp it, a directory says which department handles it, and that department writes the reply (the <em>response</em>, the page or data sent back). Every part of Django has a place in that building, and each section shows you which.</p>
 <hr />
 <h2 id="intro-how-to-use-this-course">How to use this course</h2>
 <ul>
-<li><strong>It assumes Python, SQL and HTTP.</strong> You should be comfortable with Python itself (classes, decorators, context managers, modules), with basic SQL (<code>SELECT</code>, joins, <code>GROUP BY</code>, indexes), and with what an HTTP request and response are. The Python, SQL and Networking courses in this collection cover all three. Django is not explained here as a beginner's first framework: §1 starts from how a request really reaches your code.</li>
-<li><strong>Every output is what the code printed.</strong> Every printed result, query count, error message and test report in the course came from running the example. Some claims that seem obviously true, such as "async makes a view faster" or "a cached page is the same for everyone", turn out to be false when measured, and the course shows the measurement instead.</li>
-<li><strong>It runs against a real database and real servers.</strong> Every example uses PostgreSQL, not SQLite, because locks, isolation, constraints and query plans are where Django projects succeed or fail, and SQLite behaves differently in all four. The deployment section starts real Gunicorn, Uvicorn, nginx, PgBouncer and Redis processes and sends real HTTP requests through them.</li>
-<li><strong>The source is Django's own documentation.</strong> The topics come from the full contents of the Django 6.1 documentation, plus the subjects senior interviews ask about that the documentation does not name, such as races, connection budgets and zero-downtime migrations.</li>
-<li><strong>Each section builds its own small project</strong>, usually a shop, so any section can be read on its own once §1 and §2 have shown how a project is put together.</li>
-<li><strong>Each section ends with interview questions and exercises.</strong> The questions are the senior-level questions that subject is really asked about, each with a worked answer that points back to the example proving it. The exercises have full, measured solutions.</li>
+<li><strong>It assumes Python, SQL and HTTP.</strong> You should be comfortable with Python itself (classes, decorators, context managers, modules). You should know basic SQL, the language for asking a database for data (<code>SELECT</code>, joins, <code>GROUP BY</code>, indexes). And you should know what an HTTP request and response are: HTTP is the set of rules browsers and web servers use to talk. The Python, SQL and Networking courses in this collection cover all three. Django is not taught here as a first web framework: §1 starts from how a request really reaches your code.</li>
+<li><strong>Every output is what the code printed.</strong> Every printed result, query count, error message and test report in the course came from running the example. Some claims seem obviously true and turn out to be false when measured. Two examples: "async makes a view faster" (<em>async</em> is a way of letting one program wait on many slow things at once, §18), and "a cached page is the same for everyone" (a <em>cached</em> page is a copy kept so it does not have to be built again, §17). When that happens, the course shows the measurement instead of the claim.</li>
+<li><strong>It runs against a real database and real servers.</strong> Every example uses <strong>PostgreSQL</strong>, a full database server, rather than <strong>SQLite</strong>, a small database kept in a single file. The reason is that four things decide whether a Django site works under real use, and SQLite behaves differently in all four:<ul>
+<li><em>locks</em>, which make one change wait while another finishes;</li>
+<li><em>isolation</em>, which decides what one change can see of another that is still in progress;</li>
+<li><em>constraints</em>, rules the database itself refuses to break;</li>
+<li><em>query plans</em>, the database's own choice of how to find the rows you asked for.</li>
 </ul>
-<p>Versions every example in this course was produced against: <strong>Django 6.1.2 · Python 3.14 · PostgreSQL 18</strong>, with Redis 8.10, Gunicorn 26.2.0, Uvicorn 0.54.0, nginx 1.31.6, PgBouncer 1.26.0, pytest 9.1.1 and pytest-django 4.14.0, on macOS. Where a result depends on the operating system, the text says so.</p>
+</li>
+<li><strong>The deployment section starts real programs and sends real requests through them.</strong> These are the programs a Django site runs on in production, and the course introduces each one properly where it is first needed:<ul>
+<li><strong>Gunicorn</strong> and <strong>Uvicorn</strong> run your Django code and take requests from the network;</li>
+<li><strong>nginx</strong> is the front door, which receives every request first and passes it on;</li>
+<li><strong>PgBouncer</strong> lets many copies of Django share a small number of database connections;</li>
+<li><strong>Redis</strong> is a very fast store kept in memory, used here for caching.</li>
+</ul>
+</li>
+<li><strong>The source is Django's own documentation.</strong> The topics come from the full contents of the Django 6.1 documentation. To those it adds the subjects senior interviews ask about that the documentation does not name. Three examples: <em>races</em> (two requests changing the same data at once, like the puzzle above), <em>connection budgets</em> (how many database connections a site can afford), and <em>zero-downtime migrations</em> (changing the database's tables while the site keeps serving people).</li>
+<li><strong>Each section builds its own small project</strong>, usually a shop. So any section can be read on its own, once §1 and §2 have shown how a project is put together.</li>
+<li><strong>Each section ends with interview questions and exercises.</strong> The questions are the senior-level questions really asked about that subject. Each has a worked answer that points back to the example proving it. The exercises have full, measured solutions.</li>
+</ul>
+<p>Versions every example in this course was produced against: <strong>Django 6.1.2 · Python 3.14 · PostgreSQL 18</strong>, with Redis 8.10, Gunicorn 26.2.0, Uvicorn 0.54.0, nginx 1.31.6, PgBouncer 1.26.0, pytest 9.1.1 and pytest-django 4.14.0 (the tools that run the tests), on macOS. Where a result depends on the operating system, the text says so.</p>
 <h3 id="intro-how-the-course-is-structured">How the course is structured</h3>
+<p>The twenty-four sections fall into five parts.</p>
 <ol>
-<li><strong>Foundations</strong> (§1 to §3): how a request travels through Django, how a project is put together, and how models describe tables.</li>
-<li><strong>The ORM in depth</strong> (§4 to §9): QuerySets, query performance, aggregation, transactions and concurrency, integrity and validation, and migrations. This is the longest part, because it is where production incidents come from and where interviews go deepest.</li>
-<li><strong>The web layer</strong> (§10 to §15): views and URLs, class-based views, templates, forms, authentication and the admin.</li>
-<li><strong>Running a real site</strong> (§16 to §23): security, caching, async Django, background work, files, testing, logging and its companions, and deployment.</li>
-<li><strong>The capstone</strong> (§24): a box office that sells tickets, built from every earlier section and tested under concurrency, followed by how to prepare for a senior interview, design questions that span the course, and the bank of all 386 interview questions.</li>
+<li><strong>Foundations</strong> (§1 to §3). How a request travels through Django, how a project is put together, and how <em>models</em> describe your database tables as Python classes.</li>
+<li><strong>The ORM in depth</strong> (§4 to §9). The <strong>ORM</strong> (object-relational mapper) is the part of Django that writes SQL for you, so you can work with Python objects instead of rows. This part covers <em>QuerySets</em> (Django's description of a query, which runs only when you use its results), query performance, aggregation (totals, counts and averages), transactions and concurrency (groups of changes that succeed or fail together, and what happens when two run at once), integrity and validation (keeping bad data out), and migrations (changing the tables as the code changes). It is the longest part, because it is where production incidents come from and where interviews go deepest.</li>
+<li><strong>The web layer</strong> (§10 to §15). Views (the functions that answer requests) and URLs, class-based views, templates, forms, authentication (who is logged in) and the admin.</li>
+<li><strong>Running a real site</strong> (§16 to §23). Security, caching, async Django, background work (jobs that run outside a request, such as sending an email), files, testing, logging and its companions, and deployment (putting the site on the machines the public uses).</li>
+<li><strong>The capstone</strong> (§24). A box office that sells tickets, built from every earlier section and tested with many customers at once. It is followed by how to prepare for a senior interview, design questions that span the course, and the bank of all 386 interview questions.</li>
 </ol>
 <hr />
 <h2 id="intro-what-you-are-actually-learning">What you are actually learning</h2>
-<p>Not a list of Django features, but five ideas that explain most of what goes wrong in Django projects:</p>
+<p>Not a list of Django features. Five ideas explain most of what goes wrong in Django projects, and each one is the lesson of several sections.</p>
 <ol>
-<li><strong>Every line has a cost in queries.</strong> The ORM writes SQL for you, which also means it can write a hundred queries where one would do, without any sign in the code. You will learn to count them, read them and pin them with tests (§5).</li>
-<li><strong>Two requests can run at the same time.</strong> Code that reads a value, checks it and saves it is correct for one user and wrong for two. You will see that happen, and learn the database's tools for preventing it (§7, §8, §24.5).</li>
-<li><strong>The database is the last line of defence.</strong> Validation in forms and Python is for friendly messages; constraints in the database are what make a rule true for every code path, including the ones not written yet (§8).</li>
-<li><strong>Production is a different machine.</strong> Settings, servers, proxies, connections and migrations interact in ways a laptop never shows, and most incidents happen in those interactions rather than in the Python code (§23).</li>
-<li><strong>Measure, do not assume.</strong> Every claim in this course was checked by running it, and the most useful habit to take away is to do the same on your own projects (§24.15).</li>
+<li><strong>Every line has a cost in queries.</strong> A <em>query</em> is one question sent to the database. The ORM writes them for you, which also means it can send a hundred where one would do, with no sign of it in the code. You will learn to count them, read them and pin the number down with tests (§5).</li>
+<li><strong>Two requests can run at the same time.</strong> Code that reads a value, checks it and saves it is correct for one user and wrong for two. The puzzle above is that bug. You will see it happen, and learn the database's tools for preventing it (§7, §8, §24.5).</li>
+<li><strong>The database is the last line of defence.</strong> Checks in forms and in Python are for friendly error messages. <em>Constraints</em> in the database are what make a rule true for every piece of code that touches the data, including code nobody has written yet (§8).</li>
+<li><strong>Production is a different machine.</strong> Settings, servers, the front door, database connections and table changes all interact in ways a laptop never shows. Most incidents happen in those interactions rather than in the Python code (§23).</li>
+<li><strong>Measure, do not assume.</strong> Every claim in this course was checked by running it. The most useful habit to take away is to do the same on your own projects (§24.15).</li>
 </ol>
-<p>By the end you should be able to build a Django service that stays correct under load, explain why it does, deploy it, and answer the questions a senior interview will ask about it.</p>
+<p>By the end you should be able to build a Django site that stays correct when many people use it at once, explain why it does, deploy it, and answer the questions a senior interview will ask about it.</p>
 <div class="section-footer"><button class="btn-next" data-next="section-0">Start: The Request Lifecycle →</button></div>
 </section>
 <section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">The Request Lifecycle</h1><p>Start with the smallest view in this section. It looks up a tea by its short name and returns a sentence about it:</p>
@@ -86983,28 +87011,111 @@ KeyReused
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-22">← Back</button><button class="btn-next" data-next="section-24">Next: Course Conclusion →</button></div>
 </section>
-<section class="course-section" id="section-24" data-section-id="section-24"><p>You started this course able to build a Django site that works on your machine. You can now say what it does to the database, what happens when two people use it at the same moment, what breaks when it is deployed, and how you would know. That is the difference between a developer who uses Django and one a team trusts with it.</p>
+<section class="course-section" id="section-24" data-section-id="section-24"><p>You started this course able to build a Django site that works on your machine. You can now say four more things about it:</p>
+<ul>
+<li>what it does to the database;</li>
+<li>what happens when two people use it at the same moment;</li>
+<li>what breaks when it is deployed;</li>
+<li>and how you would know.</li>
+</ul>
+<p>That is the difference between a developer who uses Django and one a team trusts with it.</p>
+<p>Remember the puzzle the course opened with: twenty customers, 40 seats, and a counter that went down by one. You can now explain it (§7.9), choose a fix for it (§7.10 to §7.16), and prove the fix with forty threads and a barrier (§24.5).</p>
 <p>Twenty-four sections is a lot to hold at once. The useful summary is not a list of features. It is five things you can now do.</p>
 <h2 id="section-24-what-you-can-now-do">What you can now do</h2>
-<p><strong>1. Follow a request all the way through.</strong> From the server's call into Django's handler, through each middleware in order, to the URL resolver, the view, the template and back out (§1). From there to the queries the view sends, which you can now count and read (§5.2, §5.11), and to the transaction they run in (§7.2). Most bugs that look mysterious stop being mysterious once you can say which of those layers produced them. A <code>403</code> from the CSRF check, a <code>400</code> from host validation, a <code>500</code> written by Gunicorn rather than by Django (§23.6): each one has a single place where it is decided.</p>
-<p><strong>2. Make data correct under concurrency.</strong> You have watched read-modify-write lose updates (§7.9, §24.5), and you know the fixes and their order of cost: a conditional <code>F()</code> update, a row lock, a version column, a constraint, and <code>SERIALIZABLE</code> with retries for rules that span rows (§7.10 to §7.16). You know that a check in Python followed by a write is only safe with a constraint behind it (§7.14, §8.20), and that a side effect belongs after the commit, or in an outbox when it must not be lost (§7.7).</p>
-<p><strong>3. Keep a site fast as it grows</strong>, by measuring first. An N+1 found by counting and pinned by a test (§5.14). A plan read with <code>explain()</code> before an index is added (§5.11). Aggregates that do not multiply across joins (§6.5, §24.11). Pages that do not read a hundred thousand rows to show twenty-five (§22.11). A cache placed where the measurements say, invalidated after the commit, and never trusted for a decision (§17.17, §24.9). Async used where requests wait on other services, and not as a speed setting (§18.4, §18.12).</p>
-<p><strong>4. Change a live system safely.</strong> Migrations that do not lock a busy table, that work with the old code and the new code at once, and that backfill in batches (§9.13 to §9.17). Settings that come from the environment and fail loudly when something is missing (§23.3, §24.13). Restarts that drop no requests (§23.19), connections that survive a database restart (§23.13), and upgrades driven by deprecation warnings rather than surprises (§23.22).</p>
-<p><strong>5. Defend the application, and prove it with tests.</strong> CSRF, XSS, SQL injection and clickjacking each shown working, then stopped, then brought back by an ordinary-looking change (§16). Ownership filters on every object a user can name in a URL (§14.19, §24.8). Signed webhooks compared in constant time (§24.6). And a test suite aimed at the project's own decisions, at the cheapest level that can see them, with the query count, the commits and the clock under control (§21, §24.12).</p>
+<p><strong>1. Follow a request all the way through.</strong> Back in the post room of §1:</p>
+<ul>
+<li>The server calls Django's handler, the request passes each middleware in order, the URL resolver picks the view, the view uses a template, and the response travels back out the same way (§1).</li>
+<li>From the view you can follow the queries it sends, which you can now count and read (§5.2, §5.11), and the transaction they run in (§7.2).</li>
+</ul>
+<p>Most bugs that look mysterious stop being mysterious once you can say which of those layers produced them. A <code>403</code> from the CSRF check, a <code>400</code> from host validation, a <code>500</code> written by Gunicorn rather than by Django (§23.6): each one has a single place where it is decided.</p>
+<p><strong>2. Make data correct under concurrency.</strong> You have watched read-modify-write lose updates (§7.9, §24.5). You know the fixes, from cheapest to most expensive:</p>
+<ul>
+<li>a conditional <code>F()</code> update;</li>
+<li>a row lock;</li>
+<li>a version column;</li>
+<li>a constraint;</li>
+<li>and <code>SERIALIZABLE</code> with retries, for rules that span rows (§7.10 to §7.16).</li>
+</ul>
+<p>You know that a check in Python followed by a write is only safe with a constraint behind it (§7.14, §8.20). And you know that a side effect, such as an email, belongs after the commit, or in an outbox when it must not be lost (§7.7).</p>
+<p><strong>3. Keep a site fast as it grows</strong>, by measuring first:</p>
+<ul>
+<li>An N+1 found by counting and pinned by a test (§5.14).</li>
+<li>A plan read with <code>explain()</code> before an index is added (§5.11).</li>
+<li>Aggregates that do not multiply across joins (§6.5, §24.11).</li>
+<li>Pages that do not read a hundred thousand rows to show twenty-five (§22.11).</li>
+<li>A cache placed where the measurements say, invalidated after the commit, and never trusted for a decision (§17.17, §24.9).</li>
+<li>Async used where requests wait on other services, and not as a speed setting (§18.4, §18.12).</li>
+</ul>
+<p><strong>4. Change a live system safely.</strong></p>
+<ul>
+<li>Migrations that do not lock a busy table, that work with the old code and the new code at once, and that backfill in batches (§9.13 to §9.17).</li>
+<li>Settings that come from the environment and fail loudly when something is missing (§23.3, §24.13).</li>
+<li>Restarts that drop no requests (§23.19), and connections that survive a database restart (§23.13).</li>
+<li>Upgrades driven by deprecation warnings rather than by surprises (§23.22).</li>
+</ul>
+<p><strong>5. Defend the application, and prove it with tests.</strong></p>
+<ul>
+<li>CSRF, XSS, SQL injection and clickjacking, each shown working, then stopped, then brought back by an ordinary-looking change (§16).</li>
+<li>Ownership filters on every object a user can name in a URL (§14.19, §24.8).</li>
+<li>Signed webhooks compared in constant time (§24.6).</li>
+<li>A test suite aimed at the project's own decisions, at the cheapest level that can see them, with the query count, the commits and the clock under control (§21, §24.12).</li>
+</ul>
 <h2 id="section-24-the-twenty-four-sections-one-line-each">The twenty-four sections, one line each</h2>
 <p>Keep this as an index of where each argument lives.</p>
-<p><strong>§1</strong> the request lifecycle: WSGI and ASGI, the handler, middleware and URL resolution. <strong>§2</strong> projects, apps, the registry, settings, system checks and management commands. <strong>§3</strong> models, fields, relations, managers and the custom user model. <strong>§4</strong> the QuerySet: laziness, caching, lookups, <code>Q</code> and <code>F</code>. <strong>§5</strong> query performance: N+1, <code>select_related</code>, <code>prefetch_related</code>, fetch modes, indexes and bulk writes. <strong>§6</strong> aggregation, conditional expressions, subqueries, window functions and raw SQL.</p>
-<p><strong>§7</strong> transactions, savepoints, <code>on_commit</code>, isolation levels and every fix for a race. <strong>§8</strong> constraints and validation, and the race between them. <strong>§9</strong> migrations, and how to run them without taking the site down. <strong>§10</strong> views, URLs and responses. <strong>§11</strong> class-based views, mixins and the method resolution order. <strong>§12</strong> templates, escaping and custom tags. <strong>§13</strong> forms, validation, model forms and formsets.</p>
-<p><strong>§14</strong> authentication, sessions, passwords and permissions. <strong>§15</strong> the admin, its queries and its security. <strong>§16</strong> security: each attack shown working, then defended. <strong>§17</strong> caching at every level, and what each level gets wrong. <strong>§18</strong> async Django: what it is for and what it costs. <strong>§19</strong> background work: the Tasks framework, Celery, signals and email.</p>
-<p><strong>§20</strong> files, static files and media. <strong>§21</strong> testing. <strong>§22</strong> logging, pagination, serialization, time zones and translation. <strong>§23</strong> deployment and operations: Gunicorn, nginx, PgBouncer, replicas and zero-downtime releases. <strong>§24</strong> a box office built from all of the above, and the 386-question interview bank.</p>
+<p><strong>Foundations</strong></p>
+<ul>
+<li><strong>§1</strong> the request lifecycle: WSGI and ASGI, the handler, middleware and URL resolution.</li>
+<li><strong>§2</strong> projects, apps, the registry, settings, system checks and management commands.</li>
+<li><strong>§3</strong> models, fields, relations, managers and the custom user model.</li>
+</ul>
+<p><strong>The ORM in depth</strong></p>
+<ul>
+<li><strong>§4</strong> the QuerySet: laziness, caching, lookups, <code>Q</code> and <code>F</code>.</li>
+<li><strong>§5</strong> query performance: N+1, <code>select_related</code>, <code>prefetch_related</code>, fetch modes, indexes and bulk writes.</li>
+<li><strong>§6</strong> aggregation, conditional expressions, subqueries, window functions and raw SQL.</li>
+<li><strong>§7</strong> transactions, savepoints, <code>on_commit</code>, isolation levels and every fix for a race.</li>
+<li><strong>§8</strong> constraints and validation, and the race between them.</li>
+<li><strong>§9</strong> migrations, and how to run them without taking the site down.</li>
+</ul>
+<p><strong>The web layer</strong></p>
+<ul>
+<li><strong>§10</strong> views, URLs and responses.</li>
+<li><strong>§11</strong> class-based views, mixins and the method resolution order.</li>
+<li><strong>§12</strong> templates, escaping and custom tags.</li>
+<li><strong>§13</strong> forms, validation, model forms and formsets.</li>
+<li><strong>§14</strong> authentication, sessions, passwords and permissions.</li>
+<li><strong>§15</strong> the admin, its queries and its security.</li>
+</ul>
+<p><strong>Running a real site</strong></p>
+<ul>
+<li><strong>§16</strong> security: each attack shown working, then defended.</li>
+<li><strong>§17</strong> caching at every level, and what each level gets wrong.</li>
+<li><strong>§18</strong> async Django: what it is for and what it costs.</li>
+<li><strong>§19</strong> background work: the Tasks framework, Celery, signals and email.</li>
+<li><strong>§20</strong> files, static files and media.</li>
+<li><strong>§21</strong> testing.</li>
+<li><strong>§22</strong> logging, pagination, serialization, time zones and translation.</li>
+<li><strong>§23</strong> deployment and operations: Gunicorn, nginx, PgBouncer, replicas and zero-downtime releases.</li>
+</ul>
+<p><strong>The capstone</strong></p>
+<ul>
+<li><strong>§24</strong> a box office built from all of the above, and the 386-question interview bank.</li>
+</ul>
 <h2 id="section-24-what-this-course-is-not">What this course is not</h2>
-<p><strong>Django REST Framework</strong> is the next course. This one built JSON endpoints by hand where it needed them (§10, §24.6, §24.10), which is the right way to understand what DRF automates, but serializers, viewsets, routers and API authentication are DRF's subject.</p>
+<p><strong>Django REST Framework</strong> is the next course. This one built JSON endpoints by hand where it needed them (§10, §24.6, §24.10). That is the right way to understand what DRF automates. But serializers, viewsets, routers and API authentication are DRF's subject.</p>
 <p><strong>The frontend</strong> belongs to the HTML, CSS, JavaScript and React courses. The templates here are deliberately plain, because the subject was what Django does with them, not how they look.</p>
-<p><strong>PostgreSQL itself</strong> belongs to the SQL course. This course used PostgreSQL's behaviour wherever Django depends on it, locks, isolation, constraints and plans, and stopped where the database's own administration begins.</p>
+<p><strong>PostgreSQL itself</strong> belongs to the SQL course. This course used PostgreSQL's behaviour wherever Django depends on it (locks, isolation, constraints and plans), and stopped where the database's own administration begins.</p>
 <p><strong>Infrastructure</strong> beyond one machine, such as containers, orchestration and infrastructure as code, is outside this course. §23 built every piece Django needs on one machine, so that what runs where is clear before it is spread across many.</p>
 <h2 id="section-24-what-to-do-next">What to do next</h2>
 <p>The same thing this course did, on your own project.</p>
-<p><strong>Pick a claim you believe about it and measure it.</strong> Count the queries of its busiest page. Send the same form twice at the same moment with two threads and a barrier. Restart the database while it serves requests. Run <code>check --deploy</code> against the real production settings. Each of these takes minutes, and it is worth saying plainly how often the answer was not the expected one while this course was being written:</p>
+<p><strong>Pick a claim you believe about it and measure it.</strong> For example:</p>
+<ul>
+<li>Count the queries of its busiest page.</li>
+<li>Send the same form twice at the same moment, with two threads and a barrier.</li>
+<li>Restart the database while it serves requests.</li>
+<li>Run <code>check --deploy</code> against the real production settings.</li>
+</ul>
+<p>Each of these takes minutes. And it is worth saying plainly how often the answer was not the expected one while this course was being written:</p>
 <ul>
 <li><code>get_page(0)</code> returned the <strong>last</strong> page, not the first (§22.9).</li>
 <li>A view under <code>cache_page</code> greeted a different user and an anonymous visitor by the first user's name (§17.13).</li>
