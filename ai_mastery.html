@@ -5936,13 +5936,24 @@ saving                : $4,118.25 (71%)
 <p><strong>The money is larger than it feels, and that is the first lesson.</strong> 3,230 tokens looks trivial. Multiplied by 360,000 model turns a month, it is 1.16 <em>billion</em> input tokens and $5,814, for text that never changes. Nobody arrives at that figure by intuition, which is the argument for spending two minutes on the arithmetic before spending a sprint on anything.</p>
 <p><strong>Caching removes 71% of it</strong>, taking $5,814 to $1,696. That is the highest-value change available, and it is roughly twenty minutes of work, because tools render first in the request, before <code>system</code> and before <code>messages</code>, and are therefore already the natural stable prefix (§9.3). Note that the saving is 71% and not 90%, because one turn in six is a cache <em>write</em> at $6.25 per million, which is more expensive than an ordinary input token. Conversations with more turns each would do better.</p>
 <p><strong>The context window is not the problem here.</strong> 3,230 tokens is 1.6% of a 200k window and negligible against 1M, so context pressure is <em>not</em> the argument for restructuring. This is exactly the sort of conclusion this arithmetic exists to reach before someone builds tool search that nothing needed.</p>
-<p><strong>What I would actually do, in order.</strong> Add caching. Then look at the 34 tools for consolidation, not to save tokens but because 34 similar-sounding names is where selection accuracy degrades, and a wrong tool call costs a full round trip plus whatever the wrong tool did. Leave tool search alone, because it earns its complexity in the hundreds and not the thirties.</p>
+<p><strong>What I would actually do, in order.</strong> Add caching. Then look at the 34 tools for consolidation, not to save tokens but because 34 similar-sounding names is where selection accuracy degrades, and a wrong tool call costs a full round trip plus whatever the wrong tool did. Consider tool search only after that. Anthropic suggests it from about ten tools or 10k tokens of definitions, and consolidation may well bring 34 tools under the first; at 3,230 tokens the definitions are already far under the second.</p>
 <p><strong>The number this calculation does not contain</strong>, and which dominates all of it, is tool <em>results</em>. Six turns of a search tool returning even 800 tokens each is 4,800 tokens per conversation, against 3,200 for the definitions. Unlike the definitions, results are different every time and therefore uncacheable. That is what §9.6's context editing is for, and it is why sizing a tool surface by its definitions alone always looks reassuring.</p>
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-4">← Back</button><button class="btn-next" data-next="section-6">Next: Server Tools, Skills and MCP →</button></div>
 </section>
-<section class="course-section" id="section-6" data-section-id="section-6"><div class="section-header-meta">  <span class="section-tag">SECTION 7</span>  <button class="btn-complete" data-complete="section-6"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Server Tools, Skills and MCP</h1><p>Section 6 built the client-side loop: the model asks, you execute, and you report back. This section is about the capabilities where <strong>you do not write that loop</strong>. Either the tool runs on Anthropic's infrastructure, or its schema comes from a server you did not build, or the "tool" is a folder of instructions that the model reads when it decides it needs them.</p>
-<p>There are four mechanisms, and they are easy to mix up because they all end up as entries in <code>tools</code>. Two questions keep them straight: <strong>who executes</strong> and <strong>who supplies the definition</strong>.</p>
+<section class="course-section" id="section-6" data-section-id="section-6"><div class="section-header-meta">  <span class="section-tag">SECTION 7</span>  <button class="btn-complete" data-complete="section-6"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Server Tools, Skills and MCP</h1><p>Start with a puzzle. Your model needs to look up 400 orders and add up their totals. Done the §6 way, with the model asking for each lookup and reading each answer, the job bills about 2,544,000 input tokens. Done another way, it bills 12,180. The same 400 lookups still happen, through the same function of yours, and the answer is the same. So where did two and a half million tokens go? Guess before you read on. §7.6 runs the numbers for both ways and answers it.</p>
+<p>Section 6 built the client-side loop. <em>Client-side</em> means it runs in your program, the client of the API. The model asks, you execute, and you report back. This section is about the capabilities where <strong>you do not write that loop</strong>. That happens in three ways:</p>
+<ul>
+<li>the tool runs on Anthropic's infrastructure, meaning Anthropic's own servers, so they do the running;</li>
+<li>the tool's schema, its description and boxes from §6.2, comes from a server you did not build;</li>
+<li>the "tool" is not a tool at all, but a folder of instructions that the model reads when it decides it needs them.</li>
+</ul>
+<p>There are four mechanisms in all. They are easy to mix up, because all four end up as entries in <code>tools</code>. Two questions keep them straight: <strong>who executes</strong> and <strong>who supplies the definition</strong>. The grid answers both for each one. It uses three new words, each taught later in this section:</p>
+<ul>
+<li><em>MCP</em> is an open standard for offering tools to a model (§7.7);</li>
+<li><em>code execution</em> is a server tool that lets the model run code it wrote;</li>
+<li>a <em>sandbox</em> is the sealed-off computer that code runs in, where it cannot touch anything else.</li>
+</ul>
 <div style="display:grid;grid-template-columns:180px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">Server tools</div><div><strong>Anthropic executes; Anthropic defines.</strong> <code>web_search</code>, <code>web_fetch</code>, <code>code_execution</code>, <code>tool_search</code>. You enable them and read the answer. No <code>tool_result</code>, no loop.</div>
 <div style="font-weight:600;color:#35b37e">MCP connector</div><div><strong>A third party executes; a third party defines.</strong> A remote MCP server's tools become callable from the Messages API with no MCP client of your own. Anthropic's servers do the calling.</div>
@@ -5950,8 +5961,112 @@ saving                : $4,118.25 (71%)
 <div style="font-weight:600;color:#7c8cff">Programmatic tool calling</div><div><strong>You execute; the model orchestrates in code.</strong> Your client tools become callable from <em>inside</em> the code execution sandbox, so a loop over 400 rows costs one turn instead of 400.</div>
 </div>
 
+<p>Here is the picture for the whole section. Since §1 the model has been a ghostwriter you can only reach by telegram. In §6 the writer handed request slips out of the window, and your clerk ran the errands. §6.1 mentioned that the telegram office runs some errands itself. This section is about <strong>the office's own errand desk</strong>:</p>
+<ul>
+<li>errands the office runs before the letter ever reaches you;</li>
+<li>an outside agency the office telephones on your behalf;</li>
+<li>binders of know-how on the writer's shelf.</li>
+</ul>
+<p>Every part of this section has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>In the telegram office</th>
+<th>In this section</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>An errand the office's own desk runs, not your clerk</td>
+<td>a server tool</td>
+<td>§7.1</td>
+</tr>
+<tr>
+<td>The desk's own number series, stamped on its slips</td>
+<td>the <code>srvtoolu_</code> id prefix</td>
+<td>§7.1</td>
+</tr>
+<tr>
+<td>The desk's report, clipped to the letter it belongs to</td>
+<td>the result block in the same message</td>
+<td>§7.1</td>
+</tr>
+<tr>
+<td>A separate line on the invoice for errands</td>
+<td><code>usage.server_tool_use</code></td>
+<td>§7.1</td>
+</tr>
+<tr>
+<td>The desk's shift ending mid-errand, and the half-written letter sent to you to hand back in</td>
+<td><code>pause_turn</code></td>
+<td>§7.2</td>
+</tr>
+<tr>
+<td>How many library trips you allow per letter</td>
+<td><code>max_uses</code></td>
+<td>§7.3</td>
+</tr>
+<tr>
+<td>The list of libraries the clerk may visit, or must avoid</td>
+<td><code>allowed_domains</code>, <code>blocked_domains</code></td>
+<td>§7.3</td>
+</tr>
+<tr>
+<td>Clippings stapled into the file, reread with every later letter</td>
+<td>search results in the context window</td>
+<td>§7.3</td>
+</tr>
+<tr>
+<td>A free photocopy of a whole document, which the writer must then read</td>
+<td>web fetch</td>
+<td>§7.4</td>
+</tr>
+<tr>
+<td>A letter that says "fetch this address, and write the account number on the slip"</td>
+<td>exfiltration</td>
+<td>§7.4</td>
+</tr>
+<tr>
+<td>Forms kept in a drawer, with an index card on the desk</td>
+<td>tool search</td>
+<td>§7.5</td>
+</tr>
+<tr>
+<td>One page of instructions for a back-room clerk, who runs 400 errands and returns the total</td>
+<td>programmatic tool calling</td>
+<td>§7.6</td>
+</tr>
+<tr>
+<td>A partner agency the office phones for you, and the list of its forms you accept</td>
+<td>the MCP connector and its allowlist</td>
+<td>§7.7</td>
+</tr>
+<tr>
+<td>A binder on the shelf: the spine label, the chapters, the appendices</td>
+<td>a Skill and its three levels</td>
+<td>§7.8</td>
+</tr>
+<tr>
+<td>The binder's edition number</td>
+<td>a Skill's <code>version</code></td>
+<td>§7.8</td>
+</tr>
+</tbody>
+</table>
+<p>This section has nine subsections, in five parts:</p>
+<ol>
+<li>what a server call looks like, and when the server hands control back (§7.1, §7.2);</li>
+<li>the two tools that reach the internet, and how one of them can leak data (§7.3, §7.4);</li>
+<li>tools at scale: finding tools on demand, and code that calls tools in bulk (§7.5, §7.6);</li>
+<li>two things that are not your tools at all: MCP servers and Skills (§7.7, §7.8);</li>
+<li>how to choose between them (§7.9).</li>
+</ol>
+<p>Seven examples call the real API, in §7.1, §7.2, §7.3, §7.5, §7.6, §7.7 and §7.8. Running them needs an API key, and your ids, wording and search results will differ from the ones shown. Every other example is plain Python, and prints the same thing on every machine.</p>
 <h2 id="section-6-71-the-server-tool-use-block">7.1 The <code>server_tool_use</code> Block</h2>
-<p>A <strong>server-side tool</strong> changes the shape of a turn in one specific way. A call and its result both appear in the <em>same assistant message</em>, and there is nothing for you to send back. That is the defining property of a server-side tool, and it is what removes the loop.</p>
+<p>A <em>turn</em> is one reply from the model (§2.3). A <strong>server-side tool</strong> changes the shape of a turn in one specific way. With a client tool, the reply ends with a call, and you send the result in your next message. With a server-side tool, the call and its result both appear in the <em>same assistant message</em>, and there is nothing for you to send back. That is the defining property of a server-side tool, and it is what removes the loop.</p>
+<p>In the picture: the writer hands a slip to the office's own desk. The desk runs the errand, and its report comes back clipped to the letter. By the time the letter reaches you, the errand is done.</p>
+<p>The request below turns on web search, the server tool named <code>web_search</code>, and asks about a recent event. <code>max_uses</code> allows at most five searches; §7.3 comes back to it. The loop then prints every block in the reply, one line each. It needs an API key:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -5986,16 +6101,51 @@ saving                : $4,118.25 (71%)
 searches billed: 1
 </code></pre></div>
 
-<p>Three details in that output are worth naming.</p>
-<p><strong>The id prefix is <code>srvtoolu_</code>, not <code>toolu_</code>.</strong> That is how you tell a server call from a client call when reading a trace. It is worth keying on the prefix and not on the block type, because new server tools keep arriving.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>stop_reason: end_turn</code> says the model finished. It did not stop to wait for you, as it does with <code>tool_use</code> in §6.3.</li>
+<li>The <code>server_tool_use</code> line is the model's call: one search, with the query it chose.</li>
+<li>The <code>result for</code> line is the search's answer, 3 results, paired to the call by its id.</li>
+<li>The <code>text</code> line is the start of the answer, written after reading those results.</li>
+<li><code>searches billed: 1</code> is a count kept apart from tokens.</li>
+</ul>
+<p>All of that happened inside one request. Your code sent one message and got back one reply. Three details in that output are worth naming.</p>
+<p><strong>The id prefix is <code>srvtoolu_</code>, not <code>toolu_</code>.</strong> That is how you tell a server call from a client call when reading a <em>trace</em>, the record of everything a run did. In the picture, the office's desk stamps its slips from its own number series. It is worth keying on the prefix and not on the block type, because new server tools keep arriving, each with its own block type.</p>
 <p><strong>The result block follows the call in the same turn</strong>, paired by <code>tool_use_id</code>. You never construct one. A loop written to answer every <code>*_tool_use</code> block with a <code>tool_result</code> will send something the API did not ask for.</p>
-<p><strong><code>usage.server_tool_use</code> is a separate meter.</strong> Web search is billed at <strong>$10 per 1,000 searches</strong> on top of tokens, and failed searches are not billed. Web fetch is free beyond tokens, and so is code execution when it is paired with search or fetch. §15 puts these in one cost model.</p>
+<p>That mistake is easy to make, so here it is on plain dicts, with no API key needed. The turn below holds a server call, its result, a client call and some text. The wrong loop picks blocks by their type name. The right one picks them by id prefix:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># One assistant turn, as plain dicts: a server call, its result, a client call.</span>
+<span class="n">content</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"server_tool_use"</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">:</span> <span class="s2">"srvtoolu_01"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"web_search"</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"web_search_tool_result"</span><span class="p">,</span> <span class="s2">"tool_use_id"</span><span class="p">:</span> <span class="s2">"srvtoolu_01"</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"tool_use"</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">:</span> <span class="s2">"toolu_02"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"get_order"</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="s2">"Let me check that order."</span><span class="p">},</span>
+<span class="p">]</span>
+
+<span class="c1"># Wrong: answer every block whose type ends in "tool_use".</span>
+<span class="n">wrong</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="p">[</span><span class="s2">"type"</span><span class="p">]</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"tool_use"</span><span class="p">)]</span>
+
+<span class="c1"># Right: answer only client calls, recognised by the id prefix.</span>
+<span class="n">right</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span><span class="p">[</span><span class="s2">"id"</span><span class="p">]</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"toolu_"</span><span class="p">)]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"the wrong loop answers:"</span><span class="p">,</span> <span class="n">wrong</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"the right loop answers:"</span><span class="p">,</span> <span class="n">right</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>the wrong loop answers: ['srvtoolu_01', 'toolu_02']
+the right loop answers: ['toolu_02']
+</code></pre></div>
+
+<p>The wrong loop picked two ids. The type <code>server_tool_use</code> ends in <code>tool_use</code>, so it looked like a call to answer. But the server already answered <code>srvtoolu_01</code>, and the result is right there in the same turn. The right loop picked only <code>toolu_02</code>, the one call your code must run. In the picture: you only report back on slips from your own clerk's number series.</p>
+<p><strong><code>usage.server_tool_use</code> is a separate meter.</strong> <em>Usage</em> is the part of the response that counts what you are billed for. Web search is billed at <strong>$10 per 1,000 searches</strong> on top of tokens, and failed searches are not billed. At that price one search costs one cent, so the request above cost one cent in searching, plus its tokens. Web fetch is free beyond tokens, and so is code execution when it is paired with search or fetch. §15 puts these in one cost model. In the picture, errands get their own line on the invoice, apart from the words.</p>
+<p>The figure puts the two shapes side by side. The top row is §6's loop. The bottom row is a server tool, with the one exit you must still handle, which §7.2 covers:</p>
 <!-- fig:ai-server-tool -->
 <figure id="fig-ai-server-tool" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 520" role="img" aria-labelledby="t-ai-server-tool d-ai-server-tool" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-server-tool">Where the loop runs: your code or the server</title><desc id="d-ai-server-tool">With a client tool the model answers with stop reason tool use, your code runs the function and sends a tool result, and you go round again. With a server tool the call and its result both appear in the same assistant message and nothing is sent back. If the server loop reaches its iteration cap the stop reason is pause turn, and you append the assistant content and send it again.</desc><defs><marker id="ah-ai-server-tool" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="24" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#4a9eda;opacity:1">A CLIENT TOOL: YOU RUN THE LOOP</text><rect x="20" y="38" width="149" height="92" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="94.5" y="78.9125" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Send</text><text x="94.5" y="97.8625" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">messages + tools</text><path d="M175,84 L191,84" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-server-tool)"/><rect x="197" y="38" width="149" height="92" rx="10" style="fill:#7c8cff;fill-opacity:0.13;stroke:#7c8cff;stroke-width:1.6"/><text x="271.5" y="71.4375" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Model answers</text><text x="271.5" y="90.3875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">stop_reason:</text><text x="271.5" y="105.338" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">tool_use</text><path d="M352,84 L368,84" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-server-tool)"/><rect x="374" y="38" width="149" height="92" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="448.5" y="70.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Your code</text><text x="448.5" y="87.35" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">runs it</text><text x="448.5" y="106.3" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">the function</text><path d="M529,84 L545,84" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-server-tool)"/><rect x="551" y="38" width="149" height="92" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="625.5" y="78.9125" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">You send</text><text x="625.5" y="97.8625" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">tool_result</text><path d="M610,136 Q610,170 360,170 Q110,170 110,136" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5" marker-end="url(#ah-ai-server-tool)"/><text x="360" y="190" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">and go round again</text><text x="20" y="236" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#35b37e;opacity:1">A SERVER TOOL: THE LOOP RUNS INSIDE ONE REQUEST</text><rect x="20" y="250" width="197.333" height="92" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="118.667" y="290.912" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Send</text><text x="118.667" y="309.862" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">once</text><path d="M223.333,296 L255.333,296" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-server-tool)"/><rect x="261.333" y="250" width="197.333" height="92" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="360" y="283.438" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Anthropic runs it</text><text x="360" y="302.387" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">search, read, search</text><text x="360" y="317.337" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">again: inside this call</text><path d="M464.667,296 L496.667,296" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-server-tool)"/><rect x="502.667" y="250" width="197.333" height="92" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="601.333" y="283.438" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">One response</text><text x="601.333" y="302.387" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">server_tool_use, its</text><text x="601.333" y="317.337" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">result, then text</text><rect x="260" y="396" width="200" height="76" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="360" y="429.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">pause_turn</text><text x="360" y="448.025" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">iteration cap reached</text><path d="M360,348 L360,390" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-server-tool)"/><path d="M254,434 L110,434 L110,348" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5" marker-end="url(#ah-ai-server-tool)"/><text x="180" y="462" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">append the assistant content,</text><text x="180" y="478" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">send it again</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">A server tool removes the loop from your code. The one thing you must still handle is pause_turn.</figcaption></figure>
 <!-- /fig:ai-server-tool -->
 
 <h2 id="section-6-72-pause-turn-the-server-loop-handing-control-back">7.2 <code>pause_turn</code>: The Server Loop Handing Control Back</h2>
-<p>The server runs its own agentic loop entirely inside one request: it searches, reads, and decides whether to search again. That loop has an iteration cap, and when it hits the cap you get a stop reason you must handle.</p>
+<p>The server runs its own <em>agentic loop</em>, the same ask, run and report cycle as §6.4, entirely inside one request. It searches, reads what it found, and decides whether to search again. That loop has an iteration cap: a most-rounds limit, as §6.4's loop should have had. When it hits the cap, you get a stop reason you must handle, <code>pause_turn</code>.</p>
+<p>In the picture, the office's desk works a fixed shift on each letter. If the shift ends mid-errand, the desk sends you the half-written letter, with every clipping gathered so far. It waits for you to hand it back in.</p>
+<p>The request below asks a question that needs many searches, and allows up to ten. The loop sends it. While the reply is <code>pause_turn</code>, it appends the reply and sends again, up to four requests in all. It needs an API key:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -6013,7 +6163,7 @@ searches billed: 1
     <span class="c1"># Send the paused turn straight back, unmodified, and it continues.</span>
     <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
 <span class="k">else</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"still pausing after 4 continuations"</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">"still pausing after 4 requests"</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="s2">"final:"</span><span class="p">,</span> <span class="nb">next</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"text"</span><span class="p">))</span>
 </code></pre></div>
@@ -6023,12 +6173,68 @@ request 2: stop_reason=end_turn
 final: The ECB cut once and held twice; the Fed held across all three meetings.
 </code></pre></div>
 
-<p><strong>A paused turn is resumed by appending it and re-sending.</strong> You do not start over, and you do not summarise what happened. The assistant content carries the partial work, and stripping it throws away every search already paid for.</p>
-<p><strong>Bound the continuations.</strong> The loop above gives up after four. Without a bound, you have re-created §6.4's unbounded loop in a place where each iteration is more expensive, because every continuation resends a conversation that now contains search results.</p>
-<p>One further server tool is worth knowing about even though it is used differently from the rest. The <strong>advisor tool</strong> pairs a fast executor model with a higher-intelligence advisor that supplies strategic guidance <em>mid-generation</em>. The advisor tool is aimed at long-horizon agentic workloads, where the executor benefits from a second opinion without paying the larger model's price for every token.</p>
-<p>There is a second way control comes back, and it is easy to miss. <strong>If the model calls a server tool and one of your client tools in the same turn</strong>, you get <code>stop_reason: "tool_use"</code> and a <code>server_tool_use</code> block <em>without</em> its result. Return your client <code>tool_result</code> blocks as usual, and the API runs the server tool afterwards. So a turn can contain a server call you must not answer and a client call you must.</p>
+<p>Line by line: request 1 ended with <code>pause_turn</code>, so the loop appended the reply to <code>messages</code> and sent it again. Request 2 ended with <code>end_turn</code>, so the loop stopped and printed the answer. Nothing in the loop told the model what it had already found. The appended reply carried that.</p>
+<p><strong>A paused turn is resumed by appending it and re-sending.</strong> You do not start over, and you do not summarise what happened. The assistant content carries the partial work, and stripping it throws away every search already paid for. Send the same <code>tools</code> as well: a paused turn can end on a server call that has not run yet, and the continuation needs that tool to run it. In the picture, you hand back the half-written letter with its clippings, not a note saying "carry on".</p>
+<p><strong>Bound the continuations.</strong> A <em>continuation</em> is one more request to resume a paused turn. The loop above gives up after four requests. Without a bound, you have re-created §6.4's unbounded loop in a place where each iteration is more expensive, because every continuation resends a conversation that now contains search results.</p>
+<p>You can watch both cases without an API key. Below, <code>fake_create</code> plays the server. It pauses as many times as you tell it, then finishes. <code>run</code> is the loop from above, written over plain dicts, with the cap as a parameter. It prints how many messages each request sends:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># A stand-in for the API: the server pauses `pauses` times, then finishes.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fake_create</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">pauses</span><span class="p">):</span>
+    <span class="n">done</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">messages</span> <span class="k">if</span> <span class="n">m</span><span class="p">[</span><span class="s2">"role"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"assistant"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">done</span> <span class="o">&lt;</span> <span class="n">pauses</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"pause_turn"</span><span class="p">,</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"part </span><span class="si">{</span><span class="n">done</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span><span class="p">}]</span>
+    <span class="k">return</span> <span class="s2">"end_turn"</span><span class="p">,</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="s2">"Done."</span><span class="p">}]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="n">pauses</span><span class="p">,</span> <span class="n">max_requests</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
+    <span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Compare three rate decisions."</span><span class="p">}]</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_requests</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">stop_reason</span><span class="p">,</span> <span class="n">content</span> <span class="o">=</span> <span class="n">fake_create</span><span class="p">(</span><span class="n">messages</span><span class="p">,</span> <span class="n">pauses</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  request </span><span class="si">{</span><span class="n">attempt</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">stop_reason</span><span class="si">:</span><span class="s2">&lt;10</span><span class="si">}</span><span class="s2"> messages sent: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stop_reason</span> <span class="o">!=</span> <span class="s2">"pause_turn"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">content</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">"text"</span><span class="p">]</span>
+        <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">content</span><span class="p">})</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"still pausing after </span><span class="si">{</span><span class="n">max_requests</span><span class="si">}</span><span class="s2"> requests"</span><span class="p">)</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"a server that pauses twice:"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"  final:"</span><span class="p">,</span> <span class="n">run</span><span class="p">(</span><span class="n">pauses</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"a server that never finishes:"</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">run</span><span class="p">(</span><span class="n">pauses</span><span class="o">=</span><span class="mi">99</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"  gave up:"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>a server that pauses twice:
+  request 1: pause_turn messages sent: 1
+  request 2: pause_turn messages sent: 2
+  request 3: end_turn   messages sent: 3
+  final: Done.
+a server that never finishes:
+  request 1: pause_turn messages sent: 1
+  request 2: pause_turn messages sent: 2
+  request 3: pause_turn messages sent: 3
+  request 4: pause_turn messages sent: 4
+  gave up: still pausing after 4 requests
+</code></pre></div>
+
+<p>Read the two runs:</p>
+<ul>
+<li>The first server pauses twice. Each pause adds one assistant message, so the requests send 1, 2 and 3 messages. The third one gets <code>end_turn</code>.</li>
+<li>The second server never finishes. The loop sends four requests, each bigger than the last, then raises an error instead of carrying on.</li>
+</ul>
+<p>That growing count is what the bound protects you from. With a real server, those messages carry search results, and every request resends all of them.</p>
+<p>One further server tool is worth knowing about even though it is used differently from the rest. The <strong>advisor tool</strong> pairs a fast executor model with a higher-intelligence advisor that supplies strategic guidance <em>mid-generation</em>, while the executor is still writing. The <em>executor</em> is the model doing the work. The advisor tool is aimed at long-horizon agentic workloads, tasks that run for many steps, where the executor benefits from a second opinion without paying the larger model's price for every token. In the picture, it is a junior writer who can knock on a senior writer's door mid-letter.</p>
+<p>There is a second way control comes back, and it is easy to miss. <strong>If the model calls a server tool and one of your client tools in the same turn</strong>, you get <code>stop_reason: "tool_use"</code> and a <code>server_tool_use</code> block <em>without</em> its result. Return your client <code>tool_result</code> blocks as usual, and the API runs the server tool afterwards. So a turn can contain a server call you must not answer and a client call you must. This is where §7.1's prefix test earns its place: answer the <code>toolu_</code> call, and leave the <code>srvtoolu_</code> one alone.</p>
 <h2 id="section-6-73-web-search">7.3 Web Search</h2>
-<p>Web search is the most-used server tool and the one whose configuration matters most, because its defaults are permissive by design.</p>
+<p>Web search is the most-used server tool. It is also the one whose configuration matters most, because its defaults are <em>permissive</em> by design. Left alone, it may search as often as it likes, anywhere on the web. In the picture, that is a clerk sent to "the library", with no list of libraries and no limit on trips.</p>
+<p>The request below sets three things:</p>
+<ul>
+<li><code>max_uses</code> allows at most 3 searches;</li>
+<li><code>allowed_domains</code> limits the search to two sites, the European Central Bank's and the US Federal Reserve's;</li>
+<li><code>user_location</code> says roughly where the user is, so results suit someone in Lisbon.</li>
+</ul>
+<p>It needs an API key:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -6057,12 +6263,46 @@ searches    : 1
 answer      : According to the ECB press release, the deposit facility rate was left unchanged at this meeting.
 </code></pre></div>
 
-<p><strong><code>max_uses</code> is the only hard constraint on how much searching happens.</strong> Everything else, such as "search more readily" or "prefer answering directly", is steering through the system prompt, which is guidance. A simple factual question uses one to three searches, and a comparative research question can use ten or more, each billed. Exceeding <code>max_uses</code> produces a <code>max_uses_exceeded</code> error in the result block and not a failed request.</p>
-<p><strong><code>allowed_domains</code> and <code>blocked_domains</code> are mutually exclusive.</strong> Sending both is a 400. Entries are bare domains with an optional path (<code>example.com</code>, <code>example.com/blog</code>) and <strong>no scheme</strong>, so a value of <code>https://example.com</code> is not what the API expects.</p>
-<p><strong>Search results enter the context window and stay there.</strong> They are input tokens on this turn and on every later turn of the conversation, which is §9's arithmetic applied to content you did not write. This is the strongest argument for <code>max_uses</code>, because it bounds tokens and not just search fees.</p>
-<p>That last problem has a purpose-built answer. <strong>Dynamic filtering</strong>, available on <code>web_search_20260209</code> and later, has the model write and run code that filters results <em>before</em> they reach the context window, so only the relevant part is loaded. It is the same idea as §7.6's programmatic tool calling, and it uses the same machinery.</p>
+<p>The answer cites the ECB's own press release, because <code>allowed_domains</code> left the search nowhere else to look. One search was enough.</p>
+<p><strong><code>max_uses</code> is the only hard constraint on how much searching happens.</strong> Everything else, such as "search more readily" or "prefer answering directly", is steering through the system prompt (§2.4), which is guidance. A simple factual question uses one to three searches, and a comparative research question can use ten or more, each billed. Exceeding <code>max_uses</code> produces a <code>max_uses_exceeded</code> error in the result block and not a failed request. In the picture, the clerk who runs out of trips comes back with a note saying so, and the writer finishes the letter with what it has.</p>
+<p><strong><code>allowed_domains</code> and <code>blocked_domains</code> are mutually exclusive.</strong> You can say "only these libraries" or "never these libraries", not both. Sending both is a 400, the API's "bad request" error (§2.9). Entries are bare domains with an optional path (<code>example.com</code>, <code>example.com/blog</code>) and <strong>no scheme</strong>, so a value of <code>https://example.com</code> is not what the API expects. The <em>scheme</em> is the <code>https://</code> at the front of a web address. Two more rules from the same docs:</p>
+<ul>
+<li>a domain covers its subdomains, so <code>example.com</code> also covers <code>docs.example.com</code>;</li>
+<li>paths work for web search only. Web fetch matches on the domain alone, so an entry with a path never matches a fetch.</li>
+</ul>
+<p>Those rules are easy to get wrong before a request ever leaves your machine. Here is a small check of our own, written from the first two rules. It is not the API's validator, just a way to catch the two mistakes before you pay for a request:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># Our own check, written from the two rules above. It is not the API's validator.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">check_domains</span><span class="p">(</span><span class="n">tool</span><span class="p">):</span>
+    <span class="k">if</span> <span class="s2">"allowed_domains"</span> <span class="ow">in</span> <span class="n">tool</span> <span class="ow">and</span> <span class="s2">"blocked_domains"</span> <span class="ow">in</span> <span class="n">tool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"rejected: both lists in one tool"</span>
+    <span class="k">for</span> <span class="n">domain</span> <span class="ow">in</span> <span class="n">tool</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"allowed_domains"</span><span class="p">,</span> <span class="p">[])</span> <span class="o">+</span> <span class="n">tool</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"blocked_domains"</span><span class="p">,</span> <span class="p">[]):</span>
+        <span class="k">if</span> <span class="s2">"://"</span> <span class="ow">in</span> <span class="n">domain</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">"rejected: </span><span class="si">{</span><span class="n">domain</span><span class="si">!r}</span><span class="s2"> has a scheme"</span>
+    <span class="k">return</span> <span class="s2">"ok"</span>
+
+
+<span class="n">TRIES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"allowed_domains"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"ecb.europa.eu"</span><span class="p">,</span> <span class="s2">"federalreserve.gov"</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s2">"allowed_domains"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"example.com/blog"</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s2">"allowed_domains"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"https://example.com"</span><span class="p">]},</span>
+    <span class="p">{</span><span class="s2">"allowed_domains"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"ecb.europa.eu"</span><span class="p">],</span> <span class="s2">"blocked_domains"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"spam.example"</span><span class="p">]},</span>
+<span class="p">]</span>
+<span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">TRIES</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">check_domains</span><span class="p">(</span><span class="n">tool</span><span class="p">))</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>ok
+ok
+rejected: 'https://example.com' has a scheme
+rejected: both lists in one tool
+</code></pre></div>
+
+<p>The first two lists pass: two bare domains, then a domain with a path. The third has a scheme. The fourth uses both lists in one tool, which the API rejects with a 400.</p>
+<p><strong>Search results enter the context window and stay there.</strong> The <em>context window</em> is everything the model reads on a request (§1.4). Search results are input tokens on this turn and on every later turn of the conversation, which is §9's arithmetic applied to content you did not write. This is the strongest argument for <code>max_uses</code>, because it bounds tokens and not just search fees. In the picture, every clipping is stapled into the file, and the writer rereads the whole file before every later letter.</p>
+<p>That last problem has a purpose-built answer. <strong>Dynamic filtering</strong>, available on <code>web_search_20260209</code> and later, has the model write and run code that filters results <em>before</em> they reach the context window, so only the relevant part is loaded. It is the same idea as §7.6's programmatic tool calling, and it uses the same machinery. In the picture, a clerk reads the clippings first, and only the useful paragraphs reach the writer's desk.</p>
 <h2 id="section-6-74-web-fetch-and-the-exfiltration-problem">7.4 Web Fetch, and the Exfiltration Problem</h2>
-<p>Web fetch retrieves a specific URL. It costs nothing beyond tokens, which makes its real cost easy to underestimate. A research paper PDF is around 125,000 tokens, and it lands in your context window.</p>
+<p>Web fetch retrieves a specific URL, one web address, and puts the page in the conversation. It costs nothing beyond tokens, which makes its real cost easy to underestimate. A research paper PDF is around 125,000 tokens, and it lands in your context window. In the picture, the office photocopies the document for free. The cost is the writer reading every page, again, before every later letter.</p>
+<p>The block below prices three typical sizes of page, using the sizes Anthropic's docs give. It assumes $5.00 per million input tokens, and shows each page once and over ten turns:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">CONTENT_SIZES</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"average web page"</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">2_500</span><span class="p">),</span>
                  <span class="p">(</span><span class="s2">"large documentation page"</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">25_000</span><span class="p">),</span>
                  <span class="p">(</span><span class="s2">"research paper PDF"</span><span class="p">,</span> <span class="mi">500</span><span class="p">,</span> <span class="mi">125_000</span><span class="p">)]</span>
@@ -6086,22 +6326,78 @@ research paper PDF          500 kB   125,000     $0.625          $6.25
 the fetch itself is free; the context it fills is not
 </code></pre></div>
 
+<p>Line by line: each row is one kind of page. A <em>kB</em> is a kilobyte, about a thousand characters of text. The <code>tokens</code> column is what the page puts in the context window. <code>cost once</code> is those tokens at $5.00 per million, on the turn the page arrives. <code>over 10 turns</code> is the same page resent ten times, because it stays in the conversation. Remember the PDF row: one free fetch, $0.625 on the turn it arrives, and $6.25 over ten turns. The figure draws the same three rows to scale:</p>
 <!-- fig:ai-fetch-size -->
 <figure id="fig-ai-fetch-size" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 340" role="img" aria-labelledby="t-ai-fetch-size d-ai-fetch-size" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-fetch-size">What one fetched URL puts in your window</title><desc id="d-ai-fetch-size">Three kinds of fetched content in tokens: an average web page is about 2,500 tokens, a large documentation page 25,000, and a research paper PDF 125,000. At five dollars per million input tokens they cost a little over a cent, twelve and a half cents and sixty-two and a half cents once, and ten times that over ten turns.</desc><defs><marker id="ah-ai-fetch-size" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="50" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text);opacity:1">average web page</text><text x="20" y="70" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">10 kB</text><rect x="220" y="32" width="6" height="36" rx="2" style="fill:#d9a441;fill-opacity:0.3;stroke:#d9a441;stroke-width:1.2"/><text x="238" y="50" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">2,500 tokens</text><text x="238" y="68" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">$0.013 once,  $0.12 over 10 turns</text><text x="20" y="126" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text);opacity:1">large documentation page</text><text x="20" y="146" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">100 kB</text><rect x="220" y="108" width="60" height="36" rx="2" style="fill:#d9a441;fill-opacity:0.3;stroke:#d9a441;stroke-width:1.2"/><text x="292" y="126" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">25,000 tokens</text><text x="292" y="144" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">$0.125 once,  $1.25 over 10 turns</text><text x="20" y="202" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text);opacity:1">research paper PDF</text><text x="20" y="222" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">500 kB</text><rect x="220" y="184" width="300" height="36" rx="2" style="fill:#d9a441;fill-opacity:0.3;stroke:#d9a441;stroke-width:1.2"/><text x="532" y="202" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">125,000 tokens</text><text x="532" y="220" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">$0.625 once,  $6.25 over 10 turns</text><text x="360" y="296" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">set max_content_tokens on anything user-facing</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The fetch itself is free; the context it fills is not, and it is resent on every later turn.</figcaption></figure>
 <!-- /fig:ai-fetch-size -->
 
-<p><code>max_content_tokens</code> caps this, and on anything user-facing it should be set.</p>
-<p>The other consideration is security, and it is not hypothetical. <strong>Web fetch in an environment where the model reads untrusted input alongside sensitive data is a data-exfiltration channel.</strong> The attack is simple. Text the model reads contains an instruction to fetch <code>https://attacker.example/?data=&lt;the secret&gt;</code>, and the fetch itself is the leak.</p>
-<p>The platform mitigates the worst version, because <strong>the model may not construct URLs dynamically</strong>. It may only fetch ones the user supplied or that came from a previous search or fetch result. But that is a mitigation and not a fix, since a search result is itself content the model did not verify. Three controls are yours:</p>
+<p><code>max_content_tokens</code> caps this, and on anything user-facing it should be set. It is a limit on how many tokens of a fetched page are kept. <em>User-facing</em> means a user's request decides what gets fetched, so you cannot know the size in advance.</p>
+<p>The other consideration is security, and it is not hypothetical. Two words first. <em>Untrusted input</em> is any text your system did not write and cannot vouch for: a web page, an email, a document a user uploaded. <em>Exfiltration</em> means carrying data out of a system to someone who should not have it. <strong>Web fetch in an environment where the model reads untrusted input alongside sensitive data is a data-exfiltration channel.</strong></p>
+<p>The attack is simple. Text the model reads contains an instruction to fetch <code>https://attacker.example/?data=&lt;the secret&gt;</code>, and the fetch itself is the leak. No reply needs to reach the attacker: the address of the request carries the secret, and the attacker's server only has to record the addresses it was asked for. In the picture, a letter arrives saying "please fetch this address, and write the account number on the slip". A clerk who runs that errand has delivered the account number, whatever the errand brings back.</p>
+<p>The platform mitigates the worst version, because <strong>the model may not construct URLs dynamically</strong>. It may only fetch a URL that already appeared in the conversation:</p>
+<ul>
+<li>in a user message;</li>
+<li>in a result from one of your client tools;</li>
+<li>in an earlier search or fetch result.</li>
+</ul>
+<p>It also refuses a URL that seems to carry a credential, such as an API key, unless that credential appears in the system prompt or a user message. But that is a mitigation and not a fix, since a search result is itself content the model did not verify. Three controls are yours:</p>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#e06c75">Do not enable it</div><div><strong>The only complete answer</strong> when the same conversation holds untrusted text and data that must not leave. Consider whether fetch is doing enough work to justify the channel.</div>
 <div style="font-weight:600;color:#d9a441"><code>allowed_domains</code></div><div><strong>Restrict to hosts you trust.</strong> An allowlist turns the exfiltration channel into one that only reaches places you chose, which for most internal tools is sufficient.</div>
 <div style="font-weight:600;color:#4a9eda"><code>max_uses</code></div><div><strong>Bound the number of requests.</strong> Limits both the token bill and how much can be exfiltrated per conversation.</div>
 </div>
 
-<p>§14.4 develops the general form of this argument. The point to carry here is that <strong>a tool that makes outbound network requests is an exfiltration primitive</strong>, whoever executes it, and it should be reasoned about as one.</p>
+<p>A fourth, newer control narrows the list of sources above. <code>url_sources</code> can stop a source from counting, for example the results of a client tool that echoes text the model wrote.</p>
+<p>The <code>allowed_domains</code> row is enforced by the platform for web fetch. The moment you write a fetch tool of your own (§6), the same check becomes yours, and its obvious version has a hole. Below, <code>naive</code> asks whether a URL mentions a trusted domain anywhere. <code>careful</code> takes the URL apart with <code>urlsplit</code>, from Python's standard library. It asks whether the <em>host</em>, the server name between <code>://</code> and the next <code>/</code>, is a trusted domain or a subdomain of one, which is the same rule the API's lists use:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">urllib.parse</span><span class="w"> </span><span class="kn">import</span> <span class="n">urlsplit</span>
+
+<span class="n">ALLOWED</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ecb.europa.eu"</span><span class="p">,</span> <span class="s2">"federalreserve.gov"</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">naive</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
+    <span class="c1"># "Does the URL mention a trusted domain anywhere?"</span>
+    <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">domain</span> <span class="ow">in</span> <span class="n">url</span> <span class="k">for</span> <span class="n">domain</span> <span class="ow">in</span> <span class="n">ALLOWED</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">careful</span><span class="p">(</span><span class="n">url</span><span class="p">):</span>
+    <span class="c1"># "Is the host a trusted domain, or a subdomain of one?"</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="n">urlsplit</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">hostname</span> <span class="ow">or</span> <span class="s2">""</span>
+    <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">host</span> <span class="o">==</span> <span class="n">d</span> <span class="ow">or</span> <span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"."</span> <span class="o">+</span> <span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">ALLOWED</span><span class="p">)</span>
+
+
+<span class="n">URLS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"https://www.ecb.europa.eu/press/"</span><span class="p">,</span>
+        <span class="s2">"https://federalreserve.gov/monetarypolicy.htm"</span><span class="p">,</span>
+        <span class="s2">"https://ecb.europa.eu.attacker.example/?d=SECRET"</span><span class="p">,</span>
+        <span class="s2">"https://attacker.example/?q=federalreserve.gov"</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'url'</span><span class="si">:</span><span class="s2">&lt;50</span><span class="si">}{</span><span class="s1">'naive'</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}{</span><span class="s1">'careful'</span><span class="si">:</span><span class="s2">&gt;9</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="n">URLS</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">url</span><span class="si">:</span><span class="s2">&lt;50</span><span class="si">}{</span><span class="nb">str</span><span class="p">(</span><span class="n">naive</span><span class="p">(</span><span class="n">url</span><span class="p">))</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}{</span><span class="nb">str</span><span class="p">(</span><span class="n">careful</span><span class="p">(</span><span class="n">url</span><span class="p">))</span><span class="si">:</span><span class="s2">&gt;9</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>url                                                 naive  careful
+https://www.ecb.europa.eu/press/                     True     True
+https://federalreserve.gov/monetarypolicy.htm        True     True
+https://ecb.europa.eu.attacker.example/?d=SECRET     True    False
+https://attacker.example/?q=federalreserve.gov       True    False
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li>The first two rows are real ECB and Fed addresses, and both checks pass them.</li>
+<li>The third starts its host with a trusted name, but the host really belongs to <code>attacker.example</code>. Everything before that is a subdomain the attacker controls.</li>
+<li>The fourth names a trusted domain only in the <em>query string</em>, the part after <code>?</code>.</li>
+</ul>
+<p>The naive check passes all four, so it would have made both bad requests. Compare hosts, never substrings. Keep the domains in your lists plain ASCII too: a name with one look-alike letter from another alphabet is a different domain.</p>
+<p>§14.4 develops the general form of this argument: give each part of a system only the access it needs. The point to carry here is that <strong>a tool that makes outbound network requests is an exfiltration primitive</strong>, whoever executes it, and it should be reasoned about as one. A <em>primitive</em> is a basic building block that an attack can be built from.</p>
 <h2 id="section-6-75-tool-search-scaling-past-a-few-dozen-tools">7.5 Tool Search: Scaling Past a Few Dozen Tools</h2>
-<p>§6.9 established that tool definitions are context you pay for on every request, and that selection accuracy degrades as the surface grows. Tool search fixes both by not loading most of them.</p>
+<p>§6.9 established that tool definitions are context you pay for on every request, and that selection accuracy degrades as the surface grows. <em>Selection accuracy</em> is how often the model picks the right tool, and the <em>surface</em> is the whole set of tools you offer. Tool search fixes both by not loading most of them. In §6.9's picture, you keep the forms in a drawer, with an index card on the desk. The writer reads the index, asks for the forms this letter needs, and never rereads the rest.</p>
+<p>The request below offers three tools:</p>
+<ul>
+<li>the search tool itself, in its regex variant, so the model searches with a <em>regular expression</em>, a pattern for matching text (§4.3);</li>
+<li>two ordinary tools named in §6.10's style, each marked <code>defer_loading: True</code>, meaning "do not load this until it is found".</li>
+</ul>
+<p>The loop prints what the model searched for, what it discovered, and what it called. It needs an API key:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -6133,8 +6429,8 @@ the fetch itself is free; the context it fills is not
     <span class="k">if</span> <span class="n">block</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"server_tool_use"</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">"  searched for:"</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">input</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">block</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"tool_search_tool_result"</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">block</span><span class="o">.</span><span class="n">content</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">"  discovered  :"</span><span class="p">,</span> <span class="n">ref</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ref</span> <span class="ow">in</span> <span class="n">block</span><span class="o">.</span><span class="n">content</span><span class="o">.</span><span class="n">tool_references</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"  discovered  :"</span><span class="p">,</span> <span class="n">ref</span><span class="o">.</span><span class="n">tool_name</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">block</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"tool_use"</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">"  called      :"</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">input</span><span class="p">)</span>
 </code></pre></div>
@@ -6145,12 +6441,32 @@ the fetch itself is free; the context it fills is not
   called      : github_list_prs {'repo': 'acme/api'}
 </code></pre></div>
 
-<p>The mechanism is this: you send <strong>every</strong> tool definition, marking with <code>defer_loading: true</code> the ones that should not be loaded up front. The model's context initially holds only the search tool and any non-deferred tools. When it needs something, it searches. The API returns <code>tool_reference</code> blocks (up to five by default) and expands them into full definitions automatically. <strong>At least one tool must stay non-deferred</strong>, and it is normally the search tool itself.</p>
-<p>There are two variants, and the choice is not arbitrary. <strong>Regex</strong> (<code>tool_search_tool_regex_20251119</code>) has the model construct patterns, which rewards the service-prefix naming convention from §6.10. For example, <code>github_</code> matches everything GitHub in one query. <strong>BM25</strong> (<code>tool_search_tool_bm25_20251119</code>) takes natural-language queries and matches them against descriptions, which rewards descriptions written for a reader and not for a matcher. If your tools are consistently namespaced, regex is sharper. If they are well described but inconsistently named, BM25 is.</p>
+<p>Line by line:</p>
+<ul>
+<li><code>searched for</code> shows the pattern the model wrote, <code>github_.*pr</code>: "github_, then anything, then pr".</li>
+<li><code>discovered</code> is the one tool that matched. Its full definition was loaded only now.</li>
+<li><code>called</code> is the model using it, with the repository from the question.</li>
+<li><code>stop_reason: tool_use</code> appears because <code>github_list_prs</code> is an ordinary client tool. You run it and send a <code>tool_result</code>, exactly as in §6. Only the search was done by the server.</li>
+</ul>
+<p>The mechanism is this: you send <strong>every</strong> tool definition, marking with <code>defer_loading: true</code> the ones that should not be loaded up front. The model's context initially holds only the search tool and any non-deferred tools. When it needs something, it searches. The API returns <code>tool_reference</code> blocks (up to five by default) and expands them into full definitions automatically. <strong>At least one tool must stay non-deferred</strong>, and it is normally the search tool itself. In the picture, the drawer holds every form, but the desk holds only the index card, plus any forms you always want at hand.</p>
+<p>There are two variants, and the choice is not arbitrary. Both search tool names, descriptions and argument names. They differ in how the model asks:</p>
+<ul>
+<li><strong>Regex</strong> (<code>tool_search_tool_regex_20251119</code>) has the model construct patterns, which rewards the service-prefix naming convention from §6.10. For example, <code>github_</code> matches everything GitHub in one query.</li>
+<li><strong>BM25</strong> (<code>tool_search_tool_bm25_20251119</code>) takes natural-language queries and ranks tools by how well the words match (§10.3 teaches BM25). That rewards descriptions written for a reader and not for a matcher.</li>
+</ul>
+<p>If your tools are consistently namespaced, regex is sharper. If they are well described but inconsistently named, BM25 is.</p>
+<p>How much does it save? The block below estimates it. Its numbers are set at the top:</p>
+<ul>
+<li>an average tool definition of 353 characters, measured over a real seven-tool surface;</li>
+<li>a search tool of 420 characters;</li>
+<li>2 tools discovered in a typical conversation;</li>
+<li>about 1.4 seconds for the extra step a search adds.</li>
+</ul>
+<p><code>approx_tokens</code> uses the rough rule of four characters per token. The block prints <em>eager</em> loading, every definition sent up front, against search, for five sizes of surface:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">AVG_TOOL_CHARS</span> <span class="o">=</span> <span class="mi">353</span>       <span class="c1"># measured over a real 7-tool surface</span>
 <span class="n">SEARCH_TOOL_CHARS</span> <span class="o">=</span> <span class="mi">420</span>
 <span class="n">TYPICAL_DISCOVERY</span> <span class="o">=</span> <span class="mi">2</span>      <span class="c1"># tools a given conversation actually needs</span>
-<span class="n">EXTRA_ROUND_TRIP_MS</span> <span class="o">=</span> <span class="mi">1_400</span>
+<span class="n">EXTRA_STEP_MS</span> <span class="o">=</span> <span class="mi">1_400</span>     <span class="c1"># the model writes a search and reads it</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">approx_tokens</span><span class="p">(</span><span class="n">chars</span><span class="p">):</span>
@@ -6166,12 +6482,12 @@ the fetch itself is free; the context it fills is not
 
 <span class="nb">print</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the search column never moves: </span><span class="si">{</span><span class="n">searched</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> tokens at every scale"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"what it costs instead: one extra round trip (~</span><span class="si">{</span><span class="n">EXTRA_ROUND_TRIP_MS</span><span class="si">}</span><span class="s2"> ms)"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"and a tool list that differs per conversation, so the cached prefix"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"no longer matches (see 9.3)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"what it costs instead: one extra step (~</span><span class="si">{</span><span class="n">EXTRA_STEP_MS</span><span class="si">}</span><span class="s2"> ms)"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"before the first real tool call; the cached prefix is unaffected,"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"because deferred tools are kept out of it (see 9.3)"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>tools     eager   with search     saved
+<div class="highlight" data-lang="text"><pre><span></span><code>  tools     eager   with search     saved
       7       618           282      +336
      20     1,765           282    +1,483
      40     3,530           282    +3,248
@@ -6179,46 +6495,92 @@ the fetch itself is free; the context it fills is not
     400    35,300           282   +35,018
 
 the search column never moves: 282 tokens at every scale
-what it costs instead: one extra round trip (~1400 ms)
-and a tool list that differs per conversation, so the cached prefix
-no longer matches (see 9.3)
+what it costs instead: one extra step (~1400 ms)
+before the first real tool call; the cached prefix is unaffected,
+because deferred tools are kept out of it (see 9.3)
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>The <code>eager</code> column grows with the number of tools: 7 tools are 618 tokens, 400 tools are 35,300.</li>
+<li>The <code>with search</code> column is the search tool plus the two tools found: (420 + 2 × 353) ÷ 4, which rounds to 282.</li>
+<li><code>saved</code> is the difference.</li>
+</ul>
 <p><strong>The flatness is the property, not the saving.</strong> The search column is the same 282 tokens whether the surface holds seven tools or four hundred, because the model only ever loads what it discovered. Eager loading grows linearly and is untenable well before the four-hundred mark.</p>
-<p>So why did §6.9 say search earns its complexity only in the hundreds, when the table shows it winning on tokens even at seven? Because tokens are not what it costs. It costs <strong>an extra round trip</strong> before the first real tool call, around 1.4 seconds of latency on every conversation that needs a tool it has not already found. And it costs <strong>your prompt cache</strong>, because a tool list that expands differently per conversation is a prefix that differs per conversation (§9.3). At twenty tools, those two outweigh the 1,483 tokens saved without difficulty. At four hundred, 35,000 tokens a request is not something a round trip can outweigh.</p>
+<p>So why did §6.9 say that for twenty tools used on every turn, caching wins, when the table shows search ahead on tokens even at seven? Because tokens are not all it costs. It costs <strong>an extra step</strong> before the first real tool call: the model must write a search and read what came back before it can call anything. That is around 1.4 seconds of <em>latency</em>, waiting time, on every conversation that needs a tool it has not already found. If every request uses every tool, each conversation pays that step and saves little.</p>
+<p>It does not cost your prompt cache. The API keeps deferred tools out of the cached prefix entirely, and adds a discovered definition later, inside the conversation. So the start of the request stays the same however the search goes (§9.3 explains why that start matters).</p>
+<p>At twenty tools the trade is real: 1,483 tokens saved against 1.4 seconds of waiting, and which matters more depends on your product. Anthropic's guidance is to consider tool search from about ten tools, or about 10k tokens of definitions, and to keep your three to five most-used tools non-deferred, so they need no search. At four hundred tools, 35,000 tokens a request is not something an extra step can outweigh.</p>
 <h2 id="section-6-76-programmatic-tool-calling">7.6 Programmatic Tool Calling</h2>
 <p>This one solves a problem that looks like a context problem and is really a <em>turn</em> problem. Suppose the model needs to call <code>get_order</code> for 400 order ids and sum the totals. With ordinary tool use that is 400 tool calls, each returning a result into the context window, across many model turns.</p>
-<p>Programmatic tool calling lets the model write <strong>code</strong> that calls your tools, and the code is executed inside the code execution sandbox (an isolated environment). The loop runs there, and only the final answer comes back.</p>
-<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
+<p>Programmatic tool calling lets the model write <strong>code</strong> that calls your tools, and the code is executed inside the code execution sandbox (an isolated environment). The loop runs there, and only the final answer comes back to the model.</p>
+<p>In the picture: instead of handing out 400 slips, a few at a time, the writer writes one page of instructions. "For each order on this list, fetch it, and add up the totals." A clerk in the back room follows it. Your clerk still runs each errand, all 400 of them. But the reports go to the back room, and only the total reaches the writer's desk.</p>
+<p>Here is the request, wrapped in the loop it needs. The tool list holds code execution and one ordinary tool, <code>get_order</code>, here a stub that returns the same record every time. A comment marks the line that makes it work. It needs an API key:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
 
-<span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-    <span class="n">model</span><span class="o">=</span><span class="s2">"claude-opus-5"</span><span class="p">,</span>
-    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
-    <span class="n">tools</span><span class="o">=</span><span class="p">[</span>
-        <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"code_execution_20260120"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"code_execution"</span><span class="p">},</span>
-        <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"get_order"</span><span class="p">,</span>
-         <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Fetch one order by id. Returns total_cents and status."</span><span class="p">,</span>
-         <span class="s2">"input_schema"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"object"</span><span class="p">,</span>
-                          <span class="s2">"properties"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"order_id"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">}},</span>
-                          <span class="s2">"required"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">]},</span>
-         <span class="c1"># This is what makes the tool callable from inside code execution.</span>
-         <span class="s2">"allowed_callers"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"code_execution_20260120"</span><span class="p">]},</span>
-    <span class="p">],</span>
-    <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span>
-               <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Total the 400 orders in orders.txt and give me the mean."</span><span class="p">}],</span>
-<span class="p">)</span>
+<span class="n">TOOLS</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"code_execution_20260120"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"code_execution"</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"get_order"</span><span class="p">,</span>
+     <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"Fetch one order by id. Returns total_cents and status."</span><span class="p">,</span>
+     <span class="s2">"input_schema"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"object"</span><span class="p">,</span>
+                      <span class="s2">"properties"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"order_id"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">}},</span>
+                      <span class="s2">"required"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">]},</span>
+     <span class="c1"># This is what makes the tool callable from inside code execution.</span>
+     <span class="s2">"allowed_callers"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"code_execution_20260120"</span><span class="p">]},</span>
+<span class="p">]</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="s2">"stop_reason:"</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">stop_reason</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"answer     :"</span><span class="p">,</span> <span class="nb">next</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"text"</span><span class="p">))</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">get_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">):</span>
+    <span class="c1"># A stand-in for your real lookup: every order is 4,281 cents.</span>
+    <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">"order_id"</span><span class="p">:</span> <span class="n">order_id</span><span class="p">,</span> <span class="s2">"total_cents"</span><span class="p">:</span> <span class="mi">4281</span><span class="p">,</span> <span class="s2">"status"</span><span class="p">:</span> <span class="s2">"paid"</span><span class="p">})</span>
+
+
+<span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span>
+             <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Total orders ord_0001 to ord_0400 and give me the mean."</span><span class="p">}]</span>
+<span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">"claude-opus-5"</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+                                  <span class="n">tools</span><span class="o">=</span><span class="n">TOOLS</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">)</span>
+<span class="n">results_sent</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">while</span> <span class="n">response</span><span class="o">.</span><span class="n">stop_reason</span> <span class="o">==</span> <span class="s2">"tool_use"</span><span class="p">:</span>
+    <span class="c1"># The sandbox's code is paused, waiting for these results.</span>
+    <span class="n">calls</span> <span class="o">=</span> <span class="p">[</span><span class="n">b</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"tool_use"</span><span class="p">]</span>
+    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">})</span>
+    <span class="n">messages</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"tool_result"</span><span class="p">,</span> <span class="s2">"tool_use_id"</span><span class="p">:</span> <span class="n">b</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">get_order</span><span class="p">(</span><span class="o">**</span><span class="n">b</span><span class="o">.</span><span class="n">input</span><span class="p">)}</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">calls</span><span class="p">]})</span>
+    <span class="n">results_sent</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">calls</span><span class="p">)</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="s2">"claude-opus-5"</span><span class="p">,</span> <span class="n">max_tokens</span><span class="o">=</span><span class="mi">4096</span><span class="p">,</span>
+                                      <span class="n">tools</span><span class="o">=</span><span class="n">TOOLS</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="n">messages</span><span class="p">,</span>
+                                      <span class="n">container</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">container</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"tool results sent:"</span><span class="p">,</span> <span class="n">results_sent</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"stop_reason      :"</span><span class="p">,</span> <span class="n">response</span><span class="o">.</span><span class="n">stop_reason</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"answer           :"</span><span class="p">,</span> <span class="nb">next</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">content</span> <span class="k">if</span> <span class="n">b</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"text"</span><span class="p">))</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>stop_reason: end_turn
-answer     : The 400 orders total 1,712,400 cents; the mean is 42.81 EUR.
+<div class="highlight" data-lang="text"><pre><span></span><code>tool results sent: 400
+stop_reason      : end_turn
+answer           : The 400 orders total 1,712,400 cents; the mean is 42.81 EUR.
 </code></pre></div>
 
+<p>This is a loop, and here is why. Each time the model's code calls <code>get_order</code>, the code pauses inside the sandbox. The API returns <code>stop_reason: "tool_use"</code> with a <code>tool_use</code> block, just as in §6. That block also carries a <code>caller</code> field, which says the call came from code execution and not from the model directly. Your loop runs the function and sends back the results. Three details differ from §6.4:</p>
+<ul>
+<li>the user message carrying the results may hold only <code>tool_result</code> blocks;</li>
+<li>the request passes <code>container</code>, the id of the paused sandbox, so the code can resume;</li>
+<li>it sends the same <code>tools</code> as before.</li>
+</ul>
+<p>The code may ask for several orders at once, so one pause can carry many calls. The model is not asked to read any of the results. It writes the code at the start, and reads the code's printed summary at the end. In between, your loop and the sandbox trade results without the model. That is how the output above can say 400 results were sent and still be cheap.</p>
 <p><strong><code>allowed_callers: ["code_execution_20260120"]</code> is the whole switch.</strong> Without it the tool is callable only directly by the model, and with it the sandbox may call it too.</p>
+<p>Now the puzzle from the start of this section. The block below does the arithmetic for both ways of running the 400 lookups. Its numbers are set at the top:</p>
+<ul>
+<li>220 tokens for each order record;</li>
+<li>a 6,000-token conversation to start from;</li>
+<li>1.4 seconds per model turn;</li>
+<li>for ordinary tool use, a generous 8 calls per turn.</li>
+</ul>
+<p>For programmatic calling it assumes a 180-token summary, and the conversation sent twice: once to write the code, once to read the summary:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">N_CALLS</span> <span class="o">=</span> <span class="mi">400</span>
 <span class="n">RESULT_TOKENS</span> <span class="o">=</span> <span class="mi">220</span>          <span class="c1"># one order record coming back</span>
 <span class="n">BASE_CONTEXT</span> <span class="o">=</span> <span class="mi">6_000</span>
@@ -6245,7 +6607,7 @@ answer     : The 400 orders total 1,712,400 cents; the mean is 42.81 EUR.
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"input tokens billed     : </span><span class="si">{</span><span class="n">ordinary_billed</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">ptc_billed</span><span class="si">:</span><span class="s2">&gt;6.0f</span><span class="si">}</span><span class="s2">x fewer"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>model turns  peak context  input billed
+<div class="highlight" data-lang="text"><pre><span></span><code>                       model turns  peak context  input billed
 ordinary tool use               50        94,000     2,544,000
 programmatic                     2         6,180        12,180
 
@@ -6253,13 +6615,34 @@ latency from model turns:   70.0s  -&gt;   2.8s
 input tokens billed     :    209x fewer
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>Ordinary tool use takes 400 ÷ 8 = 50 turns. Its peak context is 6,000 + 400 × 220 = 94,000 tokens.</li>
+<li>It bills 2,544,000 input tokens, because every turn resends the whole conversation so far. Turn 1 sends 6,000 + 8 × 220 = 7,760 tokens, turn 50 sends 94,000, and the block adds up all fifty.</li>
+<li>Programmatic calling takes 2 turns. Its peak is 6,000 + 180 = 6,180, and it bills 6,000 × 2 + 180 = 12,180.</li>
+<li>In model time, 50 × 1.4 = 70.0 seconds becomes 2 × 1.4 = 2.8, and 2,544,000 ÷ 12,180 is about 209.</li>
+</ul>
+<p>Here is the puzzle's answer. The two and a half million tokens were never the lookups. They were the conversation being resent. In ordinary tool use, every result lands in the context window and is reread on every later turn. With programmatic tool calling, the 400 results stay in the sandbox. Your function still ran 400 times. The model just never read the results one by one. In the picture, the back-room clerk reads 400 reports, and the writer reads one total.</p>
+<p>The 209 is this example's arithmetic for the best case: one loop of identical lookups. Anthropic reports a smaller measured saving on mixed, realistic work, about 38% fewer billed input tokens on a 75-tool benchmark. The figure shows this example's two bills to scale:</p>
 <!-- fig:ai-ptc -->
 <figure id="fig-ai-ptc" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 400" role="img" aria-labelledby="t-ai-ptc d-ai-ptc" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-ptc">Programmatic tool calling: 400 calls, one summary</title><desc id="d-ai-ptc">Totalling 400 orders. With ordinary tool use it takes 50 model turns, a peak context of 94,000 tokens and 2,544,000 input tokens billed. With programmatic tool calling the loop runs in the sandbox: 2 model turns, 6,180 tokens of peak context and 12,180 input tokens billed, which is 209 times fewer.</desc><defs><marker id="ah-ai-ptc" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="36" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Ordinary tool use: results accumulate, the conversation is resent</text><rect x="20" y="48" width="440" height="30" rx="2" style="fill:#cf4b6c;fill-opacity:0.32;stroke:#cf4b6c;stroke-width:1.2"/><text x="472" y="68" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">2,544,000 input tokens billed</text><text x="20" y="102" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">50 model turns   ·   peak context 94,000   ·   70.0s in model turns</text><text x="20" y="170" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Programmatic: the loop runs in the sandbox</text><rect x="20" y="182" width="3" height="30" rx="2" style="fill:#35b37e;fill-opacity:0.32;stroke:#35b37e;stroke-width:1.2"/><text x="35" y="202" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">12,180 input tokens billed</text><text x="20" y="236" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">2 model turns   ·   peak context 6,180   ·   2.8s in model turns</text><rect x="12" y="288" width="696" height="52" rx="8" style="fill:#35b37e;fill-opacity:0.12"/><text x="360" y="320" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">209x fewer input tokens billed</text><text x="360" y="368" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">needs the code execution tool, and is incompatible with strict: true</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The loop runs where the tools are cheap to call. 209x fewer input tokens billed and 70.0s of model turns down to 2.8s.</figcaption></figure>
 <!-- /fig:ai-ptc -->
 
-<p>There are two constraints before you reach for it. It <strong>requires the code execution tool</strong>, which brings that tool's billing and its sandbox. And it is <strong>incompatible with <code>strict: true</code></strong> (§6.8), so a tool you want schema-guaranteed cannot also be programmatically callable, and you have to decide which property matters more for that tool.</p>
+<p>There are two constraints before you reach for it. It <strong>requires the code execution tool</strong>, which brings that tool's billing and its sandbox. And it is <strong>incompatible with <code>strict: true</code></strong> (§6.8), so a tool you want schema-guaranteed cannot also be programmatically callable, and you have to decide which property matters more for that tool. In the picture, §4's stencil fits over a slip the writer fills in. It cannot be laid over a slip that code in the back room fills in.</p>
 <h2 id="section-6-77-the-mcp-connector">7.7 The MCP Connector</h2>
-<p>The Model Context Protocol (MCP) is an open standard for exposing tools to a model. Its usual shape is a client you run that speaks to a <strong>remote MCP server</strong>. The <strong>MCP connector</strong> removes the client: you name a remote MCP server in <code>mcp_servers</code>, and Anthropic's infrastructure connects to it and calls its tools.</p>
+<p>The Model Context Protocol (MCP) is an open standard for exposing tools to a model. An <em>open standard</em> is a published set of rules that anyone may build to, the way anyone may build a web browser. MCP has two sides:</p>
+<ul>
+<li>a <em>server</em> offers tools;</li>
+<li>a <em>client</em> connects to the server and calls them.</li>
+</ul>
+<p>Its usual shape is a client you run that speaks to a <strong>remote MCP server</strong>, one running elsewhere on the network. The <strong>MCP connector</strong> removes the client: you name a remote MCP server in <code>mcp_servers</code>, and Anthropic's infrastructure connects to it and calls its tools. In the picture, a partner agency prints its own forms and runs its own clerks. The telegram office phones the agency for you, and you never deal with it directly.</p>
+<p>The request below connects to an issue tracker's MCP server and allows two of its tools. Three of its words are new:</p>
+<ul>
+<li><code>authorization_token</code> is the key the server expects, here a placeholder. <em>OAuth</em> is the common standard for issuing such keys.</li>
+<li><code>betas</code> switches on a feature that is still in <em>beta</em>: released for use, but still allowed to change.</li>
+<li><code>client.beta.messages.create</code> is the SDK's door to beta features.</li>
+</ul>
+<p>It needs an API key and a real server:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -6275,7 +6658,9 @@ input tokens billed     :    209x fewer
         <span class="s2">"authorization_token"</span><span class="p">:</span> <span class="s2">"OAUTH_TOKEN_HERE"</span><span class="p">,</span>
     <span class="p">}],</span>
     <span class="n">tools</span><span class="o">=</span><span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"mcp_toolset"</span><span class="p">,</span> <span class="s2">"mcp_server_name"</span><span class="p">:</span> <span class="s2">"issue-tracker"</span><span class="p">,</span>
-            <span class="s2">"allowed_tools"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"search_issues"</span><span class="p">,</span> <span class="s2">"get_issue"</span><span class="p">]}],</span>
+            <span class="s2">"default_config"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"enabled"</span><span class="p">:</span> <span class="kc">False</span><span class="p">},</span>
+            <span class="s2">"configs"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"search_issues"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"enabled"</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+                        <span class="s2">"get_issue"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"enabled"</span><span class="p">:</span> <span class="kc">True</span><span class="p">}}}],</span>
     <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"What is blocking the release?"</span><span class="p">}],</span>
 <span class="p">)</span>
 
@@ -6287,19 +6672,27 @@ input tokens billed     :    209x fewer
 answer     : Two issues are blocking: ENG-441 (auth migration) and ENG-455 (flaky deploy).
 </code></pre></div>
 
-<p>There are two components, and conflating them is the usual first mistake. <strong><code>mcp_servers</code></strong> declares the connection: URL, name and auth. <strong>A <code>mcp_toolset</code> entry in <code>tools</code></strong> declares which of that server's tools are enabled, with <code>allowed_tools</code> as an allowlist. A server declared but never referenced by a toolset contributes nothing.</p>
-<p>Two limitations to design around:</p>
-<p><strong>Only tool calls are supported.</strong> The MCP specification also covers resources, prompts and sampling, but the connector implements the tools portion. If your integration depends on MCP resources, the connector is not the mechanism.</p>
-<p><strong>A remote MCP server must be reachable over HTTP</strong>, using Streamable HTTP or SSE. A local STDIO server cannot be connected this way. That is how most MCP servers are developed and how Claude Code runs them, so the difference catches people moving a working local setup into an API integration.</p>
-<p>And here is the consideration that outranks both: <strong>an MCP server is third-party code defining tools whose descriptions enter your model's context.</strong> A compromised or hostile server can describe a tool in terms designed to make the model call it with data from your conversation. <code>allowed_tools</code> is the control. Enumerate what you permit and do not accept whatever the server offers, so that a server that grows a new tool tomorrow does not silently acquire a place in your prompt.</p>
+<p>There are two components, and conflating them is the usual first mistake.</p>
+<ul>
+<li><strong><code>mcp_servers</code></strong> declares the connection: URL, name and auth.</li>
+<li><strong>A <code>mcp_toolset</code> entry in <code>tools</code></strong> declares which of that server's tools are enabled. Its allowlist takes two settings. <code>default_config</code> with <code>"enabled": False</code> switches every tool off, and <code>configs</code> switches the named tools back on.</li>
+</ul>
+<p>A server declared but never referenced by a toolset contributes nothing. In the picture, you have the agency's phone number, but you have not said which of its forms you accept.</p>
+<p>There are two limitations to design around.</p>
+<p><strong>Only tool calls are supported.</strong> The MCP specification also covers resources, prompts and sampling, other things a server can offer besides tools, but the connector implements the tools portion. If your integration depends on MCP resources, the connector is not the mechanism.</p>
+<p><strong>A remote MCP server must be reachable over HTTP</strong>, using Streamable HTTP or SSE. <em>HTTP</em> is the protocol web pages travel over, and SSE and Streamable HTTP are two ways of sending a reply over it in pieces. A local STDIO server cannot be connected this way. <em>STDIO</em> means standard input and output: the server runs on your own machine, and a program talks to it by writing to its input and reading its output. That is how most MCP servers are developed and how Claude Code runs them, so the difference catches people moving a working local setup into an API integration.</p>
+<p>And here is the consideration that outranks both: <strong>an MCP server is third-party code defining tools whose descriptions enter your model's context.</strong> A compromised or hostile server can describe a tool in terms designed to make the model call it with data from your conversation. In the picture, the agency writes the printed instructions on its own forms, and the writer reads them as trustingly as yours. The allowlist is the control. Enumerate what you permit and do not accept whatever the server offers. With every tool off by default, a server that grows a new tool tomorrow does not silently acquire a place in your prompt.</p>
 <h2 id="section-6-78-agent-skills">7.8 Agent Skills</h2>
-<p>A Skill is not a tool. It is a <strong>directory</strong> of instructions, reference files and executable scripts that the model reads from a filesystem when it decides the task calls for it. The mechanism that makes this efficient has a name worth knowing: <strong>progressive disclosure</strong>, which means the model sees a short description first and loads more only when it needs it.</p>
+<p>A Skill is not a tool. It is a <strong>directory</strong> of instructions, reference files and executable scripts that the model reads from a filesystem when it decides the task calls for it. A <em>directory</em> is a folder, and a <em>filesystem</em> is the set of folders and files on a computer. The mechanism that makes this efficient has a name worth knowing: <strong>progressive disclosure</strong>, which means the model sees a short description first and loads more only when it needs it.</p>
+<p>In the picture, a Skill is a binder on the writer's shelf. The writer can always read the spine label. The writer opens the binder only when a letter calls for it. The appendices at the back are read only when the chapter points to them.</p>
+<p>The grid gives the three levels. <em>YAML frontmatter</em> is a few lines of <code>name: value</code> settings at the top of the file, and <code>SKILL.md</code> is the file every Skill starts from:</p>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">Level 1 — metadata</div><div><strong>Always loaded, about 100 tokens per Skill.</strong> Just <code>name</code> and <code>description</code> from the YAML frontmatter. This is what the model matches your request against.</div>
 <div style="font-weight:600;color:#35b37e">Level 2 — instructions</div><div><strong>Loaded when the Skill triggers, under 5k tokens.</strong> The body of <code>SKILL.md</code>: workflows, conventions, gotchas.</div>
 <div style="font-weight:600;color:#d9a441">Level 3 — resources</div><div><strong>Nothing until read.</strong> Bundled files the instructions point at. Reference files cost tokens when opened; <em>scripts</em> run through bash, so only their output enters context, never their source.</div>
 </div>
 
+<p>The block below prices five Skills at each level. Its sizes are examples chosen within the grid's limits, in tokens. It then totals three cases: metadata only, one Skill triggered, and everything loaded at once:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">SKILLS</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"pdf-processing"</span><span class="p">,</span> <span class="mi">104</span><span class="p">,</span> <span class="mi">3_900</span><span class="p">,</span> <span class="mi">12_000</span><span class="p">),</span>
           <span class="p">(</span><span class="s2">"brand-voice"</span><span class="p">,</span> <span class="mi">92</span><span class="p">,</span> <span class="mi">2_100</span><span class="p">,</span> <span class="mi">4_500</span><span class="p">),</span>
           <span class="p">(</span><span class="s2">"xlsx"</span><span class="p">,</span> <span class="mi">118</span><span class="p">,</span> <span class="mi">4_400</span><span class="p">,</span> <span class="mi">26_000</span><span class="p">),</span>
@@ -6334,8 +6727,15 @@ if everything were loaded eagerly :  83,198 tokens
 ratio                             :     167x
 </code></pre></div>
 
-<p><strong>Progressive disclosure is what lets you install many Skills</strong>, and the metadata cost is the whole of the argument. Five Skills cost about half a thousand tokens until one of them is needed. That is the entire architectural argument. It is also why the <code>description</code> is the most important line in a Skill: it is the only thing the model sees when deciding whether to look further, so it must say <strong>what the Skill does and when to use it</strong>, and not just what it is about.</p>
-<p>In the API, Skills run inside code execution and are named in the <code>container</code> parameter.</p>
+<p>Line by line:</p>
+<ul>
+<li>The table lists each Skill's three levels. The metadata column is about 100 tokens each, and the bodies are all under 5,000.</li>
+<li><code>always in context</code> adds the five metadata entries: 104 + 92 + 118 + 88 + 96 = 498.</li>
+<li><code>one skill triggered</code> adds <code>pdf-processing</code>'s body to that: 498 + 3,900 = 4,398.</li>
+<li><code>if everything were loaded eagerly</code> adds every column of every row, 83,198, which is 167 times the metadata alone.</li>
+</ul>
+<p><strong>Progressive disclosure is what lets you install many Skills</strong>, and the metadata cost is the whole of the argument. Five Skills cost about half a thousand tokens until one of them is needed. It is also why the <code>description</code> is the most important line in a Skill. It is the only thing the model sees when deciding whether to look further, so it must say <strong>what the Skill does and when to use it</strong>, and not just what it is about. In the picture, a spine label that says "Finance" gets the binder opened at the wrong time. "How to close the month's accounts; use when asked to reconcile" gets it opened at the right one.</p>
+<p>In the API, Skills run inside code execution and are named in the <code>container</code> parameter. The <em>container</em> is the sandbox from §7.6. The request below asks for Anthropic's own <code>pptx</code> Skill, which makes PowerPoint decks. It needs an API key:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -6358,23 +6758,25 @@ ratio                             :     167x
 answer     : I have built a five-slide deck covering incident volume, mean time to recovery and the top three causes.
 </code></pre></div>
 
-<p><strong>Skills require the code execution tool</strong>, because the filesystem they live on is that sandbox. You can use up to 20 Skills per request. The shape is identical for Anthropic-provided Skills (<code>pptx</code>, <code>xlsx</code>, <code>docx</code>, <code>pdf</code>) and custom ones you upload, and only <code>type</code> differs.</p>
-<p><strong>Pin the version in production.</strong> <code>"version": "latest"</code> is convenient, and it means the Skill's instructions can change underneath a prompt you evaluated last month. §13's <strong>regression suite</strong> cannot protect you from a dependency that updates itself. A regression suite compares your system against its own past behaviour, and it has no way to attribute a change to a Skill that silently updated.</p>
+<p><strong>Skills require the code execution tool</strong>, because the filesystem they live on is that sandbox. You can use up to 20 Skills per request. The shape is identical for Anthropic-provided Skills (<code>pptx</code>, <code>xlsx</code>, <code>docx</code>, <code>pdf</code>) and custom ones you upload. <code>type</code> says which kind it is: <code>anthropic</code> or <code>custom</code>.</p>
+<p><strong>Pin the version in production.</strong> <em>In production</em> means in the real system your users rely on. <code>"version": "latest"</code> is convenient, and it means the Skill's instructions can change underneath a prompt you evaluated last month. Anthropic's Skills also have dated versions, such as <code>20251013</code>, and a dated version does not change. §13's <strong>regression suite</strong> cannot protect you from a dependency that updates itself. A regression suite compares your system against its own past behaviour, and it has no way to attribute a change to a Skill that silently updated. In the picture, you would not judge a writer's letters this month against last month's if someone had swapped the binder for a new edition in between.</p>
+<p>The figure sums up the three levels, with the totals from the block above:</p>
 <!-- fig:ai-skills-levels -->
 <figure id="fig-ai-skills-levels" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 470" role="img" aria-labelledby="t-ai-skills-levels d-ai-skills-levels" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-skills-levels">Progressive disclosure: what a Skill costs at each level</title><desc id="d-ai-skills-levels">Three levels. Level one, metadata, is always loaded at about a hundred tokens per skill. Level two, the SKILL.md instructions, loads when the skill triggers, under five thousand tokens. Level three, bundled resources, costs nothing until read. For five skills, everything loaded would be 83,198 tokens; the metadata alone is 498, and triggering one skill brings it to 4,398.</desc><defs><marker id="ah-ai-skills-levels" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="13" y="20" width="210" height="96" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="118" y="55.4375" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Level 1: metadata</text><text x="118" y="74.3875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">name and description,</text><text x="118" y="89.3375" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">about 100 tokens each</text><rect x="28" y="128" width="180" height="24" rx="12" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="118" y="143.74" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text);opacity:1">always loaded</text><rect x="249" y="20" width="210" height="96" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="354" y="55.4375" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Level 2: instructions</text><text x="354" y="74.3875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">the SKILL.md body,</text><text x="354" y="89.3375" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">under 5k tokens</text><rect x="264" y="128" width="180" height="24" rx="12" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="354" y="143.74" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text);opacity:1">when the skill triggers</text><rect x="485" y="20" width="210" height="96" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="590" y="55.4375" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">Level 3: resources</text><text x="590" y="74.3875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">bundled files, scripts;</text><text x="590" y="89.3375" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">script source never loads</text><rect x="500" y="128" width="180" height="24" rx="12" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="590" y="143.74" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text);opacity:1">nothing until read</text><text x="20" y="200" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">FIVE SKILLS, IN TOKENS</text><text x="20" y="238" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">everything loaded up front</text><rect x="250" y="220" width="300" height="30" rx="2" style="fill:#cf4b6c;fill-opacity:0.3;stroke:#cf4b6c;stroke-width:1.2"/><text x="560" y="240" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">83,198</text><text x="20" y="300" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">one skill triggered</text><rect x="250" y="282" width="15.8586" height="30" rx="2" style="fill:#35b37e;fill-opacity:0.3;stroke:#35b37e;stroke-width:1.2"/><text x="275.859" y="302" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">4,398</text><text x="20" y="362" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">metadata only, always resident</text><rect x="250" y="344" width="4" height="30" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="264" y="364" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">498</text><text x="360" y="438" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">a Skill is for knowledge; a tool is for action</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Five skills: 83,198 tokens if loaded up front, 498 always resident, 4,398 with one triggered.</figcaption></figure>
 <!-- /fig:ai-skills-levels -->
 
 <h2 id="section-6-79-choosing-between-them">7.9 Choosing Between Them</h2>
-<p>These mechanisms overlap enough that the choice is genuinely unclear in places. The question that resolves most cases is: <strong>what is the thing you actually have?</strong></p>
+<p>These mechanisms overlap enough that the choice is genuinely unclear in places. The question that resolves most cases is: <strong>what is the thing you actually have?</strong> In the picture: is it an errand only your clerk can run, one the office runs, an agency's form, or a binder of know-how?</p>
 <div style="display:grid;grid-template-columns:200px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">A function in your code</div><div><strong>A client tool</strong> (§6). Add <code>allowed_callers</code> if it will be called in bulk; add <code>strict</code> if a bad argument is expensive. You cannot have both.</div>
 <div style="font-weight:600;color:#35b37e">A capability Anthropic runs</div><div><strong>A server tool.</strong> Bound it with <code>max_uses</code> and, where it reaches the network, with <code>allowed_domains</code>.</div>
-<div style="font-weight:600;color:#d9a441">A service with an MCP server</div><div><strong>The MCP connector</strong>, with <code>allowed_tools</code> enumerated. Saves you writing and maintaining an integration.</div>
+<div style="font-weight:600;color:#d9a441">A service with an MCP server</div><div><strong>The MCP connector</strong>, with every tool you allow enabled by name. Saves you writing and maintaining an integration.</div>
 <div style="font-weight:600;color:#7c8cff">Knowledge, not an action</div><div><strong>A Skill.</strong> "How we write incident reviews", "our SQL conventions", "the steps for a release". If the answer is a procedure rather than a call, a Skill is the shape.</div>
-<div style="font-weight:600;color:#e06c75">Too many tools to load</div><div><strong>Tool search</strong>, in the hundreds. Below that, consolidate instead (§6.10).</div>
+<div style="font-weight:600;color:#e06c75">Too many tools to load</div><div><strong>Tool search</strong>, from about ten tools or 10k tokens of definitions. Consolidate first (§6.10).</div>
 </div>
 
 <p>The distinction people most often get wrong is the fourth. <strong>A Skill is for knowledge, and a tool is for action.</strong> "Generate a PowerPoint" feels like a tool and is a Skill, because what the model needs is not a function to call but a procedure to follow plus a library to use. Conversely, "look up an order" feels like it could be documented as knowledge and is a tool, because it requires reaching a system only your code can reach.</p>
+<p>Back to the picture one last time. Your clerk runs the errands only you can run (§6). The office's desk runs search, fetch, code and tool lookups, and pauses when its shift ends. A partner agency runs its own forms, if you allow them. Binders on the shelf teach the writer how things are done here. In every case, you still decide what the office may do on your behalf.</p>
 <h2 id="section-6-exercises">Exercises</h2>
 <p><strong>Exercise 7.1 — Bound a research agent.</strong> You are building an agent that answers questions about competitors using web search and web fetch. It handles 500 questions a day. Configure the tools, and compute the monthly cost of the server-tool fees alone.</p>
 <details>
@@ -6475,7 +6877,7 @@ e  spreadsheet to chart deck         -&gt; Skill (+ code execution)
 <p><strong>(a) is the trap, and it is the most useful one in the list.</strong> "Format currency" is a perfectly plausible tool definition, and building it means every formatted number costs a model round trip and can be got wrong. If a task is deterministic and local, it does not belong to the model at all. The general rule is this: <strong>before asking which mechanism, ask whether the model should be involved.</strong></p>
 <p><strong>(b) is a client tool and nothing else can be.</strong> No server tool reaches your subscription table, no MCP server exists for it, and no amount of instruction lets the model know the answer. This is the ordinary case, and it is most of production traffic.</p>
 <p><strong>(c) is the clearest Skill.</strong> There is nothing to execute. What the model lacks is your team's conventions: what you check, in what order, and what you always miss. Note that this could be a system prompt instead. The reason to prefer a Skill is §7.8's arithmetic: as knowledge it is only loaded when a review is actually happening, whereas a system prompt is present on every request forever.</p>
-<p><strong>(d) is MCP because the work is already done.</strong> You <em>could</em> write three client tools against Linear's REST API. The connector is the same capability without the maintenance, and <code>allowed_tools</code> lets you enable exactly <code>create_issue</code> and <code>add_comment</code> and not the server's whole surface.</p>
+<p><strong>(d) is MCP because the work is already done.</strong> You <em>could</em> write three client tools against Linear's REST API. The connector is the same capability without the maintenance, and its allowlist (<code>default_config</code> off, <code>configs</code> enabling exactly <code>create_issue</code> and <code>add_comment</code>) keeps out the rest of the server's surface.</p>
 <p><strong>(e) is the one that most often gets built wrong.</strong> The instinct is a <code>make_presentation(data)</code> tool, which means writing and maintaining slide-generation code and a schema rich enough to express a deck. The Skill approach gives the model the procedure and the library and lets it write the code in the sandbox. That is far more flexible, and it is already built.</p>
 <p><strong>The pattern.</strong> Ask what is missing. Missing <em>reach</em> into a system is a tool. Missing <em>knowledge</em> of how you do things is a Skill. Missing <em>an integration someone else maintains</em> is MCP. Missing nothing is a function call in your own code.</p>
 </details>
@@ -6520,7 +6922,7 @@ e  spreadsheet to chart deck         -&gt; Skill (+ code execution)
       <span class="sa">f</span><span class="s2">"input tokens, </span><span class="si">{</span><span class="n">ordinary</span><span class="p">(</span><span class="mi">400</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> turns -&gt; 2"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>calls   ordinary tokens  turns   ptc tokens  turns      winner
+<div class="highlight" data-lang="text"><pre><span></span><code>  calls   ordinary tokens  turns   ptc tokens  turns      winner
       2             7,760      1       12,900      2  ordinary    
       5             7,760      1       12,900      2  ordinary    
      10            17,280      2       12,900      2  programmatic
@@ -12048,7 +12450,7 @@ what distinguishes them:
 <li><strong>Constrain output instead of requesting it.</strong> Use JSON outputs and strict tools. Know what the grammar can and cannot express, and the three places the guarantee stops: truncation, refusal and enum capitalisation.</li>
 <li><strong>Spend reasoning on purpose.</strong> Use adaptive thinking, and use effort as the dial that scales tool calls as well as tokens. Treat <code>display</code> as a latency lever and not a cost one. Follow the round-trip rule that makes thinking blocks work with tools.</li>
 <li><strong>Give a model tools without giving it your database.</strong> Write descriptions that say what a tool does <em>not</em> do. Use a loop that iterates every block and branches on every stop reason. Return errors as instructions, and know parallel calls, <code>tool_choice</code> and strict inputs. Size the tool surface by selection accuracy and not by tokens.</li>
-<li><strong>Use the capabilities you do not have to build.</strong> Use server tools and the <code>pause_turn</code> contract, and web search and fetch with their limits set. Use tool search for a surface in the hundreds, programmatic tool calling for bulk work, MCP for integrations someone else maintains, and Skills for knowledge and not for action.</li>
+<li><strong>Use the capabilities you do not have to build.</strong> Use server tools and the <code>pause_turn</code> contract, and web search and fetch with their limits set. Use tool search once definitions run past about ten tools or 10k tokens, programmatic tool calling for bulk work, MCP for integrations someone else maintains, and Skills for knowledge and not for action.</li>
 <li><strong>Put non-text into the window knowingly.</strong> Visual tokens can be computed exactly. PDFs are handled as images, with a page limit that never binds. The Files API is for payload and not for saving tokens. And citations make an unsupported claim detectable by code.</li>
 <li><strong>Engineer the context.</strong> Know the prefix rule and where breakpoints go, and the invalidators that produce a silent tenfold cost increase. Use tool-result clearing with <code>clear_at_least</code> set from arithmetic, and compaction and the billing that moves with it. Treat memory as a different problem that only looks similar.</li>
 <li><strong>Retrieve the right passage.</strong> Know when not to build a pipeline at all. Chunk so that a rule stays with its heading. Use BM25 (keyword ranking), which finds error codes, and embeddings (numeric fingerprints of meaning), which find paraphrases. Use fusion that rewards agreement, and reranking that lets you send fewer chunks. And use an evaluation that separates a retrieval failure from a generation one.</li>
