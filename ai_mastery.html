@@ -2267,15 +2267,100 @@ itself is the bill, which is what compaction (9.7) is for
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-0">← Back</button><button class="btn-next" data-next="section-2">Next: Prompt Engineering →</button></div>
 </section>
-<section class="course-section" id="section-2" data-section-id="section-2"><div class="section-header-meta">  <span class="section-tag">SECTION 3</span>  <button class="btn-complete" data-complete="section-2"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Prompt Engineering</h1><p>Prompt engineering has an unfortunate reputation, and half of it is earned. There is a version that is superstition: magic phrases, threats, offers of tips. And there is a version that is ordinary technical writing under an unusual constraint. Your reader is extremely capable, has no context about your organisation, cannot ask a clarifying question, and will do exactly what you asked and not what you meant.</p>
+<section class="course-section" id="section-2" data-section-id="section-2"><div class="section-header-meta">  <span class="section-tag">SECTION 3</span>  <button class="btn-complete" data-complete="section-2"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Prompt Engineering</h1><p>Start with a puzzle. A shop's support program sends Claude this <em>prompt</em>, which is the text you send a model to tell it what to do:</p>
+<blockquote>
+<p>You are a support agent. Here is the policy: Acme refunds within 30 days. Before refunding, staff answer this question: is the item perishable? Perishables excluded.</p>
+<p>Answer this question: Can I return the cheese I bought last week?</p>
+<p>Be concise.</p>
+</blockquote>
+<p>Which question is the customer asking? You can tell, because you know what a refund policy usually looks like. Now imagine a reader who cannot tell, and who simply takes whatever follows the first "answer this question:". That reader answers <em>"is the item perishable?"</em>, and never sees the customer's question at all. Guess what one change to the prompt would stop that. §3.2 runs both versions, and shows the change.</p>
+<p>That puzzle is the whole subject in small. <strong>Prompt engineering</strong> is the craft of writing prompts that make a model do what you want. It has an unfortunate reputation, and half of it is earned:</p>
+<ul>
+<li>One version is superstition: magic phrases, threats to the model, offers of tips.</li>
+<li>The other version is ordinary technical writing under an unusual constraint.</li>
+</ul>
+<p>The constraint is your reader. Your reader is extremely capable. It has no context about your organisation. It cannot ask a clarifying question. And it will do exactly what you asked, not what you meant.</p>
 <p>The second version is what this section teaches, and it has one governing test.</p>
 <blockquote>
 <p><strong>Show your prompt to a colleague with no context on the task and ask them to follow it. If they would be confused, so is the model.</strong></p>
 </blockquote>
-<p>That test resolves most prompting questions without any theory. It also explains why the techniques below are unglamorous: they are the things that make a specification unambiguous.</p>
-<p><strong>One prerequisite, from §13.</strong> Prompt engineering assumes you have success criteria and a way to test against them. Without an eval (a repeatable test of how well the system does its job), you are not engineering. You are guessing, and remembering the guesses that felt good. If you have not read §13, the honest order is to build the eval first.</p>
+<p>That test resolves most prompting questions without any theory. It also explains why the techniques below are unglamorous. They are the things that make a <em>specification</em>, a written description of exactly what you want, unambiguous.</p>
+<p><strong>One prerequisite, from §13.</strong> Prompt engineering assumes you have success criteria, meaning a written description of what a good answer is, and a way to test against them. Without an eval (a repeatable test of how well the system does its job), you are not engineering. You are guessing, and remembering the guesses that felt good. If you have not read §13, the honest order is to build the eval first.</p>
+<p>This section is ten techniques, in four parts:</p>
+<ol>
+<li>saying what you want: clear instructions, tags, examples and roles (§3.1 to §3.4);</li>
+<li>shaping what comes back: format, and the old trick that no longer works (§3.5, §3.6);</li>
+<li>arranging long prompts and multi-step work (§3.7 to §3.9);</li>
+<li>one template that puts it all together (§3.10).</li>
+</ol>
+<p>Here is the picture for the whole section. In §1 you met the model as a ghostwriter you can only reach by telegram, and in §2 you filled in the telegram office's order form. This section is about the most important box on that form: <strong>the brief you send the ghostwriter</strong>. Picture the writer as brilliant, but brand new. They have never heard of your shop. They cannot telegraph back to ask what you meant. They will write exactly what the brief says.</p>
+<p>Every part of this section has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>In the brief to the ghostwriter</th>
+<th>In prompt engineering</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Saying exactly what you want, and why you want it</td>
+<td>clear, direct instructions that give the reason</td>
+<td>§3.1</td>
+</tr>
+<tr>
+<td>Headed parts of the brief: "INSTRUCTIONS", "POLICY", "QUESTION"</td>
+<td>XML tags</td>
+<td>§3.2</td>
+</tr>
+<tr>
+<td>Sample letters pinned to the brief, awkward ones included</td>
+<td>few-shot examples</td>
+<td>§3.3</td>
+</tr>
+<tr>
+<td>"Write this as the shop's support clerk"</td>
+<td>a role in the system prompt</td>
+<td>§3.4</td>
+</tr>
+<tr>
+<td>Describing the page you want back</td>
+<td>format instructions</td>
+<td>§3.5</td>
+</tr>
+<tr>
+<td>Writing the first words of the reply yourself, which the office now refuses</td>
+<td>prefill, now a 400 error</td>
+<td>§3.6</td>
+</tr>
+<tr>
+<td>A thick file of enclosures, with the question on the last line</td>
+<td>where things go in a long prompt</td>
+<td>§3.7</td>
+</tr>
+<tr>
+<td>A second writer who checks the draft against a checklist</td>
+<td>prompt chaining</td>
+<td>§3.8</td>
+</tr>
+<tr>
+<td>A writer with clerks: "do it, keep it small, tidy up after"</td>
+<td>steering a model that uses tools</td>
+<td>§3.9</td>
+</tr>
+<tr>
+<td>The office's printed brief form, with the standard parts kept on file</td>
+<td>a prompt template that works with caching</td>
+<td>§3.10</td>
+</tr>
+</tbody>
+</table>
+<p>Almost every example in this section is plain Python. Prompts are just text, so most of what makes a prompt good or bad can be shown by building the text and printing it. Nothing here calls the API, so every example prints the same thing on every machine.</p>
 <h2 id="section-2-31-be-clear-and-direct">3.1 Be Clear and Direct</h2>
-<p>The most common defect in a real prompt is not a missing technique. The prompt simply does not say what it wants, and no amount of prompt engineering compensates for an instruction that never named its target.</p>
+<p>The most common defect in a real prompt is not a missing technique. The prompt simply does not say what it wants. No amount of prompt engineering makes up for an instruction that never named its target.</p>
+<p>In the picture, this is the brief that says "write something about our dashboard" and hopes the writer guesses the rest.</p>
+<p>The example below lists four real instructions, in two pairs. The first pair asks for a dashboard, once vaguely and once explicitly. The second pair bans ellipses (the "..." mark), once with no reason and once with the reason. The program prints each instruction's length in words, and compares the two dashboard versions:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">PROMPTS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"Create an analytics dashboard."</span><span class="p">,</span> <span class="s2">"vague"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"Create an analytics dashboard. Include as many relevant features and "</span>
@@ -2308,12 +2393,25 @@ class of under-delivery; the motivated version generalises to en-dashes,
 emoji and anything else the engine cannot pronounce
 </code></pre></div>
 
-<p>Two principles are doing the work there.</p>
-<p><strong>Ask for what you want, including "above and beyond".</strong> A model given a vague brief produces a reasonable minimum. If you want a thorough implementation, say so. The model will not infer it from your tone.</p>
-<p><strong>Give the reason, not just the rule.</strong> <em>"Never use ellipses"</em> is a rule the model follows literally. <em>"…because a text-to-speech engine cannot pronounce them"</em> is a rule the model can <strong>generalise from</strong>. It will also avoid the em-dash, the emoji and the ASCII table that would have had the same problem. Explaining why is the single highest-leverage habit in this section, and it costs one clause.</p>
-<p><strong>Use numbered steps when order or completeness matters.</strong> A list makes omission visible, both to you when you write it and to the model when it works through it. Most of prompt engineering is this unglamorous. The techniques in the rest of this section are ways of being unambiguous, and not ways of being persuasive.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li><code>vague</code> is 4 words: "Create an analytics dashboard." It names the thing and nothing else.</li>
+<li><code>explicit</code> is 22 words. It adds what "good" means here: as many relevant features as possible, beyond the basics.</li>
+<li><code>unmotivated</code> is 3 words: a rule with no reason.</li>
+<li><code>motivated</code> is 24 words. It is the same rule, plus the reason: a <em>text-to-speech engine</em>, a program that reads text aloud, will read the reply.</li>
+<li>The last lines do the arithmetic: 22 words against 4 is 5.5 times longer.</li>
+</ul>
+<p>Five and a half times longer sounds expensive. It is eighteen extra words, and they change what the model builds. Two principles are doing the work there.</p>
+<p><strong>Ask for what you want, including "above and beyond".</strong> A model given a vague brief produces a reasonable minimum. If you want a thorough implementation, say so. The model will not infer it from your tone. In the picture, the ghostwriter cannot hear you sigh. If you want four pages and not one, the brief must say four pages.</p>
+<p><strong>Give the reason, not just the rule.</strong> <em>"Never use ellipses"</em> is a rule the model follows literally. <em>"…because a text-to-speech engine cannot pronounce them"</em> is a rule the model can <strong>generalise from</strong>, which means apply to cases the rule never named. It will also avoid the em-dash (the long dash —), the emoji and the ASCII table (a table drawn with plain keyboard characters), which would have had the same problem. Explaining why is the single highest-leverage habit in this section, and it costs one clause.</p>
+<p>Think of it this way. Tell the ghostwriter "no ellipses", and you get a reply with no ellipses and three emoji. Tell them "this will be read aloud on the radio", and they avoid everything a radio announcer cannot say.</p>
+<p><strong>Use numbered steps when order or completeness matters.</strong> A list makes omission visible. You see the missing step when you write it, and the model sees it when it works through it.</p>
+<p>Most of prompt engineering is this unglamorous. The techniques in the rest of this section are ways of being unambiguous, and not ways of being persuasive.</p>
 <h2 id="section-2-32-xml-tags">3.2 XML Tags</h2>
-<p>Once a prompt mixes instructions, context, examples and variable input, the model has to work out which is which. XML tags (labels like <code>&lt;document&gt;</code> wrapped around each part) remove the ambiguity, and they are the closest thing this subject has to a universally applicable technique.</p>
+<p>Once a prompt mixes instructions, context, examples and variable input, the model has to work out which part is which. <em>Variable input</em> is the part that changes on every request, such as the customer's question.</p>
+<p>XML tags remove the ambiguity. An XML tag is a label in angle brackets, like <code>&lt;document&gt;</code>, wrapped around one part of the prompt: an opening tag before the part, and a closing tag with a slash, like <code>&lt;/document&gt;</code>, after it. They are the closest thing this subject has to a universally applicable technique.</p>
+<p>In the picture, tags are the headings on the brief. "POLICY" at the top of one part, "QUESTION" at the top of another, so the writer never has to guess where one ends and the next begins.</p>
+<p>The example below builds the same support prompt two ways. The <em>flat</em> version runs everything together in one paragraph. The <em>tagged</em> version puts the instructions, the policy and the question each inside their own tags. It prints both:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">CONTEXT</span> <span class="o">=</span> <span class="s2">"Acme refunds within 30 days. Perishables excluded."</span>
 <span class="n">QUESTION</span> <span class="o">=</span> <span class="s2">"Can I return the cheese I bought last week?"</span>
 
@@ -2366,14 +2464,71 @@ in the flat version, where does the policy end and the question begin?
 a policy containing the words 'answer this question' would merge them
 </code></pre></div>
 
-<p><strong>Delimiters are a correctness property, not tidiness.</strong> A delimiter is a marker that separates one part of the prompt from another. The flat prompt works until a document contains a sentence that looks like an instruction. §14.2 shows that this is not merely an accident waiting to happen but an <em>attack</em>. Tagging your own prompt is the same discipline that makes untrusted content safe to include.</p>
-<p>Two conventions are worth adopting. <strong>Use the same tag names across your prompts</strong>, so a change of wording never changes structure. And <strong>nest when the content has a hierarchy</strong>: documents go inside <code>&lt;documents&gt;</code>, each in <code>&lt;document index="n"&gt;</code> with <code>&lt;source&gt;</code> and <code>&lt;document_content&gt;</code> subtags.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li>The flat version is three lines. The policy and the question sit next to each other with nothing between them but a full stop.</li>
+<li>The tagged version wraps each part in a pair of tags: <code>&lt;instructions&gt;</code> and <code>&lt;/instructions&gt;</code>, then <code>&lt;policy&gt;</code> and <code>&lt;/policy&gt;</code>, then <code>&lt;question&gt;</code> and <code>&lt;/question&gt;</code>.</li>
+<li>The last two lines ask the question that matters. In the flat version, nothing marks where the policy ends.</li>
+</ul>
+<p>Here is that last line made real. This is the opening puzzle. Its policy contains the words "answer this question:", the exact phrase the flat prompt uses to introduce the customer's question.</p>
+<p>A real model is far cleverer than the two little functions below. But they show the problem the model faces. <code>question_in_flat</code> reads the flat prompt the only way it can: the question is whatever follows the first "answer this question:". <code>question_in_tagged</code> reads the tagged prompt: the question is whatever sits between the <code>&lt;question&gt;</code> tags. The program prints the question each one finds:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">POLICY</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"Acme refunds within 30 days. Before refunding, staff answer this "</span>
+          <span class="s2">"question: is the item perishable? Perishables excluded."</span><span class="p">)</span>
+<span class="n">QUESTION</span> <span class="o">=</span> <span class="s2">"Can I return the cheese I bought last week?"</span>
+
+<span class="n">flat</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"""You are a support agent. Here is the policy: </span><span class="si">{</span><span class="n">POLICY</span><span class="si">}</span>
+<span class="s2">Answer this question: </span><span class="si">{</span><span class="n">QUESTION</span><span class="si">}</span>
+<span class="s2">Be concise."""</span>
+
+<span class="n">tagged</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"""&lt;policy&gt;</span>
+<span class="si">{</span><span class="n">POLICY</span><span class="si">}</span>
+<span class="s2">&lt;/policy&gt;</span>
+
+<span class="s2">&lt;question&gt;</span>
+<span class="si">{</span><span class="n">QUESTION</span><span class="si">}</span>
+<span class="s2">&lt;/question&gt;"""</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">question_in_flat</span><span class="p">(</span><span class="n">prompt</span><span class="p">):</span>
+    <span class="c1"># the question is whatever follows the first "answer this question:"</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">prompt</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"answer this question:"</span><span class="p">)</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="s2">"answer this question:"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">prompt</span><span class="p">[</span><span class="n">start</span><span class="p">:]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"?"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">+</span> <span class="s2">"?"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">question_in_tagged</span><span class="p">(</span><span class="n">prompt</span><span class="p">):</span>
+    <span class="c1"># the question is whatever sits between the &lt;question&gt; tags</span>
+    <span class="k">return</span> <span class="n">prompt</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"&lt;question&gt;</span><span class="se">\n</span><span class="s2">"</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">&lt;/question&gt;"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"flat  :"</span><span class="p">,</span> <span class="n">question_in_flat</span><span class="p">(</span><span class="n">flat</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"tagged:"</span><span class="p">,</span> <span class="n">question_in_tagged</span><span class="p">(</span><span class="n">tagged</span><span class="p">))</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>flat  : is the item perishable?
+tagged: Can I return the cheese I bought last week?
+</code></pre></div>
+
+<p>Read the two lines:</p>
+<ul>
+<li><code>flat</code> found "is the item perishable?". That is the staff's question from inside the policy, not the customer's. The first "answer this question:" in the prompt belongs to the policy, so the reader stopped there.</li>
+<li><code>tagged</code> found the customer's real question, because the tags say exactly where it starts and ends.</li>
+</ul>
+<p>That is the answer to the opening puzzle. The one change is tags. The words of the policy did not change at all. Only the markers around them did.</p>
+<p><strong>Delimiters are a correctness property, not tidiness.</strong> A <em>delimiter</em> is a marker that separates one part of the prompt from another, and a tag is one kind. The flat prompt works until a document contains a sentence that looks like an instruction, exactly as the policy above did. §14.2 shows that this is not merely an accident waiting to happen but an <em>attack</em>: someone can write instructions into a document on purpose, hoping your model obeys them. Tagging your own prompt is the same discipline that makes <em>untrusted content</em>, text that came from someone other than you, safe to include.</p>
+<p>Two conventions are worth adopting:</p>
+<ul>
+<li><strong>Use the same tag names across your prompts</strong>, so a change of wording never changes structure. In the picture, every brief from your office uses the same headings, so the writer always knows where to look.</li>
+<li><strong>nest when the content has a hierarchy</strong>. To <em>nest</em> is to put tags inside other tags. Documents go inside <code>&lt;documents&gt;</code>, each in <code>&lt;document index="n"&gt;</code> with <code>&lt;source&gt;</code> and <code>&lt;document_content&gt;</code> subtags. §3.7 builds exactly that shape.</li>
+</ul>
+<p>The figure shows the flat prompt and the tagged prompt side by side.</p>
 <!-- fig:ai-xml -->
 <figure id="fig-ai-xml" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 430" role="img" aria-labelledby="t-ai-xml d-ai-xml" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-xml">A flat prompt against a tagged one</title><desc id="d-ai-xml">The same support prompt written two ways. Flat, the instructions, the policy and the question run together in one paragraph. Tagged, each part sits in its own XML element: instructions, policy and question, so the model does not have to work out which is which.</desc><defs><marker id="ah-ai-xml" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="12" y="12" width="320" height="340" rx="14" style="fill:none;stroke:#8a94a6;stroke-width:1.4"/><text x="26" y="32" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#8a94a6;opacity:1">FLAT</text><text x="32" y="62" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">You are a support agent.</text><text x="32" y="86" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">Here is the policy: Acme</text><text x="32" y="110" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">refunds within 30 days.</text><text x="32" y="134" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">Perishables excluded.</text><text x="32" y="158" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">Answer this question: Can I</text><text x="32" y="182" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">return the cheese I bought</text><text x="32" y="206" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">last week? Be concise.</text><text x="172" y="262" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">which words are the policy,</text><text x="172" y="280" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">and which are the question?</text><rect x="388" y="12" width="320" height="340" rx="14" style="fill:none;stroke:#35b37e;stroke-width:1.4"/><text x="402" y="32" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#35b37e;opacity:1">TAGGED</text><rect x="404" y="52" width="288" height="76" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="548" y="77.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">&lt;instructions&gt;</text><text x="548" y="96.225" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">Answer using only the policy. Be</text><text x="548" y="111.175" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">concise.</text><rect x="404" y="154" width="288" height="76" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="548" y="179.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">&lt;policy&gt;</text><text x="548" y="198.225" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">Acme refunds within 30 days.</text><text x="548" y="213.175" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">Perishables excluded.</text><rect x="404" y="256" width="288" height="76" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="548" y="281.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">&lt;question&gt;</text><text x="548" y="300.225" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">Can I return the cheese I bought last</text><text x="548" y="315.175" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">week?</text><text x="360" y="400" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">the model can tell instruction from context from input at a glance</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Tags cost a few tokens and remove a class of ambiguity. They are the closest thing this subject has to a universally applicable technique.</figcaption></figure>
 <!-- /fig:ai-xml -->
 
 <h2 id="section-2-33-examples">3.3 Examples</h2>
-<p>Examples are the most reliable way to steer format, tone and structure. The technique is usually called <strong>few-shot</strong> prompting (showing the model a few worked examples). It is also where people over-invest in quantity and under-invest in coverage.</p>
+<p>Examples are the most reliable way to steer format, tone and structure. If you want replies in a particular shape, show a few replies in that shape. The technique is usually called <strong>few-shot</strong> prompting (showing the model a few worked examples). It is also where people over-invest in quantity and under-invest in coverage, meaning they add more examples of the same kind, instead of examples of different kinds.</p>
+<p>In the picture, examples are sample letters pinned to the brief. "Here are three replies we were happy with. Write like this."</p>
+<p>The example below is a support task where each customer message gets a <em>label</em>, a short name for what the customer wants, such as <code>refund</code>. Each example pairs a message with its label. The first list has three examples, all from the <em>happy path</em>: the ordinary case where everything is as expected. The second list adds two <em>edge cases</em>, unusual inputs at the boundary of the task: an empty message, and a message with two problems at once. The program prints which labels each list covers, then shows the edge-case list wrapped in tags:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">EXAMPLES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"refund request"</span><span class="p">,</span> <span class="s2">"refund"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"where is my parcel"</span><span class="p">,</span> <span class="s2">"order_status"</span><span class="p">),</span>
@@ -2429,12 +2584,59 @@ with edge cases   5 examples, labels covered: ['ambiguous', 'cancel_order', 'cla
 &lt;/examples&gt;
 </code></pre></div>
 
+<p>Read the output line by line:</p>
+<ul>
+<li><code>happy path only</code> has 3 examples, and they cover 3 labels: <code>cancel_order</code>, <code>order_status</code>, <code>refund</code>.</li>
+<li><code>with edge cases</code> has 5 examples, and they cover 5 labels. The two new ones are <code>ambiguous</code> and <code>clarify</code>.</li>
+<li>The rest is the tagged block: an <code>&lt;examples&gt;</code> tag around the group, and an <code>&lt;example&gt;</code> tag around each one, with <code>&lt;input&gt;</code> and <code>&lt;label&gt;</code> inside. The empty message is printed as <code>(empty)</code>, so you can see it is there.</li>
+</ul>
+<p>Why do the two extra labels matter so much? A model reading examples copies their pattern. Here is a crude stand-in for that. The function <code>nearest_label</code> is not how a model works: a model does not look examples up. But examples pull a model in the same direction. The function copies the label of whichever example looks most like the new message, using Python's <code>difflib.SequenceMatcher</code>, which scores two strings from 0 (nothing alike) to 1 (identical). The program tries two awkward messages against both lists:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">difflib</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequenceMatcher</span>
+
+<span class="n">HAPPY_PATH</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">"refund request"</span><span class="p">,</span> <span class="s2">"refund"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"where is my parcel"</span><span class="p">,</span> <span class="s2">"order_status"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"cancel please"</span><span class="p">,</span> <span class="s2">"cancel_order"</span><span class="p">),</span>
+<span class="p">]</span>
+<span class="n">WITH_EDGES</span> <span class="o">=</span> <span class="n">HAPPY_PATH</span> <span class="o">+</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="s2">"clarify"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"late AND wrong address"</span><span class="p">,</span> <span class="s2">"ambiguous"</span><span class="p">),</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">nearest_label</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">examples</span><span class="p">):</span>
+    <span class="c1"># a stand-in for a model: copy the label of the most similar example</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">similarity</span><span class="p">(</span><span class="n">example</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">SequenceMatcher</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">example</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">ratio</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">examples</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">similarity</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+
+
+<span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">""</span><span class="p">,</span> <span class="s2">"parcel late and wrong address"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">message</span><span class="si">!r:</span><span class="s2">&lt;32</span><span class="si">}</span><span class="s2"> happy path only: </span><span class="si">{</span><span class="n">nearest_label</span><span class="p">(</span><span class="n">message</span><span class="p">,</span><span class="w"> </span><span class="n">HAPPY_PATH</span><span class="p">)</span><span class="si">:</span><span class="s2">&lt;14</span><span class="si">}</span><span class="s2">"</span>
+          <span class="sa">f</span><span class="s2">"with edge cases: </span><span class="si">{</span><span class="n">nearest_label</span><span class="p">(</span><span class="n">message</span><span class="p">,</span><span class="w"> </span><span class="n">WITH_EDGES</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>''                               happy path only: refund        with edge cases: clarify
+'parcel late and wrong address'  happy path only: cancel_order  with edge cases: ambiguous
+</code></pre></div>
+
+<p>Read the two lines:</p>
+<ul>
+<li>The empty message <code>''</code> gets <code>refund</code> from the happy-path list. No example looks anything like an empty message, so all three score 0 and the first one wins. With the edge cases, it gets <code>clarify</code>, because there is now an example of exactly that.</li>
+<li>The two-problem message gets <code>cancel_order</code> from the happy-path list, which is plainly wrong. With only three choices, every message must be one of the three. With the edge cases it gets <code>ambiguous</code>.</li>
+</ul>
 <p><strong>Three to five examples is the useful range</strong> for few-shot prompting. Beyond that, the return falls off sharply and the token cost does not.</p>
-<p><strong>Diversity matters more than count.</strong> Three examples that all look like the happy path teach the model that the happy path is the whole task, and it will then confidently classify an empty string as a refund request. The two edge cases added above are worth more than three more ordinary ones.</p>
-<p><strong>Wrap them in tags.</strong> Use <code>&lt;example&gt;</code> for each one and <code>&lt;examples&gt;</code> for the group, so they are distinguishable from instructions. Without that, a model reading an example of bad input may follow it.</p>
-<p>Two tricks are worth knowing. You can ask the model to <strong>evaluate your examples</strong> for relevance and diversity, or to generate more from your initial set. That is a good use of a cheap model, and it surfaces gaps you did not see. And if you have no first draft at all, the <strong>metaprompt</strong> recipe in the Claude Cookbook generates one from a task description. A metaprompt is simply a prompt whose output is another prompt. It is a starting point to edit and not an output to ship, and it is most useful for getting past the blank page on an unfamiliar task.</p>
+<p><strong>Diversity matters more than count.</strong> Three examples that all look like the happy path teach the model that the happy path is the whole task. It will then confidently classify an empty string as a refund request, just as the stand-in did. The two edge cases added above are worth more than three more ordinary ones.</p>
+<p><strong>Wrap them in tags.</strong> Use <code>&lt;example&gt;</code> for each one and <code>&lt;examples&gt;</code> for the group, so they are distinguishable from instructions. Without that, a model reading an example of bad input may follow it. In the picture, the sample letters are clipped together under the heading "SAMPLES", so the writer never mistakes a sample complaint for a new instruction.</p>
+<p>Two tricks are worth knowing:</p>
+<ul>
+<li>You can ask the model to <strong>evaluate your examples</strong> for relevance and diversity, or to generate more from your initial set. That is a good use of a cheap model, and it surfaces gaps you did not see.</li>
+<li>If you have no first draft at all, the <strong>metaprompt</strong> recipe in the Claude Cookbook (Anthropic's published collection of worked recipes) generates one from a task description. A metaprompt is simply a prompt whose output is another prompt. It is a starting point to edit and not an output to ship. It is most useful for getting past the blank page on an unfamiliar task.</li>
+</ul>
 <h2 id="section-2-34-roles">3.4 Roles</h2>
-<p><strong>Role prompting</strong>, which means setting a role in the system prompt, focuses behaviour and tone. One sentence is often enough, and the gain is largest where the task has domain conventions.</p>
+<p><strong>Role prompting</strong>, which means setting a role in the system prompt, focuses behaviour and tone. The <em>system prompt</em> is the standing-instructions box from §2.4, the part of the request that sits above the conversation. A <em>role</em> is one sentence there that says who the model is being, such as "You are a support agent for Acme." One sentence is often enough. The gain is largest where the task has <em>domain conventions</em>: the habits, vocabulary and rules of a particular profession.</p>
+<p>In the picture, a role is the line at the top of the brief that says which hat to wear: "Write this as the shop's support clerk", or "Write this as the company's lawyer".</p>
+<p>The example below lists three roles: none at all, a support agent, and a data protection officer. That is the person in a company responsible for following the law on personal data, which in Europe is the GDPR (the General Data Protection Regulation). The program prints each role's length in words and the effect it has:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">ROLES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">"generic assistant behaviour"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"You are a support agent for Acme."</span><span class="p">,</span>
@@ -2453,7 +2655,7 @@ with edge cases   5 examples, labels covered: ['ambiguous', 'cancel_order', 'cla
 <span class="nb">print</span><span class="p">(</span><span class="s2">"a role sets defaults; it does not grant permissions or enforce policy"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>0 words  generic assistant behaviour
+<div class="highlight" data-lang="text"><pre><span></span><code>  0 words  generic assistant behaviour
   7 words  adopts your product's vocabulary and tone
            You are a support agent for Acme.
  12 words  applies the conventions of that discipline
@@ -2462,14 +2664,22 @@ with edge cases   5 examples, labels covered: ['ambiguous', 'cancel_order', 'cla
 a role sets defaults; it does not grant permissions or enforce policy
 </code></pre></div>
 
-<p>The gain from role prompting comes from the domain conventions a role carries and not from the words themselves. That is why "data protection officer" outperforms "expert assistant".</p>
-<p><strong>A role is a default, not a control.</strong> <em>"You are a support agent who never discloses internal data"</em> shapes ordinary behaviour, and it is not a security boundary. §14.4 is the whole argument. Use roles for tone and domain conventions, and use code for anything that must not happen.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li>The first line is no role at all, 0 words: generic assistant behaviour.</li>
+<li>The support agent is 7 words, and adopts your product's vocabulary and tone.</li>
+<li>The data protection officer is 12 words, and applies the conventions of that discipline.</li>
+<li>The last line is the warning that the rest of this subsection explains.</li>
+</ul>
+<p>The gain from role prompting comes from the domain conventions a role carries and not from the words themselves. That is why "data protection officer" outperforms "expert assistant". "Expert" says nothing about which expertise. "Data protection officer" brings a whole profession's checklist with it.</p>
+<p><strong>A role is a default, not a control.</strong> <em>"You are a support agent who never discloses internal data"</em> shapes ordinary behaviour, and it is not a security boundary, meaning a line that something cannot cross. A determined user can talk a model out of a role, so the real protection is to limit what the model is able to do at all. §14.4 is the whole argument. In the picture, telling the writer "you are a discreet clerk" makes them discreet on an ordinary day. It does not lock the filing cabinet. Use roles for tone and domain conventions, and use code for anything that must not happen.</p>
 <h2 id="section-2-35-controlling-the-format">3.5 Controlling the Format</h2>
-<p>Four techniques, in descending order of how well they work.</p>
-<p><strong>Say what to do, not what to avoid.</strong> "Do not use markdown" leaves the model guessing at the alternative. "Write in smoothly flowing prose paragraphs" names the target, which is an <strong>output format</strong> stated positively. A negative output format instruction excludes one option out of many, while a positive one names the single option you want.</p>
-<p><strong>Use XML format indicators.</strong> "Put the prose sections in <code>&lt;prose&gt;</code> tags" is unambiguous and trivially parseable.</p>
-<p><strong>Match your prompt's style to the output you want.</strong> This one is unintuitive and real: a prompt written in heavy markdown tends to produce heavy markdown. Removing bullets from your prompt reduces bullets in the response.</p>
+<p>The <em>format</em> of a reply is its shape on the page: paragraphs or bullets, plain text or headings, one line or ten. Here are four techniques, in descending order of how well they work.</p>
+<p><strong>Say what to do, not what to avoid.</strong> "Do not use markdown" leaves the model guessing at the alternative. (<em>Markdown</em> is the plain-text style for headings, bold and bullets, written with symbols like <code>#</code> and <code>*</code>.) "Write in smoothly flowing prose paragraphs" names the target, which is an <strong>output format</strong> stated positively. A negative output format instruction excludes one option out of many, while a positive one names the single option you want. In the picture, "not on blue paper" still leaves the writer choosing between a hundred colours. "On white paper" leaves no choice.</p>
+<p><strong>Use XML format indicators.</strong> "Put the prose sections in <code>&lt;prose&gt;</code> tags" is unambiguous and trivially parseable. <em>Parseable</em> means your program can find the parts by itself, by looking for the tags.</p>
+<p><strong>Match your prompt's style to the output you want.</strong> This one is unintuitive and real: a prompt written in heavy markdown tends to produce heavy markdown. Removing bullets from your prompt reduces bullets in the response. The writer copies the look of the brief.</p>
 <p><strong>Be detailed when the preference is specific.</strong> A paragraph of formatting guidance, in its own tag, works better than a sentence.</p>
+<p>The example below puts the first two techniques side by side: one negative instruction, one positive one, and one structural one that uses tags. It prints each kind, why it works or fails, and the start of the instruction:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">INSTRUCTIONS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"Do not use markdown."</span><span class="p">,</span> <span class="s2">"negative"</span><span class="p">,</span> <span class="s2">"no target named"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"Write in smoothly flowing prose paragraphs, using standard paragraph "</span>
@@ -2493,11 +2703,24 @@ and the strongest option of all, when the output feeds code:
   output_config.format — a grammar, not a request (see 4.2)
 </code></pre></div>
 
-<p>That last line is the honest summary of this subsection. <strong>If the output feeds code, stop prompting for format and constrain it</strong> (§4). Format instructions are for output a person reads.</p>
-<p>Two notes on current models. <strong>Verbosity</strong> has shifted, and verbosity is now something you ask for and no longer something you suppress. The latest models are less verbose by default. They are direct, grounded, and inclined to skip elaborate summaries unless asked, so if you want a detailed write-up, request one. And they <strong>default to LaTeX for mathematics</strong> (a typesetting notation full of backslashes). If you need plain text, say so explicitly, naming the notations to avoid.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li><code>negative</code>, "Do not use markdown.", names no target. The model knows one thing you do not want, and has to guess what you do.</li>
+<li><code>positive</code> names the target: flowing prose paragraphs.</li>
+<li><code>structural</code> is parseable and unambiguous: the prose goes inside <code>&lt;prose&gt;</code> tags, where your program can find it.</li>
+<li>The last two lines name an option stronger than all three. <code>output_config.format</code> is a request parameter, and §4.2 teaches it.</li>
+</ul>
+<p>That last line is the honest summary of this subsection. <strong>If the output feeds code, stop prompting for format and constrain it</strong> (§4). To <em>constrain</em> the output means the API itself guarantees its shape, instead of the model trying its best. §4 calls that rule a <em>grammar</em>. Format instructions are for output a person reads. In the picture, a brief can ask the writer nicely for a neat table. A printed form with boxes leaves the writer no other way to fill it in.</p>
+<p>Two notes on current models:</p>
+<ul>
+<li><strong>Verbosity</strong>, how long and wordy replies are, has shifted. Verbosity is now something you ask for and no longer something you suppress. The latest models are less verbose by default. They are direct, grounded, and inclined to skip elaborate summaries unless asked. So if you want a detailed write-up, request one.</li>
+<li>They <strong>default to LaTeX for mathematics</strong> (a typesetting notation full of backslashes, such as <code>\frac{1}{2}</code> for a half). If you need plain text, say so explicitly, naming the notations to avoid.</li>
+</ul>
 <h2 id="section-2-36-prefill-is-gone">3.6 Prefill Is Gone</h2>
-<p>For years the standard trick for controlling output was to <em>prefill</em> the assistant turn: you supplied the start of the assistant's reply and let the model continue from it. It is worth knowing this existed, because a great deal of published prompting advice still assumes it.</p>
-<p><strong>From Claude 4.6 onwards, a prefilled final assistant turn is a 400 error.</strong> It is not degraded. It is rejected.</p>
+<p>For years the standard trick for controlling output was to <em>prefill</em> the assistant turn. The <em>assistant turn</em> is the model's reply in the conversation. To prefill it, you supplied the start of the assistant's reply yourself, and let the model continue from there. Send <code>{</code> as the start of the reply, for example, and the model would carry on writing JSON.</p>
+<p>In the picture, prefill was writing the first words of the reply yourself, at the top of the writer's page, and asking them to carry on. It is worth knowing this existed, because a great deal of published prompting advice still assumes it.</p>
+<p><strong>From Claude 4.6 onwards, a prefilled final assistant turn is a 400 error.</strong> A 400 error is the "fix your form" rejection slip from §2.9. It is not degraded. It is rejected.</p>
+<p>The example below is a table of what prefill was used for, and what to use in its place. Each row has the purpose, the old trick and what to do now:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">MIGRATIONS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"force a JSON shape"</span><span class="p">,</span> <span class="s1">'prefill "{"'</span><span class="p">,</span>
      <span class="s2">"structured outputs (4.2) — a grammar rather than a nudge"</span><span class="p">),</span>
@@ -2531,14 +2754,59 @@ adding assistant messages ELSEWHERE in the conversation is unaffected;
 only a prefilled FINAL assistant turn is rejected
 </code></pre></div>
 
-<p>The first row is the important one. Prefill was a <em>probabilistic</em> way to get a shape, and structured outputs is a <em>guaranteed</em> one. The feature that replaced it is strictly better, which is why the removal is not a loss.</p>
-<p>Note also that prefill is incompatible with thinking (§5), so on any model where thinking is on by default the technique was already unavailable.</p>
+<p>Read the table row by row:</p>
+<ul>
+<li>To <strong>force a JSON shape</strong>, you used to prefill <code>{</code>. Now you use structured outputs (§4.2), which are a grammar rather than a nudge.</li>
+<li>To <strong>skip the preamble</strong>, the "Sure! Here is your summary" opening, you used to prefill the opening yourself. Now you ask directly for no preamble, and strip any that slips through.</li>
+<li>To <strong>steer past a refusal</strong>, you used to prefill an agreeable opening. Now you prompt clearly in the user turn, and current models refuse better.</li>
+<li>To <strong>continue a cut-off answer</strong>, you used to prefill the partial text. Now you put it in a <em>user</em> turn: "your previous response ended with X, continue".</li>
+<li>To <strong>re-inject context</strong>, a reminder the model needs, you used to prefill it. Now it goes in the user turn, a tool, or compaction (§9.7).</li>
+<li>The last two lines are the exact scope of the rule. Assistant messages earlier in the conversation are fine. Only the <em>final</em> one is rejected.</li>
+</ul>
+<p>The first row is the important one. Prefill was a <em>probabilistic</em> way to get a shape: it made the shape likely, not certain. Structured outputs is a <em>guaranteed</em> one. The feature that replaced it is strictly better, which is why the removal is not a loss.</p>
+<p>The rule itself is easy to state in code. The function below is a toy office, not the real API. It applies just the one rule above: the last message in the list may not be the assistant's. It checks two conversations. The first ends with a prefilled assistant turn. The second is the fourth row's fix, with the partial answer earlier in the list and a user turn last. The program prints how many messages each has, who sent the last one, and the toy office's answer:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">toy_office</span><span class="p">(</span><span class="n">messages</span><span class="p">):</span>
+    <span class="c1"># the one rule from above: the LAST message may not be the assistant's</span>
+    <span class="k">if</span> <span class="n">messages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">"role"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"assistant"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">400</span><span class="p">,</span> <span class="s2">"rejected: the final turn is a prefilled assistant turn"</span>
+    <span class="k">return</span> <span class="mi">200</span><span class="p">,</span> <span class="s2">"accepted"</span>
+
+
+<span class="n">prefilled</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Summarise the refund policy."</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Here is the summary:"</span><span class="p">},</span>
+<span class="p">]</span>
+<span class="n">continued</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Summarise the refund policy."</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Refunds are accepted within 30 days, and"</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Your previous response ended with 'and'. Continue."</span><span class="p">},</span>
+<span class="p">]</span>
+
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">messages</span> <span class="ow">in</span> <span class="p">((</span><span class="s2">"prefilled"</span><span class="p">,</span> <span class="n">prefilled</span><span class="p">),</span> <span class="p">(</span><span class="s2">"continued"</span><span class="p">,</span> <span class="n">continued</span><span class="p">)):</span>
+    <span class="n">status</span><span class="p">,</span> <span class="n">verdict</span> <span class="o">=</span> <span class="n">toy_office</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">:</span><span class="s2">&lt;10</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">messages</span><span class="p">)</span><span class="si">}</span><span class="s2"> messages, last from </span><span class="si">{</span><span class="n">messages</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s1">'role'</span><span class="p">]</span><span class="si">:</span><span class="s2">&lt;9</span><span class="si">}</span><span class="s2">"</span>
+          <span class="sa">f</span><span class="s2">" -&gt; </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">verdict</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>prefilled  2 messages, last from assistant -&gt; 400 rejected: the final turn is a prefilled assistant turn
+continued  3 messages, last from user      -&gt; 200 accepted
+</code></pre></div>
+
+<p>Read the two lines:</p>
+<ul>
+<li><code>prefilled</code> has 2 messages, and the last is from the assistant, so it gets 400.</li>
+<li><code>continued</code> has 3 messages. It still contains an assistant message, the cut-off answer, but the last message is from the user, so it gets 200.</li>
+</ul>
+<p>Note also that prefill is incompatible with thinking (§5), the model's ability to reason before it answers. So on any model where thinking is on by default, the technique was already unavailable.</p>
+<p>The figure lays out the five old uses and their replacements.</p>
 <!-- fig:ai-prefill -->
 <figure id="fig-ai-prefill" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 560" role="img" aria-labelledby="t-ai-prefill d-ai-prefill" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-prefill">What prefill used to do, and what to do now</title><desc id="d-ai-prefill">From Claude 4.6 onwards a prefilled final assistant turn is a 400 error. Five old uses and their replacements: force a JSON shape now uses structured outputs; skipping the preamble uses a direct instruction; steering past a refusal uses clear prompting; continuing a cut-off answer puts the partial text in a user turn; re-injecting context uses the user turn, a tool or compaction.</desc><defs><marker id="ah-ai-prefill" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="12" y="12" width="696" height="44" rx="8" style="fill:#cf4b6c;fill-opacity:0.12"/><text x="360" y="40" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">a prefilled final assistant turn is a 400 error from Claude 4.6 onwards</text><text x="28" y="84" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">WHAT IT WAS FOR</text><text x="210" y="84" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">THE OLD TRICK</text><text x="472" y="84" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">WHAT TO DO NOW</text><text x="28" y="126" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">force a JSON shape</text><rect x="210" y="102" width="214" height="46" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6" stroke-dasharray="5 4"/><text x="317" y="128.738" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">prefill &quot;{&quot;</text><path d="M430,125 L462,125" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-prefill)"/><text x="472" y="120" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">structured outputs:</text><text x="472" y="138" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">a grammar, not a nudge</text><text x="28" y="212" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">skip the preamble</text><rect x="210" y="188" width="214" height="46" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6" stroke-dasharray="5 4"/><text x="317" y="214.738" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">prefill &quot;Here is the summary:&quot;</text><path d="M430,211 L462,211" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-prefill)"/><text x="472" y="206" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">instruct directly: respond</text><text x="472" y="224" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">without preamble</text><text x="28" y="298" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">steer past a refusal</text><rect x="210" y="274" width="214" height="46" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6" stroke-dasharray="5 4"/><text x="317" y="300.738" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">prefill an agreeable opening</text><path d="M430,297 L462,297" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-prefill)"/><text x="472" y="292" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">clear prompting in the user</text><text x="472" y="310" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">turn; models refuse better now</text><text x="28" y="384" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">continue a cut-off answer</text><rect x="210" y="360" width="214" height="46" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6" stroke-dasharray="5 4"/><text x="317" y="386.738" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">prefill the partial text</text><path d="M430,383 L462,383" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-prefill)"/><text x="472" y="378" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">a user turn: your previous</text><text x="472" y="396" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">response ended with X, continue</text><text x="28" y="470" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">re-inject context</text><rect x="210" y="446" width="214" height="46" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6" stroke-dasharray="5 4"/><text x="317" y="472.738" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">prefill a reminder</text><path d="M430,469 L462,469" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-prefill)"/><text x="472" y="464" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">the user turn, a tool,</text><text x="472" y="482" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">or compaction</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Rejected, not degraded. Each old trick has a replacement that works at the layer where the problem actually lives.</figcaption></figure>
 <!-- /fig:ai-prefill -->
 
 <h2 id="section-2-37-long-context">3.7 Long Context</h2>
-<p><strong>Long context prompting</strong> is a distinct skill. Above roughly 20,000 tokens of input, <em>where</em> things sit in the prompt starts to matter as much as what it says.</p>
+<p><strong>Long context prompting</strong> is a distinct skill. A <em>long context</em> prompt is one with a great deal of material in it: whole reports, contracts or codebases. Above roughly 20,000 tokens of input, <em>where</em> things sit in the prompt starts to matter as much as what it says.</p>
+<p>In the picture, this is the brief that arrives with a thick file of enclosures. The writer reads it top to bottom. Put the question on the first page, and by page forty they have half forgotten it. Put it on the last page, and they read it with the whole file fresh in mind.</p>
+<p>The example below compares the two orders for a prompt with 42,000 tokens of documents and a 120-token question. It then builds the recommended layout for two documents, each with a <code>&lt;source&gt;</code> saying where it came from. The <code>{{ANNUAL_REPORT}}</code> markers are placeholders, where the real text of each document would go:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">DOCUMENT_TOKENS</span><span class="p">,</span> <span class="n">QUERY_TOKENS</span> <span class="o">=</span> <span class="mi">42_000</span><span class="p">,</span> <span class="mi">120</span>
 
 <span class="n">query_first</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"&lt;query&gt;"</span><span class="p">,</span> <span class="s2">"&lt;documents&gt; (42,000 tokens)"</span><span class="p">]</span>
@@ -2589,15 +2857,24 @@ to improve response quality by up to 30% in Anthropic's testing.
 &lt;/documents&gt;
 </code></pre></div>
 
-<p><strong>Longform data at the top; the query at the bottom.</strong> This is the single most useful long context prompting rule, and it costs nothing to follow. It also works with §9.3: the documents are the stable prefix, so putting them first is exactly where a cache breakpoint wants them.</p>
-<p><strong>Structure multiple documents with metadata.</strong> <code>&lt;source&gt;</code> alongside <code>&lt;document_content&gt;</code> lets the model say <em>which</em> document a claim came from. If you want that mechanically and not in prose, §10.7's search results and §8.5's citations do it properly.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li><code>query first</code> puts the question before the 42,000 tokens of documents.</li>
+<li><code>documents first</code> puts the documents first and the question after them.</li>
+<li>The next three lines are the measurement: on complex inputs with several documents, putting the question at the end improved response quality by up to 30% in Anthropic's testing.</li>
+<li>The rest is the layout. A <code>&lt;documents&gt;</code> tag holds both. Each one sits in its own <code>&lt;document index="..."&gt;</code>, numbered 1 and 2, with a <code>&lt;source&gt;</code> naming the file and a <code>&lt;document_content&gt;</code> holding the text.</li>
+</ul>
+<p><strong>Longform data at the top; the query at the bottom.</strong> This is the single most useful long context prompting rule, and it costs nothing to follow. It also works with §9.3's prompt caching. A <em>cache</em> is the office keeping a copy of the part of your prompt that never changes, so you pay less to send it again. The cache only works for the <em>prefix</em>, the stable start of the prompt. The documents are the stable prefix, so putting them first is exactly where a cache breakpoint, the marker that says "cache up to here", wants them.</p>
+<p><strong>Structure multiple documents with metadata.</strong> <em>Metadata</em> is information about a document, such as its file name, as opposed to the document's own text. <code>&lt;source&gt;</code> alongside <code>&lt;document_content&gt;</code> lets the model say <em>which</em> document a claim came from. If you want that mechanically and not in prose, §10.7's search results and §8.5's citations do it properly.</p>
+<p>The figure shows the two orders to scale.</p>
 <!-- fig:ai-longctx -->
 <figure id="fig-ai-longctx" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 360" role="img" aria-labelledby="t-ai-longctx d-ai-longctx" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-longctx">Where things sit in a long prompt</title><desc id="d-ai-longctx">Two orderings of a prompt with 42,000 tokens of documents and a 120-token question. Documents first and the query last is the recommended order; in Anthropic’s testing, queries at the end improved response quality on complex multi-document inputs by up to thirty percent.</desc><defs><marker id="ah-ai-longctx" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="52" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">query first</text><rect x="20" y="64" width="10" height="54" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><rect x="34" y="64" width="626" height="54" rx="2" style="fill:#8a94a6;fill-opacity:0.3;stroke:#8a94a6;stroke-width:1.2"/><text x="25" y="138" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">query</text><text x="347" y="96" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">&lt;documents&gt;  42,000 tokens</text><rect x="596" y="38" width="84" height="22" rx="11" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="638" y="52.74" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text);opacity:1">worse</text><text x="20" y="178" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">documents first, query last</text><rect x="20" y="190" width="630" height="54" rx="2" style="fill:#8a94a6;fill-opacity:0.3;stroke:#8a94a6;stroke-width:1.2"/><rect x="654" y="190" width="6" height="54" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="335" y="222" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">&lt;documents&gt;  42,000 tokens</text><text x="649" y="264" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">query, last</text><rect x="596" y="164" width="84" height="22" rx="11" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="638" y="178.74" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text);opacity:1">better</text><text x="360" y="328" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">measured up to 30% better on complex multi-document inputs (Anthropic’s testing)</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Above about 20,000 tokens of input, where things sit starts to matter as much as what they say. Long data goes on top; the question goes last.</figcaption></figure>
 <!-- /fig:ai-longctx -->
 
 <h2 id="section-2-38-prompt-chaining">3.8 Prompt Chaining</h2>
-<p>With adaptive thinking and subagents, the model handles most multi-step reasoning internally, so explicit chaining (splitting a task into several calls, each feeding the next) is less necessary than it once was. It still earns its place when you need to <strong>inspect intermediate output</strong> or <strong>enforce a pipeline shape</strong>.</p>
-<p>The most useful pattern is self-correction: draft, review against criteria, refine.</p>
+<p><strong>Prompt chaining</strong> means splitting a task into several calls, each feeding the next. Today the model handles most multi-step reasoning internally, with adaptive thinking (§5, the model deciding for itself how much to reason) and subagents (§11.8). So explicit chaining is less necessary than it once was. It still earns its place when you need to <strong>inspect intermediate output</strong> or <strong>enforce a pipeline shape</strong>. A <em>pipeline</em> is a fixed sequence of steps, each one taking the previous step's result.</p>
+<p>In the picture, chaining is sending the writer's draft to a second writer with a checklist. The checker sends back "passes" or "fails, and here is what is missing". Then the first writer fixes exactly those things.</p>
+<p>The most useful pattern is self-correction: draft, review against criteria, refine. The example below fakes the three calls with plain functions, so you can watch the shape without the API. <code>draft</code> writes a placeholder draft. <code>review</code> checks it against three criteria and returns which ones fail. <code>refine</code> adds the missing ones. The program prints each step:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">draft</span><span class="p">(</span><span class="n">brief</span><span class="p">):</span>
     <span class="k">return</span> <span class="sa">f</span><span class="s2">"[draft for </span><span class="si">{</span><span class="n">brief</span><span class="si">}</span><span class="s2">]"</span>
 
@@ -2639,17 +2916,32 @@ value your code can log, threshold, or route on — 13.8's harness
 plugs straight into it
 </code></pre></div>
 
-<p>A related pattern is worth naming here because it is often confused with chaining. A <strong>subagent</strong> is a <em>separate</em> model call with its own context, whose summary returns to a coordinator (§11.8). A chain keeps one context and inspects it between steps. Reach for a subagent when the intermediate material is large and disposable. Reach for a chain when the intermediate <em>value</em> is what you need.</p>
-<p><strong>Chain when you need the intermediate value, and do not chain to simulate reasoning.</strong> Asking the model to "think step by step" across three API calls is a worse version of thinking (§5), which does the same work in one request with the reasoning kept out of your context. Chain when the intermediate result is something <em>your program</em> needs.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li>Step 1 is the draft: a placeholder, <code>[draft for a refund decline]</code>.</li>
+<li>Step 2 is the review. <code>passes</code> is <code>False</code>, and <code>failures</code> lists all three criteria.</li>
+<li>Step 3 is the refined draft, with the three missing pieces added.</li>
+<li>Step 4 reviews it again, and now <code>passes</code> is <code>True</code> with no failures.</li>
+<li>The last three lines are the point. Step 2's verdict is a value your code can log, check against a threshold, or <em>route on</em>, meaning send down a different path. §13.8's eval harness plugs straight into it.</li>
+</ul>
+<p>A related pattern is worth naming here because it is often confused with chaining. A <strong>subagent</strong> is a <em>separate</em> model call with its own context, whose summary returns to a coordinator, the main call that hands out the work (§11.8). A chain keeps one context and inspects it between steps. So:</p>
+<ul>
+<li>Reach for a subagent when the intermediate material is large and disposable.</li>
+<li>Reach for a chain when the intermediate <em>value</em> is what you need.</li>
+</ul>
+<p><strong>Chain when you need the intermediate value, and do not chain to simulate reasoning.</strong> Asking the model to "think step by step" across three API calls is a worse version of thinking (§5). Thinking does the same work in one request, with the reasoning kept out of your context. Chain when the intermediate result is something <em>your program</em> needs.</p>
+<p>The figure draws the loop.</p>
 <!-- fig:ai-chain -->
 <figure id="fig-ai-chain" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 420" role="img" aria-labelledby="t-ai-chain d-ai-chain" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-chain">Draft, review, refine as a chain of separate calls</title><desc id="d-ai-chain">A brief goes to a draft call. A separate review call checks the draft against criteria such as cites the policy, names the deadline and offers a next step, and returns whether it passes and which criteria failed. If it fails, a refine call fixes exactly those failures and the draft is reviewed again. If it passes, the chain is done.</desc><defs><marker id="ah-ai-chain" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="20" y="60" width="150" height="84" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="95" y="97.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Draft</text><text x="95" y="116.675" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">from the brief</text><path d="M176,102 L214,102" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-chain)"/><rect x="220" y="60" width="190" height="84" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="315" y="89.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Review</text><text x="315" y="108.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">against the criteria,</text><text x="315" y="124.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">a separate call</text><path d="M416,102 L454,102" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-chain)"/><rect x="460" y="60" width="130" height="84" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="525" y="106.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Passes?</text><path d="M596,102 L632,102" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-chain)"/><text x="614" y="90" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">yes</text><rect x="636" y="60" width="74" height="84" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="673" y="106.225" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">Done</text><path d="M525,150 L525,214" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-chain)"/><text x="537" y="186" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">no</text><rect x="430" y="216" width="190" height="84" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="525" y="245.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Refine</text><text x="525" y="264.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">fix exactly the</text><text x="525" y="280.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">failed criteria</text><path d="M424,258 L315,258 L315,150" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5" marker-end="url(#ah-ai-chain)"/><text x="240" y="282" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">review again</text><text x="20" y="344" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">criteria in the course example</text><rect x="20" y="356" width="130" height="23.5" rx="11.75" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="85" y="370" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">cites the policy</text><rect x="160" y="356" width="143.75" height="23.5" rx="11.75" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="231.875" y="370" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">names the deadline</text><rect x="313.75" y="356" width="143.75" height="23.5" rx="11.75" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="385.625" y="370" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">offers a next step</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Each step is its own call, so its output can be logged, evaluated or branched on. That is when explicit chaining still earns its place.</figcaption></figure>
 <!-- /fig:ai-chain -->
 
 <h2 id="section-2-39-steering-agentic-behaviour">3.9 Steering Agentic Behaviour</h2>
-<p>Three behaviours come up repeatedly once a model has tools, and each has a prompt-shaped fix. The caveat from §11.2 applies: a prompt is a default and not a control.</p>
+<p>An <em>agentic</em> model is one that does things, not just writes: it has <em>tools</em>, functions your program lets it call, such as editing a file or running a search (§6). Three behaviours come up repeatedly once a model has tools, and each has a prompt-shaped fix. The caveat from §11.2 applies: a prompt is a default and not a control.</p>
+<p>In the picture, the writer now has clerks who can act: open files, fetch records, make changes. The brief has to say how far they may go.</p>
 <p><strong>Under-acting.</strong> "Can you suggest some changes" gets suggestions and not changes. The current models follow instructions precisely, so if you want the edit made, ask for the edit.</p>
-<p><strong>Over-engineering.</strong> This means extra files, unnecessary abstractions, and flexibility nobody asked for. The fix is explicit scope: <em>"Only make changes that are directly requested or clearly necessary. Keep solutions simple and focused."</em></p>
-<p><strong>File litter.</strong> Models use temporary scripts as a scratchpad, which improves outcomes in agentic coding and leaves debris. The fix is to ask: <em>"If you create any temporary files or helper scripts for iteration, remove them at the end of the task."</em></p>
+<p><strong>Over-engineering.</strong> This means extra files, unnecessary abstractions, and flexibility nobody asked for. (An <em>abstraction</em> is extra general-purpose code that hides details, useful when needed and clutter when not.) The fix is explicit scope: <em>"Only make changes that are directly requested or clearly necessary. Keep solutions simple and focused."</em></p>
+<p><strong>File litter.</strong> Models use temporary scripts as a scratchpad, a place to try things out. That improves outcomes in agentic coding, and leaves debris. The fix is to ask: <em>"If you create any temporary files or helper scripts for iteration, remove them at the end of the task."</em></p>
+<p>The example below collects those three, plus a fourth that a prompt is not the best fix for. It prints each behaviour, its symptom and its fix:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">GUIDANCE</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"under-acting"</span><span class="p">,</span> <span class="s2">"suggests instead of doing"</span><span class="p">,</span>
      <span class="s2">"ask for the action explicitly"</span><span class="p">),</span>
@@ -2677,12 +2969,23 @@ over-eager tool use   calls tools that were not needed    lower `effort` (5.2) �
 the last row is not a prompt fix at all, and is usually the better lever
 </code></pre></div>
 
+<p>Read the table row by row:</p>
+<ul>
+<li><strong>under-acting</strong> suggests instead of doing. The fix is to ask for the action explicitly.</li>
+<li><strong>over-engineering</strong> adds extra files and abstractions. The fix is to state the scope: only what is requested.</li>
+<li><strong>file litter</strong> leaves temporary scratchpad files behind. The fix is to ask the model to clean up at the end.</li>
+<li><strong>over-eager tool use</strong> calls tools that were not needed. The fix is to lower <code>effort</code> (§5.2), a request parameter that sets how hard the model works. It reduces tool calls, not just thinking.</li>
+</ul>
+<p>The last line says why the fourth row is different. It is not a prompt fix at all, and it is usually the better lever. A setting in the request works every time. A sentence in the prompt works most of the time.</p>
 <h2 id="section-2-310-a-prompt-template">3.10 A Prompt Template</h2>
+<p>A <em>template</em> is a prompt with fixed parts and gaps, filled in fresh for every request. This subsection builds one template from everything above. In the picture, it is the office's printed brief form. The standard parts, the role, the policy and the sample letters, are printed on it and kept on file. Only the enclosures and the question are written in fresh each time.</p>
+<p>The figure shows the order, from the parts that never change at the top to the part that changes on every request at the bottom.</p>
 <!-- fig:ai-template -->
 <figure id="fig-ai-template" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 480" role="img" aria-labelledby="t-ai-template d-ai-template" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-template">A prompt template ordered from stable to volatile</title><desc id="d-ai-template">The request has a system prompt and one user turn. The system prompt holds the role, then the policy with a one hour cache breakpoint, then the examples with a second one hour cache breakpoint. The user turn holds the documents, then the question last. Stable content comes first and volatile content last, so the cached prefix survives.</desc><defs><marker id="ah-ai-template" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="24" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">SYSTEM</text><rect x="20" y="38" width="300" height="52" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="170" y="68.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">&lt;role&gt;</text><rect x="20" y="116" width="300" height="52" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="170" y="146.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">&lt;policy&gt;</text><rect x="336" y="129" width="152" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="412" y="145.74" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text);opacity:1">cache breakpoint, 1h</text><rect x="20" y="194" width="300" height="52" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="170" y="224.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">&lt;examples&gt;</text><rect x="336" y="207" width="152" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="412" y="223.74" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text);opacity:1">cache breakpoint, 1h</text><text x="20" y="282" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">USER TURN</text><rect x="20" y="296" width="300" height="52" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="170" y="326.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">&lt;documents&gt;</text><rect x="20" y="374" width="300" height="52" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="170" y="404.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">&lt;question&gt;</text><path d="M520,44 L540,44 L540,236 L520,236" style="fill:none;stroke:#35b37e;stroke-width:1.6"/><text x="552" y="132" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:#35b37e;opacity:1">stable</text><text x="552" y="150" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">cached, reused</text><path d="M520,300 L540,300 L540,398 L520,398" style="fill:none;stroke:#d9a441;stroke-width:1.6"/><text x="552" y="344" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:#d9a441;opacity:1">volatile</text><text x="552" y="362" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">changes every turn</text><text x="360" y="450" text-anchor="middle" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">role  →  policy  →  examples  →  documents  →  question</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Order is the whole design: role, policy, examples, documents, question. Breakpoints sit at the boundary between stable and volatile.</figcaption></figure>
 <!-- /fig:ai-template -->
 
 <p>Now we put the section together: a shape that works with caching, structured output and untrusted content.</p>
+<p>The function <code>build</code> takes the five parts and returns a request, as the plain dictionary the API expects. The <em>system</em> list holds the role, the policy and the examples, each in its own tags. Two of them carry a <code>cache_control</code> marker: that is a cache breakpoint, and <code>"ttl": "1h"</code> asks the office to keep the cached copy for one hour. The user turn holds the documents and the question. The program prints each block of the request, with its cache setting and its first line:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="n">system_role</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">examples</span><span class="p">,</span> <span class="n">documents</span><span class="p">,</span> <span class="n">question</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Stable content first, volatile content last — 9.3's ordering, exactly."""</span>
     <span class="n">system</span> <span class="o">=</span> <span class="p">[</span>
@@ -2735,11 +3038,22 @@ order: role -&gt; policy -&gt; examples -&gt; documents -&gt; question
 breakpoints sit at the boundary between stable and volatile
 </code></pre></div>
 
-<p>Four properties of that shape, each earned in a different section.</p>
-<p><strong>Stable content is first and cached.</strong> Role, policy and examples change rarely, while the question changes every request (§9.3).</p>
-<p><strong>Everything is tagged</strong>, so nothing in a document can be mistaken for an instruction (§3.2, §14.2).</p>
-<p><strong>Documents sit above the question</strong>, per §3.7.</p>
-<p><strong>Nothing here constrains the output</strong>, because that is <code>output_config.format</code>'s job and not a sentence's (§4).</p>
+<p>Read the output line by line:</p>
+<ul>
+<li><code>system[0]</code> is the role, with no cache setting (<code>—</code>).</li>
+<li><code>system[1]</code> is the policy, cached for 1 hour (<code>1h</code>).</li>
+<li><code>system[2]</code> is the examples, also cached for 1 hour.</li>
+<li><code>user[0]</code> is the documents and <code>user[1]</code> is the question, so the question comes last.</li>
+<li>The last two lines sum it up: the order, and where the breakpoints sit.</li>
+</ul>
+<p>Four properties of that shape, each earned in a different section:</p>
+<ul>
+<li><strong>Stable content is first and cached.</strong> Role, policy and examples change rarely, while the question changes every request (§9.3).</li>
+<li><strong>Everything is tagged</strong>, so nothing in a document can be mistaken for an instruction (§3.2, §14.2).</li>
+<li><strong>Documents sit above the question</strong>, per §3.7.</li>
+<li><strong>Nothing here constrains the output</strong>, because that is <code>output_config.format</code>'s job and not a sentence's (§4).</li>
+</ul>
+<p>Go back to the opening puzzle one last time. The careless reader found "is the item perishable?" because a policy happened to contain the words "answer this question:". In this template, that cannot happen. The policy sits inside <code>&lt;policy&gt;</code> tags and the question inside <code>&lt;question&gt;</code> tags, so no sentence in the policy can be mistaken for the question. The ghostwriter's brief now has headings, samples, a hat to wear, the question on the last page, and the standard parts kept on file.</p>
 <h2 id="section-2-exercises">Exercises</h2>
 <p><strong>Exercise 3.1 — Rewrite this prompt.</strong> It works about 70% of the time. Find every problem and rewrite it.</p>
 <div class="highlight" data-lang="text"><pre><span></span><code>You are a helpful assistant. Read the ticket below and figure out what the
