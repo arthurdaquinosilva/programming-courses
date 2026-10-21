@@ -1353,10 +1353,107 @@ d  emailed an address from a document it only emits tokens            §14.4
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="intro">← Back</button><button class="btn-next" data-next="section-1">Next: The Messages API →</button></div>
 </section>
-<section class="course-section" id="section-1" data-section-id="section-1"><div class="section-header-meta">  <span class="section-tag">SECTION 2</span>  <button class="btn-complete" data-complete="section-1"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">The Messages API</h1><p>There is one endpoint. Everything in this course, including tools, thinking, retrieval, agents and structured output, is either a parameter on <code>POST /v1/messages</code> or a block type in its response. Learning that request and response properly is the highest-leverage hour in the subject, because every later feature is a variation on a shape you already know.</p>
-<p>This section is that shape: what goes in, what comes back, how it fails, and how to read the numbers on it.</p>
+<section class="course-section" id="section-1" data-section-id="section-1"><div class="section-header-meta">  <span class="section-tag">SECTION 2</span>  <button class="btn-complete" data-complete="section-1"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">The Messages API</h1><p>Start with a puzzle. A program asks Claude to explain the water cycle, and shows the answer to a user. The request succeeds. There is no error and no exception, and the server answers with HTTP status 200, the web's code for "OK". This is how the answer the user sees ends:</p>
+<blockquote>
+<p>...Water evaporates from oceans and</p>
+</blockquote>
+<p>What went wrong, and how could the program have known? Guess before reading on.</p>
+<p>Nothing crashed. The program itself set a limit on the length of the reply, and the reply reached it in the middle of a sentence. The text gives no sign of that, and it reads smoothly right up to the cut. One field in the response does say it, and §2.6 runs both requests, the cut one and a complete one, side by side.</p>
+<p>That field is one small part of a single request and its reply, and this section is about that request. In §1 you met the model as a ghostwriter you can only reach by telegram. This section is the telegram itself: the exact form you fill in, and the exact reply that comes back.</p>
+<p>There is one <em>endpoint</em>, meaning one address on Anthropic's servers that your program sends requests to: <code>POST /v1/messages</code>. (<code>POST</code> is the kind of web request that sends data to a server.) Everything in this course, including tools, thinking, retrieval, agents and structured output, is either a parameter on <code>POST /v1/messages</code> or a block type in its response. A <em>parameter</em> is a named setting you put in the request. A <em>block</em> is one piece of the reply, as §2.5 shows. Learning that request and response properly is the highest-leverage hour in the subject, because every later feature is a variation on a shape you already know.</p>
+<p>This section is that shape, in four parts:</p>
+<ol>
+<li>what goes in: the request, the model's name, the conversation and the instructions (§2.1 to §2.5);</li>
+<li>what comes back, and why it stopped (§2.5, §2.6);</li>
+<li>how to receive it as it is written, and how to measure it before you send it (§2.7, §2.8);</li>
+<li>how it fails, and how to read the numbers on it (§2.9, §2.10).</li>
+</ol>
+<p>Here is the picture for the whole section: <strong>the telegram office's order form</strong>. To reach the ghostwriter, you fill in a form at the counter:</p>
+<ul>
+<li>You must fill in three boxes: which writer you want, the most words you will pay for in the reply, and the text of the conversation so far.</li>
+<li>A separate box at the top holds standing instructions, such as "always answer in one sentence". It is not part of the conversation.</li>
+<li>You can attach enclosures: a photograph, a document, or a report from one of your own clerks.</li>
+<li>The reply comes back with a stamp that says why it ended: the writer finished, your word limit ran out, or the writer wants your clerk to do something.</li>
+<li>When the form is filled in wrongly, it comes back with a rejection slip. Some slips say "fix your form"; others say "we are busy, come back in 12 seconds".</li>
+<li>Every reply comes with an itemised bill.</li>
+</ul>
+<p>Every part of this section has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>On the order form</th>
+<th>In the Messages API</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The three boxes you must fill in</td>
+<td><code>model</code>, <code>max_tokens</code> and <code>messages</code></td>
+<td>§2.1</td>
+</tr>
+<tr>
+<td>The writer's registration number, which never changes</td>
+<td>a pinned model ID</td>
+<td>§2.2</td>
+</tr>
+<tr>
+<td>The office's noticeboard of writers and their rates</td>
+<td>the Models API</td>
+<td>§2.2</td>
+</tr>
+<tr>
+<td>Copying out the whole conversation on every form</td>
+<td>resending the message list, because the API is stateless</td>
+<td>§2.3</td>
+</tr>
+<tr>
+<td>Standing instructions in their own box at the top</td>
+<td>the system prompt</td>
+<td>§2.4</td>
+</tr>
+<tr>
+<td>Enclosures: a photograph, a document, a clerk's report</td>
+<td>content blocks</td>
+<td>§2.5</td>
+</tr>
+<tr>
+<td>The stamp saying why the reply ended</td>
+<td><code>stop_reason</code></td>
+<td>§2.6</td>
+</tr>
+<tr>
+<td>Having the reply read to you down the phone as it is written</td>
+<td>streaming</td>
+<td>§2.7</td>
+</tr>
+<tr>
+<td>The clerk who counts your form for free before you send it</td>
+<td><code>count_tokens</code></td>
+<td>§2.8</td>
+</tr>
+<tr>
+<td>Rejection slips: "fix your form" against "come back later"</td>
+<td>errors, and which ones to retry</td>
+<td>§2.9</td>
+</tr>
+<tr>
+<td>The itemised bill</td>
+<td><code>usage</code></td>
+<td>§2.10</td>
+</tr>
+</tbody>
+</table>
+<p>Most examples in this section call the real API. To run them yourself you need an Anthropic account and an <em>API key</em>, a secret string that identifies your account (§2.1 shows where it goes). A real run will not word its answers exactly as printed here, because the model samples, as §1.4 showed. The plain-Python examples need nothing, and print the same thing on every machine.</p>
 <h2 id="section-1-21-the-smallest-real-request">2.1 The Smallest Real Request</h2>
-<p>Three parameters are required: <code>model</code>, <code>max_tokens</code> and <code>messages</code>. Everything else is optional.</p>
+<p>Anthropic publishes a Python library called <code>anthropic</code>. A library like this is called an <em>SDK</em>, a software development kit: ready-made code that builds the request, sends it over the internet and turns the reply into Python objects you can read. You install it once with <code>pip install anthropic</code>.</p>
+<p>Three parameters are required: <code>model</code>, <code>max_tokens</code> and <code>messages</code>. Everything else is optional. In the picture, they are the three boxes you must fill in:</p>
+<ul>
+<li><code>model</code> is which writer you want: the exact name of one model.</li>
+<li><code>max_tokens</code> is the most tokens you will pay for in the reply.</li>
+<li><code>messages</code> is the conversation so far, as a list. Here it holds one message from you.</li>
+</ul>
+<p>Here is the smallest request that works. It asks for three primary colours, then prints every part of the reply on its own line:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1388,16 +1485,27 @@ text        : Red, blue and yellow.
 usage       : 15 in, 9 out
 </code></pre></div>
 
-<p>Four things about that, each of which matters later.</p>
-<p><strong><code>max_tokens</code> is required and is a hard ceiling on the response, not a target.</strong> It does not make the model verbose, and it does not reserve capacity. Set it too low and the answer is cut off mid-sentence. §2.6 shows what that looks like and how to notice.</p>
-<p>Each entry in <code>messages</code> carries a <strong>message role</strong>, and only two are valid here: <code>user</code> and <code>assistant</code>. The message role alternates, and §2.3 shows what happens when it does not.</p>
-<p><strong><code>content</code> is a list of blocks, not a string.</strong> Here there is one text block. With tools there are <code>tool_use</code> blocks, with thinking there are <code>thinking</code> blocks, and with citations the text blocks carry a <code>citations</code> array. <strong>Code that does <code>response.content[0].text</code> works until the day it does not</strong>, and that is the day you enable something. Iterate over the blocks and check <code>block.type</code>.</p>
-<p><strong>The API key comes from the environment.</strong> <code>anthropic.Anthropic()</code> with no arguments reads <code>ANTHROPIC_API_KEY</code>. Pass it explicitly only if you have a reason, because hard-coding it in source is the first item on every security review. The SDK also sets the <code>anthropic-version</code> header for you, to <code>2023-06-01</code>, which pins the <em>wire format</em> (the exact shape of requests and responses) and not the model. Raw HTTP callers must send <code>anthropic-version</code> themselves, and a request without it is rejected.</p>
-<p><strong>There is no session.</strong> This response is not stored anywhere you can refer to. The next request must carry the whole conversation, which is §2.3.</p>
+<p>Read that output line by line:</p>
+<ul>
+<li><code>id</code> is a unique name for this one reply. It is handy for finding the reply again in your logs.</li>
+<li><code>type</code> and <code>role</code> say that this is a message, and that the assistant (the model) wrote it.</li>
+<li><code>model</code> says which model answered.</li>
+<li><code>stop_reason</code> says why the reply ended. <code>end_turn</code> means the model finished on its own (§2.6 lists the others).</li>
+<li><code>content</code> is a list with one text block inside it.</li>
+<li><code>text</code> is the words of the reply, taken from that block.</li>
+<li><code>usage</code> is the meter: 15 tokens in, 9 tokens out. That is what you pay for (§2.10).</li>
+</ul>
+<p>Five things about that, each of which matters later.</p>
+<p><strong><code>max_tokens</code> is required and is a hard ceiling on the response, not a target.</strong> It does not make the model verbose, and it does not reserve capacity. It is the word limit on the order form: the writer stops there, wherever the sentence has got to. Set it too low and the answer is cut off mid-sentence. That is the opening puzzle, and §2.6 shows what it looks like and how to notice.</p>
+<p>Each entry in <code>messages</code> carries a <strong>message role</strong>, which says who wrote it. Only two are valid here: <code>user</code> (you) and <code>assistant</code> (the model). The message role alternates, you then the model then you, and §2.3 shows what happens when it does not.</p>
+<p><strong><code>content</code> is a list of blocks, not a string.</strong> A <em>string</em> is a piece of plain text. A list of blocks is more like an envelope with several enclosures in it. Here there is one text block. With tools there are <code>tool_use</code> blocks, with thinking there are <code>thinking</code> blocks, and with citations the text blocks carry a <code>citations</code> array. <strong>Code that does <code>response.content[0].text</code> works until the day it does not</strong>, and that is the day you enable something. <code>content[0]</code> means "the first block", and once a feature is on, the first block may not be text. Iterate over the blocks, meaning go through them one by one, and check <code>block.type</code>.</p>
+<p><strong>The API key comes from the environment.</strong> <code>anthropic.Anthropic()</code> with no arguments reads <code>ANTHROPIC_API_KEY</code>. That is an <em>environment variable</em>: a named value set outside your program, in the terminal that runs it, so the secret never appears in your code. Pass it explicitly only if you have a reason, because hard-coding it in source is the first item on every security review. The SDK also sets the <code>anthropic-version</code> header for you, to <code>2023-06-01</code>. A <em>header</em> is a labelled line of extra information sent along with the request. This one pins the <em>wire format</em> (the exact shape of requests and responses) and not the model. Raw HTTP callers, meaning programs that send the request by hand without the SDK, must send <code>anthropic-version</code> themselves, and a request without it is rejected.</p>
+<p><strong>There is no session.</strong> A <em>session</em> would be the server remembering you between requests, and there is none. This response is not stored anywhere you can refer to. The writer keeps no copies, so the next request must carry the whole conversation, which is §2.3.</p>
 <h2 id="section-1-22-model-ids">2.2 Model IDs</h2>
-<p>The <code>model</code> string is not a family name. It is a specific model, and the rules changed in a way that catches people returning to the API.</p>
-<p><strong>From the 4.6 generation onward, a dateless ID is a pinned snapshot.</strong> <code>claude-opus-5</code> is not an alias that drifts to whatever is newest. It maps to one fixed model whose weights and configuration are never updated. When there is an improved version, it ships under a <em>new</em> ID.</p>
-<p><strong>Before 4.6, IDs carried a snapshot date</strong> (<code>claude-haiku-4-5-20251001</code>). The Claude API also accepted shorter aliases (<code>claude-sonnet-4-5</code>) that pointed at the most recent dated snapshot for that minor version. Those aliases <em>do</em> move.</p>
+<p>The <code>model</code> string is not a family name. It is a specific model, like a writer's registration number at the office, and the rules changed in a way that catches people returning to the API.</p>
+<p><strong>From the 4.6 generation onward, a dateless ID is a pinned snapshot.</strong> <code>claude-opus-5</code> is not an alias that drifts to whatever is newest. An <em>alias</em> is a nickname that can be moved to point at something else. <code>claude-opus-5</code> is not one: it maps to one fixed model whose weights (the numbers learned in training) and configuration are never updated. When there is an improved version, it ships under a <em>new</em> ID.</p>
+<p><strong>Before 4.6, IDs carried a snapshot date</strong> (<code>claude-haiku-4-5-20251001</code>, where <code>20251001</code> is the date 2025-10-01). The Claude API also accepted shorter aliases (<code>claude-sonnet-4-5</code>) that pointed at the most recent dated snapshot for that minor version. Those aliases <em>do</em> move.</p>
+<p>Model IDs also decide your price. This program lists six models with their prices, in dollars per million tokens ($/MTok, from §1.3). It then works out what one typical call costs on each, with 4,000 tokens in and 600 out:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">CATALOGUE</span> <span class="o">=</span> <span class="p">[</span>
     <span class="c1"># (id, tier, input $/MTok, output $/MTok)</span>
     <span class="p">(</span><span class="s2">"claude-opus-5"</span><span class="p">,</span> <span class="s2">"Opus"</span><span class="p">,</span> <span class="mf">5.00</span><span class="p">,</span> <span class="mf">25.00</span><span class="p">),</span>
@@ -1436,8 +1544,9 @@ spread across the catalogue: 10x
 note claude-sonnet-5 is CHEAPER than claude-sonnet-4-6 — newer is not dearer
 </code></pre></div>
 
+<p>Read the table from the top. The two Opus models cost the same. Fable costs ten times what Haiku does, which is the "spread" on the last line but one. Now compare the two Sonnet rows.</p>
 <p>That last line is worth internalising, because the intuition it violates is strong. A newer model is not always more expensive: Sonnet 5 costs less than the Sonnet 4.6 it succeeds. <strong>Never assume a newer model costs more, and never assume an older one is cheaper.</strong></p>
-<p>Better still, do not hard-code the catalogue at all.</p>
+<p>Better still, do not hard-code the catalogue at all. Typing prices into your program is like copying the office's rate card into your notebook: it is right on the day you copy it. The office's noticeboard is always current, and the API has one. This asks it for five models:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1454,11 +1563,46 @@ claude-opus-4-8              Claude Opus 4.8
 claude-haiku-4-5-20251001    Claude Haiku 4.5
 </code></pre></div>
 
-<p>The Models API returns what exists right now, along with each model's <code>max_input_tokens</code>, <code>max_tokens</code> and a <code>capabilities</code> object. A model-selection routine that reads this at start-up keeps working when a new model lands. A hard-coded list quietly keeps using last year's.</p>
+<p>The Models API returns what exists right now, along with each model's <code>max_input_tokens</code>, <code>max_tokens</code> and a <code>capabilities</code> object (what the model can do). A model-selection routine that reads this at start-up keeps working when a new model lands. A hard-coded list quietly keeps using last year's.</p>
 <p>The <strong>models api</strong> is the mechanism, and reading it at start-up and not hard-coding a table is the habit worth forming. A models api call costs nothing, and its answer is current.</p>
-<p>Two companion sources are worth knowing when <strong>choosing a model</strong>. Choosing a model is a decision with three inputs: capability, price and latency (how long you wait). Only the first is hard to measure. Each model publishes a <strong>model card</strong> describing what it was trained and evaluated for. A model card is the document to read when deciding whether a model suits a domain and not whether it fits a budget, and it is the only source that describes evaluated behaviour and not mechanics. And <strong>model deprecation</strong> is a schedule you can subscribe to and not something you discover. A model deprecation notice names the retirement date and the migration path for older ids. <code>claude-opus-4-1</code> and <code>claude-sonnet-4</code> are retired on the Claude API and remain available on some partner platforms. That is exactly the sort of asymmetry that turns into an outage for whoever assumed otherwise.</p>
+<p>Two companion sources are worth knowing when <strong>choosing a model</strong>. Choosing a model is a decision with three inputs: capability, price and latency (how long you wait). Only the first is hard to measure.</p>
+<ul>
+<li>Each model publishes a <strong>model card</strong> describing what it was trained and evaluated for. A model card is the document to read when deciding whether a model suits a domain and not whether it fits a budget. It is the only source that describes evaluated behaviour and not mechanics.</li>
+<li>And <strong>model deprecation</strong> is a schedule you can subscribe to and not something you discover. A model deprecation notice names the retirement date and the migration path for older ids.</li>
+</ul>
+<p><code>claude-opus-4-1</code> and <code>claude-sonnet-4</code> are retired on the Claude API and remain available on some partner platforms (other companies' clouds that also sell Claude). That is exactly the sort of asymmetry that turns into an outage for whoever assumed otherwise.</p>
 <h2 id="section-1-23-turns-the-conversation-is-a-list-you-resend">2.3 Turns: The Conversation Is a List You Resend</h2>
-<p>The API is stateless. A multi-turn conversation is a list of alternating <code>user</code> and <code>assistant</code> messages that you own and resend in full.</p>
+<p>The API is stateless. <em>Stateless</em> means the server remembers nothing between requests, like the writer who keeps no copies. A multi-turn conversation, one with several back-and-forth exchanges, is a list of alternating <code>user</code> and <code>assistant</code> messages that you own and resend in full.</p>
+<p>You can see why without calling anything. This toy writer is plain Python. Like the real model, it knows only what is in the list it is sent. It is asked "What did I just say?" twice: once with only the newest message, and once with the whole list:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">writer</span><span class="p">(</span><span class="n">messages</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A toy model: it knows only what is in the list it is sent."""</span>
+    <span class="n">said</span> <span class="o">=</span> <span class="p">[</span><span class="n">m</span><span class="p">[</span><span class="s2">"content"</span><span class="p">]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">messages</span> <span class="k">if</span> <span class="n">m</span><span class="p">[</span><span class="s2">"role"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"user"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">said</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">"What did I just say?"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"Noted."</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">said</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"I have no earlier message from you."</span>
+    <span class="k">return</span> <span class="s2">"You said: "</span> <span class="o">+</span> <span class="n">said</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+
+
+<span class="n">history</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"My favourite colour is teal."</span><span class="p">}]</span>
+<span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"assistant"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">writer</span><span class="p">(</span><span class="n">history</span><span class="p">)})</span>
+<span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"What did I just say?"</span><span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"only the new message:"</span><span class="p">,</span> <span class="n">writer</span><span class="p">(</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"the whole list      :"</span><span class="p">,</span> <span class="n">writer</span><span class="p">(</span><span class="n">history</span><span class="p">))</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>only the new message: I have no earlier message from you.
+the whole list      : You said: My favourite colour is teal.
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><code>history</code> starts with one message from you. The toy's reply is appended as an <code>assistant</code> message, then your question as a <code>user</code> message. The list now has three entries.</li>
+<li><code>history[-1:]</code> is a list holding only the last entry. Sent that, the toy has never heard of teal.</li>
+<li>Sent the whole list, it can answer, because the answer is in the list.</li>
+</ul>
+<p>Nothing was remembered in between. The memory is the list, and the list lives in your program. The real API works the same way. This does the same two turns against it, then prints the token counts and the list that was sent on turn 2:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1493,15 +1637,17 @@ messages sent on turn 2: 3
   user       What did I just say?
 </code></pre></div>
 
-<p><strong>Append <code>response.content</code>, not a string.</strong> The list of blocks is what the API returns and what it expects back. Flattening it to text works for a plain conversation. It silently destroys tool calls, thinking blocks and compaction blocks (summaries the API writes to shrink a long conversation) the moment you use any of them, and §9.7 warns about exactly that mistake.</p>
+<p>Read the two <code>usage</code> lines. On turn 2 you typed five words, yet the request carried 44 input tokens, because it carried all three messages. The list printed underneath is exactly what was sent.</p>
+<p><strong>Append <code>response.content</code>, not a string.</strong> The list of blocks is what the API returns and what it expects back. Flattening it to text works for a plain conversation. It silently destroys tool calls, thinking blocks and compaction blocks (summaries the API writes to shrink a long conversation) the moment you use any of them, and §9.7 warns about exactly that mistake. In the picture, it is copying out only the words of a reply and throwing away its enclosures.</p>
 <p><strong>Roles must alternate</strong>, starting with <code>user</code>. Two consecutive user messages is a 400 (an HTTP error meaning the request itself is invalid). When you have several things to say, put them in one message as multiple content blocks.</p>
-<p><strong>Input tokens grow every turn</strong>, and you pay for all of them, every time. That is §9.1's quadratic growth, and it is visible right here in the two usage lines.</p>
+<p><strong>Input tokens grow every turn</strong>, and you pay for all of them, every time. That is §9.1's quadratic growth: the cost of the whole conversation grows much faster than its length. It is visible right here in the two usage lines, and the figure shows why:</p>
 <!-- fig:ai-turns -->
 <figure id="fig-ai-turns" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 380" role="img" aria-labelledby="t-ai-turns d-ai-turns" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-turns">A conversation is a list you resend</title><desc id="d-ai-turns">Three successive requests. Request 1 carries a system prompt and one user message. Request 2 carries those plus the assistant reply and a new user message. Request 3 carries everything again plus another reply and message. The API keeps nothing between requests, so every request carries the whole list.</desc><defs><marker id="ah-ai-turns" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="52" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">request 1</text><rect x="116" y="30" width="70" height="48" rx="7" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="151" y="57.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">system</text><rect x="194" y="30" width="70" height="48" rx="7" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="229" y="57.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">user 1</text><path d="M274,54 L610,54" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-turns)"/><rect x="620" y="27" width="84" height="54" rx="7" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6" stroke-dasharray="5 4"/><text x="662" y="50.4" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">new</text><text x="662" y="65.4" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">reply 1</text><text x="20" y="140" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">request 2</text><rect x="116" y="118" width="70" height="48" rx="7" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="151" y="145.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">system</text><rect x="194" y="118" width="70" height="48" rx="7" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="229" y="145.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">user 1</text><rect x="272" y="118" width="70" height="48" rx="7" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="307" y="145.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">reply 1</text><rect x="350" y="118" width="70" height="48" rx="7" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="385" y="145.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">user 2</text><path d="M430,142 L610,142" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-turns)"/><rect x="620" y="115" width="84" height="54" rx="7" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6" stroke-dasharray="5 4"/><text x="662" y="138.4" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">new</text><text x="662" y="153.4" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">reply 2</text><text x="20" y="228" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">request 3</text><rect x="116" y="206" width="70" height="48" rx="7" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="151" y="233.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">system</text><rect x="194" y="206" width="70" height="48" rx="7" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="229" y="233.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">user 1</text><rect x="272" y="206" width="70" height="48" rx="7" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="307" y="233.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">reply 1</text><rect x="350" y="206" width="70" height="48" rx="7" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="385" y="233.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">user 2</text><rect x="428" y="206" width="70" height="48" rx="7" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="463" y="233.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">reply 2</text><rect x="506" y="206" width="70" height="48" rx="7" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="541" y="233.9" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">user 3</text><path d="M586,230 L610,230" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-turns)"/><rect x="620" y="203" width="84" height="54" rx="7" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6" stroke-dasharray="5 4"/><text x="662" y="226.4" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">new</text><text x="662" y="241.4" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">reply 3</text><text x="360" y="306" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text-dim);opacity:1">nothing is remembered between requests:</text><text x="360" y="324.85" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text-dim);opacity:1">turn three carries turns one and two with it</text><rect x="190" y="344" width="61.25" height="23.5" rx="11.75" style="fill:#8a94a6;fill-opacity:.16;stroke:#8a94a6;stroke-width:1.2"/><text x="220.625" y="358" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">system</text><rect x="263.25" y="344" width="47.5" height="23.5" rx="11.75" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="287" y="358" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">user</text><rect x="322.75" y="344" width="123.125" height="23.5" rx="11.75" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="384.312" y="358" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">assistant reply</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The API is stateless: turn three does not remember turns one and two, it carries them. This is why every technique in section 9 exists.</figcaption></figure>
 <!-- /fig:ai-turns -->
 
 <h2 id="section-1-24-the-system-prompt">2.4 The System Prompt</h2>
-<p>The system prompt is a separate top-level parameter, and not a message with <code>role: "system"</code>. It is where instructions, persona and stable context go.</p>
+<p>The system prompt is a separate top-level parameter, and not a message with <code>role: "system"</code>. <em>Top-level</em> means it sits beside <code>model</code> and <code>messages</code> in the request, not inside the list. In the picture, it is the box at the top of the form for standing instructions. It is where instructions, persona (the character the model should play) and stable context go.</p>
+<p>It comes in two forms. This sends the same question twice, once with each:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1536,9 +1682,11 @@ block form  : Short wavelengths scatter most, so the sky looks blue.
 both are the same parameter, and only the block form can be cached
 </code></pre></div>
 
-<p>Two practical notes. The system prompt is <strong>not</strong> a message in <code>messages</code>, and putting <code>{"role": "system", ...}</code> there is a 400. There is one exception, the mid-conversation system message covered in §9.5, which is a different mechanism for a different purpose. And <strong>the system prompt is not a security boundary</strong>, and §14 is the whole argument.</p>
+<p>Both forms set the same thing. The string form is plain text. The block form is a list of text blocks, and a block can carry a <code>cache_control</code> marker. That marker is a cache breakpoint: it tells the API to keep everything up to that point on file, so that later requests that start the same way are cheaper (§9.4). That is the "long standard opening kept on file" from §1.</p>
+<p>Two practical notes. The system prompt is <strong>not</strong> a message in <code>messages</code>, and putting <code>{"role": "system", ...}</code> there is a 400. There is one exception, the mid-conversation system message covered in §9.5, which is a different mechanism for a different purpose. And <strong>the system prompt is not a security boundary</strong>: text in the conversation can still talk the model out of following it, and §14 is the whole argument.</p>
 <h2 id="section-1-25-content-blocks">2.5 Content Blocks</h2>
-<p>The <code>content</code> of a user message can be a plain string or a list of blocks. The list form is what lets one turn carry an image, a document, a tool result and a question together.</p>
+<p>The <code>content</code> of a user message can be a plain string or a list of blocks. The list form is what lets one turn carry an image, a document, a tool result and a question together, like a form with several enclosures pinned to it.</p>
+<p>There are nine block types in this course. This program prints them as a table: what each is, whether it appears in your messages or the model's, and which section teaches it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">BLOCK_TYPES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"text"</span><span class="p">,</span> <span class="s2">"user + assistant"</span><span class="p">,</span> <span class="s2">"prose"</span><span class="p">,</span> <span class="s2">"always"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"image"</span><span class="p">,</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"vision input"</span><span class="p">,</span> <span class="s2">"§8.2"</span><span class="p">),</span>
@@ -1577,9 +1725,10 @@ blocks you never construct, only read: tool_use, server_tool_use, thinking, comp
 <figure id="fig-ai-blocks" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 400" role="img" aria-labelledby="t-ai-blocks d-ai-blocks" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-blocks">Content blocks: the ones you build and the ones you only read</title><desc id="d-ai-blocks">User messages carry blocks you construct: text, image, document, search result and tool result. Assistant messages carry blocks you read and pass back verbatim: text, tool use, server tool use, thinking and compaction.</desc><defs><marker id="ah-ai-blocks" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="12" y="12" width="340" height="312" rx="14" style="fill:none;stroke:#4a9eda;stroke-width:1.4"/><text x="26" y="32" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#4a9eda;opacity:1">USER TURNS: YOU CONSTRUCT THESE</text><rect x="28" y="54" width="150" height="30" rx="15" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="103" y="73.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">text</text><text x="190" y="74" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">prose</text><rect x="28" y="106" width="150" height="30" rx="15" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="103" y="125.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">image</text><text x="190" y="126" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">vision input</text><rect x="28" y="158" width="150" height="30" rx="15" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="103" y="177.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">document</text><text x="190" y="178" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">PDFs and text files</text><rect x="28" y="210" width="150" height="30" rx="15" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="103" y="229.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">search_result</text><text x="190" y="230" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">RAG passages with citations</text><rect x="28" y="262" width="150" height="30" rx="15" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="103" y="281.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">tool_result</text><text x="190" y="282" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">your answer to a call</text><rect x="368" y="12" width="340" height="312" rx="14" style="fill:none;stroke:#35b37e;stroke-width:1.4"/><text x="382" y="32" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#35b37e;opacity:1">ASSISTANT TURNS: YOU ONLY READ THESE</text><rect x="384" y="54" width="150" height="30" rx="15" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="459" y="73.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">text</text><text x="546" y="74" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">prose</text><rect x="384" y="106" width="150" height="30" rx="15" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="459" y="125.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">tool_use</text><text x="546" y="126" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">the model asking for a call</text><rect x="384" y="158" width="150" height="30" rx="15" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="459" y="177.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">server_tool_use</text><text x="546" y="178" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">a tool Anthropic ran</text><rect x="384" y="210" width="150" height="30" rx="15" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="459" y="229.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">thinking</text><text x="546" y="230" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">reasoning before the answer</text><rect x="384" y="262" width="150" height="30" rx="15" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="459" y="281.08" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:var(--text);opacity:1">compaction</text><text x="546" y="282" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">a server-written summary</text><path d="M538,330 L538,352 L182,352 L182,332" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5" marker-end="url(#ah-ai-blocks)"/><text x="360" y="376" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">assistant blocks go back verbatim as part of the next request</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Assistant blocks are read, not written. You send them back verbatim as part of the conversation; you never build one yourself.</figcaption></figure>
 <!-- /fig:ai-blocks -->
 
-<p>The division in that last line is the one to hold on to. <strong>Assistant blocks are read, not written.</strong> You pass them back verbatim as part of the conversation, but you never build one yourself. User blocks are the ones you construct.</p>
+<p>Read the table by its second column. Text appears on both sides. Images, documents, search results and tool results come only from you: they are the enclosures you pin to your form. Tool calls, server tool calls, thinking and compaction come only from the model.</p>
+<p>The division in that last line is the one to hold on to. <strong>Assistant blocks are read, not written.</strong> You pass them back verbatim, word for word, as part of the conversation, but you never build one yourself. User blocks are the ones you construct.</p>
 <h2 id="section-1-26-stop-reasons">2.6 Stop Reasons</h2>
-<p><code>stop_reason</code> says why generation ended, and handling it is the difference between an application that degrades gracefully and one that shows users half a sentence.</p>
+<p><code>stop_reason</code> says why generation ended. In the picture, it is the stamp the office puts on every reply. Handling it is the difference between an application that degrades gracefully and one that shows users half a sentence. There are seven values:</p>
 <div style="display:grid;grid-template-columns:210px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#35b37e"><code>end_turn</code></div><div><strong>Finished naturally.</strong> Use the response. The only stop reason that needs no handling.</div>
 <div style="font-weight:600;color:#d9a441"><code>max_tokens</code></div><div><strong>Hit your ceiling.</strong> The answer is <em>truncated</em>, possibly mid-word. Raise <code>max_tokens</code> or continue the response — never present it as complete.</div>
@@ -1590,6 +1739,7 @@ blocks you never construct, only read: tool_use, server_tool_use, thinking, comp
 <div style="font-weight:600;color:#e06c75"><code>model_context_window_exceeded</code></div><div><strong>The response filled the window.</strong> Treat it as truncated; the conversation has outgrown the model.</div>
 </div>
 
+<p>Here is the opening puzzle, run for real. The same question is asked twice: once with room for 2,048 tokens, and once with a limit of 24. For each run the program prints the stop reason, the output tokens used, whether the answer is complete, and the last 52 characters of the text:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1618,13 +1768,20 @@ max_tokens=24     stop_reason=max_tokens   output=24    complete=False
   'rface of the Earth. Water evaporates from oceans and'
 </code></pre></div>
 
-<p>Look at the truncated one. It ends mid-sentence, it is grammatical up to the cut, and <strong>nothing in the text says it is incomplete</strong>. A user shown that has no way to know. <code>stop_reason</code> is the only signal, which is why every loop in this course branches on it and not on the presence of text.</p>
+<p>Read the two runs line by line:</p>
+<ul>
+<li>With room for 2,048 tokens, the model used 31 and stopped by itself: <code>end_turn</code>. The text ends with a full stop.</li>
+<li>With a limit of 24, it used exactly 24 and was stopped: <code>max_tokens</code>. The text ends at "oceans and".</li>
+</ul>
+<p>Look at the truncated one. It ends mid-sentence, it is grammatical up to the cut, and <strong>nothing in the text says it is incomplete</strong>. A user shown that has no way to know. <code>stop_reason</code> is the only signal, which is why every loop in this course branches on it and not on the presence of text. That answers the puzzle: the program could have known, by reading one field.</p>
 <!-- fig:ai-stop -->
 <figure id="fig-ai-stop" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 600" role="img" aria-labelledby="t-ai-stop d-ai-stop" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-stop">Every stop reason, and what your code does with it</title><desc id="d-ai-stop">Seven stop reasons. End turn means finished: use the response. Max tokens and model context window exceeded mean the answer is truncated. Stop sequence means one of your strings fired. Tool use and pause turn mean the loop continues. Refusal means the model declined, as an HTTP 200 with empty content.</desc><defs><marker id="ah-ai-stop" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="28" y="22" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">stop_reason</text><text x="268" y="22" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">WHAT HAPPENED</text><text x="468" y="22" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">WHAT YOU DO</text><rect x="12" y="34" width="696" height="68" rx="8" style="fill:#35b37e;fill-opacity:0.09"/><text x="28" y="74" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:13px;font-weight:650;fill:var(--text);opacity:1">end_turn</text><text x="268" y="74" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">finished naturally</text><text x="468" y="64" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">use the response; the only</text><text x="468" y="82" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">reason needing no handling</text><rect x="12" y="114" width="696" height="68" rx="8" style="fill:#d9a441;fill-opacity:0.09"/><text x="28" y="154" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:13px;font-weight:650;fill:var(--text);opacity:1">max_tokens</text><text x="268" y="144" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">hit your ceiling: the</text><text x="268" y="162" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">answer is truncated</text><text x="468" y="144" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">raise it or continue;</text><text x="468" y="162" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">never show it as complete</text><rect x="12" y="194" width="696" height="68" rx="8" style="fill:#d9a441;fill-opacity:0.09"/><text x="28" y="234" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">model_context_window_exceeded</text><text x="268" y="224" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">the response filled</text><text x="268" y="242" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">the window</text><text x="468" y="224" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">treat as truncated;</text><text x="468" y="242" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">the conversation outgrew it</text><rect x="12" y="274" width="696" height="68" rx="8" style="fill:#4a9eda;fill-opacity:0.09"/><text x="28" y="314" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:13px;font-weight:650;fill:var(--text);opacity:1">stop_sequence</text><text x="268" y="304" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">one of your stop_sequences</text><text x="268" y="322" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">fired</text><text x="468" y="304" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">read the matched string;</text><text x="468" y="322" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">it is an expected end</text><rect x="12" y="354" width="696" height="68" rx="8" style="fill:#7c8cff;fill-opacity:0.09"/><text x="28" y="394" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:13px;font-weight:650;fill:var(--text);opacity:1">tool_use</text><text x="268" y="384" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">the model wants a</text><text x="268" y="402" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">tool run</text><text x="468" y="384" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">run it, send a tool_result,</text><text x="468" y="402" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">go round again</text><rect x="12" y="434" width="696" height="68" rx="8" style="fill:#7c8cff;fill-opacity:0.09"/><text x="28" y="474" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:13px;font-weight:650;fill:var(--text);opacity:1">pause_turn</text><text x="268" y="464" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">a server-tool loop</text><text x="268" y="482" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">hit its iteration cap</text><text x="468" y="464" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">append the content</text><text x="468" y="482" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">and send again</text><rect x="12" y="514" width="696" height="68" rx="8" style="fill:#cf4b6c;fill-opacity:0.09"/><text x="28" y="554" text-anchor="start" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:13px;font-weight:650;fill:var(--text);opacity:1">refusal</text><text x="268" y="554" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">the model declined</text><text x="468" y="544" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">HTTP 200, empty content,</text><text x="468" y="562" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">a stop_details object</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">stop_reason is the only signal of a truncated answer: nothing in the text says it stopped mid-sentence.</figcaption></figure>
 <!-- /fig:ai-stop -->
 
 <h2 id="section-1-27-streaming">2.7 Streaming</h2>
-<p>For anything a person waits on, stream. Time to first token is what a user experiences as speed, and it is a fraction of the time to the last token.</p>
+<p>So far, each request waited until the whole reply was written, then received it at once. <em>Streaming</em> means receiving the reply piece by piece, while it is being written. In the picture, it is the office reading the reply to you down the phone as the writer goes, instead of posting the finished telegram.</p>
+<p>For anything a person waits on, stream. Time to first token, the wait before the first piece of text arrives, is what a user experiences as speed, and it is a fraction of the time to the last token.</p>
+<p>This asks for the same three colours as §2.1, but streams the reply. It prints each piece the moment it arrives, then reads the finished message at the end:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1648,7 +1805,9 @@ stop_reason: end_turn
 output tokens: 9
 </code></pre></div>
 
+<p>On screen, the colours appear a few pieces at a time instead of all at once. <code>end=""</code> stops <code>print</code> from starting a new line after each piece, so the pieces join into one line. <code>get_final_message()</code> then gives you the whole message, with the same <code>stop_reason</code> and <code>usage</code> a non-streaming request would have.</p>
 <p><code>stream.text_stream</code> is the convenience path and covers most needs. Underneath it is a sequence of typed server-sent events (small messages the server pushes as it generates). Knowing their shape matters when you need more than text, such as a token counter, a tool-call renderer or a progress indicator.</p>
+<p>A stream is made of six kinds of event, in a set order,, plus two that can turn up at any point. This program prints them in order:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">EVENT_FLOW</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"message_start"</span><span class="p">,</span> <span class="s2">"a Message with empty content and initial usage"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"content_block_start"</span><span class="p">,</span> <span class="s2">"one per block, carrying its index"</span><span class="p">),</span>
@@ -1678,13 +1837,28 @@ ping                  keep-alive; ignore it
 error                 a mid-stream failure AFTER a 200 was returned
 </code></pre></div>
 
+<p>Read it from the top. One <code>message_start</code> opens the message. Each block then gets a start, many small deltas (pieces of content) and a stop. A <code>message_delta</code> carries the final changes, and <code>message_stop</code> closes it.</p>
 <p>Three traps live in that list.</p>
-<p><strong>Usage in <code>message_delta</code> is cumulative</strong>, not a delta (an increment), despite the event name. Adding successive values inflates your token counts.</p>
+<p><strong>Usage in <code>message_delta</code> is cumulative</strong>, not a delta (an increment), despite the event name. <em>Cumulative</em> means it is a running total, like the reading on a taxi meter: each reading already includes everything before it. Adding successive values inflates your token counts. Here is the difference, with three made-up readings of one running total:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># A running total of output tokens, read three times during one stream.</span>
+<span class="n">readings</span> <span class="o">=</span> <span class="p">[</span><span class="mi">12</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">41</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">"adding the readings:"</span><span class="p">,</span> <span class="nb">sum</span><span class="p">(</span><span class="n">readings</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"the last reading   :"</span><span class="p">,</span> <span class="n">readings</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>adding the readings: 83
+the last reading   : 41
+</code></pre></div>
+
+<p>The true count is 41, the last reading. Adding them gives 83, which counts the early tokens more than once.</p>
 <p><strong>Errors can arrive mid-stream, after a 200.</strong> The HTTP status was already sent, so standard error handling never sees it. An <code>overloaded_error</code> that would have been a 529 arrives as an <code>error</code> event instead. If your streaming code has no branch for that event type, an overload looks like a truncated answer.</p>
-<p><strong>New event types will be added.</strong> Handle unknown types by ignoring them and not by raising, or a future addition breaks your client.</p>
-<p>Streaming is also a practical necessity and not just a nicety at large <code>max_tokens</code>. A long non-streaming request risks an HTTP timeout, and §11.3's task-budget example streams for exactly this reason.</p>
+<p><strong>New event types will be added.</strong> Handle unknown types by ignoring them and not by raising (stopping with an error), or a future addition breaks your client.</p>
+<p>Streaming is also a practical necessity and not just a nicety at large <code>max_tokens</code>. A long non-streaming request risks an HTTP timeout, where the connection gives up waiting, and §11.3's task-budget example streams for exactly this reason.</p>
 <h2 id="section-1-28-counting-tokens">2.8 Counting Tokens</h2>
+<p>Before you send a long request, you often need to know whether it will fit. In the picture, it is the clerk at the counter who counts your form for free before you pay to send it.</p>
 <p><strong>Token counting</strong> has its own endpoint. <code>count_tokens</code> takes the same request shape and returns what it would cost in input tokens. It is free, and it is the only honest way to answer "will this fit".</p>
+<p>This counts a small request, then works out how much room is left in a 200,000-token window once 4,096 tokens are kept back for the reply:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1710,10 +1884,13 @@ headroom in a 200,000-token window: 195,878 tokens
 fits: True
 </code></pre></div>
 
+<p>Read it line by line. The request is 26 input tokens. Take those, and the 4,096 kept for the reply, away from 200,000, and 195,878 tokens are left. It fits, with a great deal of room.</p>
 <p><strong>Budget for the output as well as the input.</strong> The context window holds both. A request that uses 199,000 of a 200,000-token window leaves a thousand tokens to answer in, and you will meet <code>max_tokens</code> or <code>model_context_window_exceeded</code> and not a helpful error.</p>
-<p>Token counting includes <code>tools</code> and <code>system</code>, which is how you discover that a tool surface is larger than you assumed (§6.9).</p>
+<p>Token counting includes <code>tools</code> and <code>system</code>, which is how you discover that a tool surface (the descriptions of every tool you offer) is larger than you assumed (§6.9).</p>
 <h2 id="section-1-29-errors-retries-and-rate-limits">2.9 Errors, Retries and Rate Limits</h2>
-<p>Every <strong>api error</strong> has an HTTP status and a machine-readable <code>type</code>, and the SDK raises a typed exception per status. Catching <code>Exception</code> and retrying blindly is how a 400 becomes an infinite loop.</p>
+<p>Sometimes a request fails. In the picture, the form comes back with a rejection slip, and the slip says one of two things: "you filled this in wrongly", or "we are busy, try later". The first kind never goes away by itself. The second usually does.</p>
+<p>Every <strong>api error</strong> has an HTTP status and a machine-readable <code>type</code>, and the SDK raises a typed exception per status. An <em>exception</em> is Python's way of reporting an error; the SDK has a different one for each kind. Catching <code>Exception</code> (every error at once) and retrying blindly is how a 400 becomes an infinite loop.</p>
+<p>There are ten statuses to know. This program prints them as a table, marks which ones are worth retrying, and lists those at the end:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">ERRORS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="mi">400</span><span class="p">,</span> <span class="s2">"invalid_request_error"</span><span class="p">,</span> <span class="s2">"malformed request, or a spend limit"</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
     <span class="p">(</span><span class="mi">401</span><span class="p">,</span> <span class="s2">"authentication_error"</span><span class="p">,</span> <span class="s2">"bad, revoked or expired key"</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
@@ -1752,6 +1929,31 @@ retryable: [429, 500, 504, 529]
 everything else is a bug in your request; retrying cannot fix it
 </code></pre></div>
 
+<p>Read the <code>retry?</code> column. Every status below 429 is a slip that sending again cannot fix: a bad request, a bad key, a billing problem, missing access, a wrong address, or a request over 32 MB. The four marked <code>yes</code> are "try later" slips.</p>
+<p>Why can a 400 not be fixed by retrying? Because the same wrong form is refused the same way every time. This toy office is plain Python. It refuses any form with no <code>max_tokens</code> box (a 400), and it is busy (a 529) for the first two attempts, then answers (a 200). Each form gets up to five attempts:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">send</span><span class="p">(</span><span class="n">form</span><span class="p">,</span> <span class="n">attempt</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A toy office. A form with no max_tokens is refused every time (400).</span>
+<span class="sd">    A busy office is busy for the first two attempts only (529)."""</span>
+    <span class="k">if</span> <span class="s2">"max_tokens"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">form</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">400</span>
+    <span class="k">return</span> <span class="mi">529</span> <span class="k">if</span> <span class="n">attempt</span> <span class="o">&lt;</span> <span class="mi">3</span> <span class="k">else</span> <span class="mi">200</span>
+
+
+<span class="k">for</span> <span class="n">form</span> <span class="ow">in</span> <span class="p">({</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"claude-opus-5"</span><span class="p">,</span> <span class="s2">"max_tokens"</span><span class="p">:</span> <span class="mi">64</span><span class="p">},</span>
+             <span class="p">{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"claude-opus-5"</span><span class="p">}):</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">):</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="n">send</span><span class="p">(</span><span class="n">form</span><span class="p">,</span> <span class="n">attempt</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="nb">print</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">form</span><span class="p">),</span> <span class="s2">"-&gt;"</span><span class="p">,</span> <span class="n">status</span><span class="p">,</span> <span class="s2">"after"</span><span class="p">,</span> <span class="n">attempt</span><span class="p">,</span> <span class="s2">"attempts"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>['max_tokens', 'model'] -&gt; 200 after 3 attempts
+['model'] -&gt; 400 after 5 attempts
+</code></pre></div>
+
+<p>The complete form was answered on its third attempt, because "busy" cleared. The incomplete one was refused all five times. Without the limit of five, that loop would never end.</p>
+<p>A real "try later" slip carries information you can read. This catches a rate-limit error, a 429, and prints what came with it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1776,13 +1978,15 @@ retry-after: 12 seconds
 remaining  : 0
 </code></pre></div>
 
-<p>The <code>type</code> is the field to branch on and not the message, because an api error's message is prose that may be reworded while its type is stable.</p>
-<p><strong>The SDK already retries for you.</strong> It retries transient failures twice by default, with exponential backoff (waits that get longer each time), and it honours <code>retry-after</code>. Configure it with <code>max_retries</code> and do not write your own loop. Disable it (<code>max_retries=0</code>) only when you have a reason, such as an outer idempotency layer.</p>
+<p>Read it line by line. The exception is a <code>RateLimitError</code>, with status 429. The <code>retry-after</code> header says to wait 12 seconds. The second header says how many input tokens you have left before the limit: none.</p>
+<p>The <code>type</code> is the field to branch on and not the message, because an api error's message is prose that may be reworded while its type is stable. <em>Branching</em> means choosing what to do next with an <code>if</code>.</p>
+<p><strong>The SDK already retries for you.</strong> It retries transient failures (ones that clear by themselves) twice by default, with exponential backoff (waits that get longer each time), and it honours <code>retry-after</code>. Configure it with <code>max_retries</code> and do not write your own loop. Disable it (<code>max_retries=0</code>) only when you have a reason, such as an outer idempotency layer: your own code that already makes a repeated request safe and handles retries itself.</p>
 <p><strong>Honour <code>retry-after</code> and do not guess.</strong> It says how long to wait, and retrying earlier fails. Blind exponential backoff without it makes an overload worse for everybody.</p>
-<p><strong>One 429 is not like another.</strong> A rate-limit 429 carries <code>retry-after</code> and clears. A <em>spend-cap</em> 429 has no <code>retry-after</code> and keeps failing until access resumes, so a retry loop on it spins forever. Branch on the header's presence.</p>
+<p><strong>One 429 is not like another.</strong> A rate-limit 429 carries <code>retry-after</code> and clears. A <em>spend-cap</em> 429 means your account has hit the most it is allowed to spend. It has no <code>retry-after</code> and keeps failing until access resumes, so a retry loop on it spins forever. Branch on the header's presence.</p>
 <p><strong>The <code>anthropic-ratelimit-*</code> headers are on every response, not just failures.</strong> Reading <code>anthropic-ratelimit-input-tokens-remaining</code> on success lets you slow down <em>before</em> you are throttled. That is a much better experience than discovering the limit by hitting it.</p>
 <h2 id="section-1-210-reading-usage">2.10 Reading <code>usage</code></h2>
-<p><code>usage</code> is the meter, and it grows a field every time a feature is added. Reading it properly is how cost tracking stays correct.</p>
+<p><code>usage</code> is the meter, and in the picture it is the itemised bill. It grows a field every time a feature is added. Reading it properly is how cost tracking stays correct.</p>
+<p>This example does not call the API. It builds a <code>usage</code> object by hand, with every field filled in at once, as a request that used the cache and two web searches would report it. It then prices it at Opus 5's rates:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Usage</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""The shape of a usage object with everything populated at once."""</span>
 
@@ -1832,6 +2036,14 @@ cost of this one request                 : $0.03891
 of which server-tool fees                : $0.02000  (51%)
 </code></pre></div>
 
+<p>Read the bill line by line:</p>
+<ul>
+<li>Only 42 input tokens were billed at the full price.</li>
+<li>Another 18,400 were read from the cache, at a tenth of the price.</li>
+<li>Nothing was written to the cache this time.</li>
+<li>So 18,442 input tokens were processed in total, plus 380 output tokens and two web searches.</li>
+<li>The request cost about 3.9 cents, and the two searches were 2 cents of that: 51%.</li>
+</ul>
 <p><strong><code>input_tokens</code> is not the total input.</strong> It counts only what came <em>after</em> the last cache breakpoint. The total is the sum of the three input fields, and a cost dashboard reading <code>input_tokens</code> alone will report a collapse the day caching is switched on.</p>
 <p><strong>Server-tool fees are a separate meter</strong> and, as that percentage shows, can be most of the bill on a search-heavy request. §15 assembles all of it into one model.</p>
 <p><strong><code>usage.iterations</code> appears when compaction is enabled</strong> (§9.7), and the top-level fields then exclude the compaction pass. Any cost tracking has to sum the iterations instead.</p>
