@@ -3196,11 +3196,127 @@ e  extra field in the JSON    structured outputs, not prompting
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-1">← Back</button><button class="btn-next" data-next="section-3">Next: Structured Outputs →</button></div>
 </section>
-<section class="course-section" id="section-3" data-section-id="section-3"><div class="section-header-meta">  <span class="section-tag">SECTION 4</span>  <button class="btn-complete" data-complete="section-3"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Structured Outputs</h1><p>Most of the time you do not want prose. You want a record: a classification, an extracted field, or a decision your code can branch on. Getting one out of a language model used to mean asking politely for JSON, parsing it, and handling the cases where the model wrapped it in a sentence, used single quotes, or invented a field.</p>
-<p><strong>Structured outputs remove that entire category of failure.</strong> They do it not by asking more firmly but by constraining what the model is allowed to emit. The output is generated against a compiled grammar derived from your schema (the description of the shape you want), so a response that violates the schema is not merely unlikely. It is unreachable.</p>
-<p>There are two features, and you can use them independently or together. <strong>JSON outputs</strong> (<code>output_config.format</code>) constrain the response. <strong>Strict tool use</strong> (<code>strict: true</code>, from §6.8) constrains tool inputs. This section covers both and, more importantly, where the guarantee stops.</p>
+<section class="course-section" id="section-3" data-section-id="section-3"><div class="section-header-meta">  <span class="section-tag">SECTION 4</span>  <button class="btn-complete" data-complete="section-3"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Structured Outputs</h1><p>Start with a puzzle. You ask a model to read a customer's message and reply in JSON. <em>JSON</em> is a plain-text way of writing a record, such as <code>{"intent": "refund"}</code>: each field's name in double quotes, followed by its value. Your program reads the reply with <code>json.loads</code>, Python's JSON reader, and passes it to the handler for that intent. Here are two replies that came back:</p>
+<blockquote>
+<p><code>{"intent": "refund", "urgency": "high"}</code></p>
+<p><code>{"intent": "money back"}</code></p>
+</blockquote>
+<p><code>json.loads</code> reads both without a single complaint. Is your program safe? Guess before you read on. §4.1 runs both replies, and shows what each one does to the code that receives it.</p>
+<p>That puzzle is the whole subject in small. Most of the time you do not want prose from a model. You want a <em>record</em>, a small piece of data with named fields: a classification, an extracted field, or a decision your code can branch on. Getting one out of a language model used to take three steps:</p>
+<ol>
+<li>asking politely for JSON in the prompt;</li>
+<li><em>parsing</em> the reply, meaning turning its text into a Python value;</li>
+<li>handling every case where the model wrapped it in a sentence, used single quotes, or invented a field.</li>
+</ol>
+<p><strong>Structured outputs remove that entire category of failure.</strong> They do it not by asking more firmly but by constraining what the model is allowed to emit. Here is how it works:</p>
+<ul>
+<li>You describe the shape you want in a <em>schema</em>: which fields, what type each one has, and which values are allowed.</li>
+<li>The API turns your schema into a <em>grammar</em>, a set of rules saying which characters may come next at every point of the reply.</li>
+<li>It <em>compiles</em> that grammar, meaning it converts it once into a fast form the server checks the reply against.</li>
+<li>The model then writes its reply under those rules.</li>
+</ul>
+<p>So a response that violates the schema is not merely unlikely. It is unreachable.</p>
+<p>There are two features, and you can use them independently or together:</p>
+<ul>
+<li><strong>JSON outputs</strong> (<code>output_config.format</code>) constrain the response, the reply the model writes for you.</li>
+<li><strong>Strict tool use</strong> (<code>strict: true</code>, taught in full in §6.8) constrains tool inputs. A <em>tool</em> is a function your code offers the model. The model asks for it to be run, with inputs it writes itself; §1 called that request a tool call.</li>
+</ul>
+<p>This section covers both and, more importantly, where the guarantee stops. It has eight subsections, in five parts:</p>
+<ol>
+<li>what goes wrong without it (§4.1);</li>
+<li>the feature itself, and what a schema may contain (§4.2, §4.3);</li>
+<li>the three cases where the guarantee stops (§4.4);</li>
+<li>two smaller behaviours: the order of fields, and tool inputs (§4.5, §4.6);</li>
+<li>what it costs, and when not to use it (§4.7, §4.8).</li>
+</ol>
+<p>Here is the picture for the whole section. In §1 you met the model as a ghostwriter you can only reach by telegram. In §2 you filled in the telegram office's order form, and in §3 you wrote the brief. §3.5 ended with a promise: a brief can ask the writer nicely for a neat table, but a printed form with boxes leaves the writer no other way to fill it in. This section is that form: <strong>a printed reply card</strong>. Instead of a blank sheet, you send the writer a card with labelled boxes. And the office fits the writer's telegraph key with a <em>stencil</em>, a cover with holes cut in it, so that only the characters that fit the card can be sent at all.</p>
+<p>Every part of this section has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>On the reply card</th>
+<th>In structured outputs</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A blank sheet, with a polite note asking for boxes</td>
+<td>asking for JSON in the prompt</td>
+<td>§4.1</td>
+</tr>
+<tr>
+<td>The card's labelled boxes, each marked "words" or "number"</td>
+<td>a JSON schema</td>
+<td>§4.2</td>
+</tr>
+<tr>
+<td>The stencil on the telegraph key</td>
+<td>the compiled grammar</td>
+<td>§4.2</td>
+</tr>
+<tr>
+<td>A box with its allowed answers printed beside it</td>
+<td>an <code>enum</code></td>
+<td>§4.2</td>
+</tr>
+<tr>
+<td>No margin to scribble anything else in</td>
+<td><code>additionalProperties: false</code></td>
+<td>§4.2</td>
+</tr>
+<tr>
+<td>A box marked "number" that cannot say "between 0 and 1"</td>
+<td>no numeric or string constraints</td>
+<td>§4.3</td>
+</tr>
+<tr>
+<td>The telegram running out of words halfway across the card</td>
+<td><code>max_tokens</code> truncation</td>
+<td>§4.4</td>
+</tr>
+<tr>
+<td>The writer refusing, and sending the card back unfilled</td>
+<td>a refusal</td>
+<td>§4.4</td>
+</tr>
+<tr>
+<td>An allowed answer copied out with one letter capitalised</td>
+<td>enum capitalisation</td>
+<td>§4.4</td>
+</tr>
+<tr>
+<td>Required boxes filled in first</td>
+<td>property ordering</td>
+<td>§4.5</td>
+</tr>
+<tr>
+<td>A stencilled request slip for your clerk</td>
+<td>strict tool use</td>
+<td>§4.6</td>
+</tr>
+<tr>
+<td>A sheet of instructions stapled to every card, and the stencil kept in a drawer for a day</td>
+<td>what it costs</td>
+<td>§4.7</td>
+</tr>
+<tr>
+<td>A love letter written in a form's one big box</td>
+<td>when not to use it</td>
+<td>§4.8</td>
+</tr>
+</tbody>
+</table>
+<p>Two examples call the real API (§4.2 and §4.6), so running them needs an API key, and the model may word its reply a little differently. Every other example is plain Python, and prints the same thing on every machine.</p>
 <h2 id="section-3-41-the-problem-stated-honestly">4.1 The Problem, Stated Honestly</h2>
-<p>Before the mechanism, it is worth seeing precisely what goes wrong without it, because the failure modes are not the ones people expect.</p>
+<p>Before the mechanism, it is worth seeing precisely what goes wrong without it, because the failure modes are not the ones people expect. In the picture, this is the blank sheet with a polite note asking for boxes.</p>
+<p>The example below collects six replies a model can really produce when the prompt asks for JSON. It asks three questions of each one:</p>
+<ul>
+<li>Does <code>json.loads</code> accept it at all?</li>
+<li>Is the <code>intent</code> one of the three your code handles? A fixed list of allowed values like that is an <em>enum</em>, short for enumeration.</li>
+<li>Does it hold only the fields you expect, with nothing stray?</li>
+</ul>
+<p>The <code>try</code>/<code>except</code> catches the error <code>json.loads</code> raises on text that is not JSON, and counts that reply as failing all three:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 
 <span class="c1"># Six real shapes a model can produce when you ask for JSON in the prompt.</span>
@@ -3242,14 +3358,70 @@ value outside the enum  True      False         True
 the last two parse perfectly and are still wrong, in different ways
 </code></pre></div>
 
-<p><strong>The parse failures are the easy half.</strong> A wrapper or a fence around the JSON is annoying and detectable. You write a regex, you feel dirty, and it works. The dangerous rows are the last two: valid JSON with an extra field, and valid JSON with a value outside your enum. Both parse. Both flow into your code. Neither raises anything, and the second one silently routes a refund request to no handler at all.</p>
-<p>Every one of these becomes impossible under a constrained grammar.</p>
+<p>Read the table row by row:</p>
+<ul>
+<li>The first row is the reply you hoped for, and it passes all three checks.</li>
+<li>The next three do not parse at all. "Sure! Here is the JSON:" is a sentence in front of the record. A <em>markdown fence</em> is the line of three backticks that chat formats use to frame code. And single quotes are not legal JSON, which requires double quotes.</li>
+<li>The last two parse perfectly. Each one still fails a check.</li>
+</ul>
+<p><strong>The parse failures are the easy half.</strong> A wrapper or a fence around the JSON is annoying and detectable. You write a <em>regex</em> (a pattern that finds text, here the part between the braces), you feel dirty, and it works.</p>
+<p>The dangerous rows are the last two, and they are the two replies from the opening puzzle:</p>
+<ul>
+<li><code>{"intent": "refund", "urgency": "high"}</code> is valid JSON with an extra field. Your code never asked for <code>urgency</code>, so what happens to it is now down to luck.</li>
+<li><code>{"intent": "money back"}</code> is valid JSON with a value outside your enum. Your code has no handler called "money back", so it silently routes a refund request to no handler at all.</li>
+</ul>
+<p>Both parse. Both flow into your code. Neither raises anything, so nothing tells you. The program in the puzzle was not safe, twice over.</p>
+<p>Every one of these becomes impossible under a constrained grammar. In the picture, a card with no margin has nowhere to write <code>urgency</code>, and a box with three printed answers cannot hold "money back". The figure sums up the table:</p>
 <!-- fig:ai-json-shapes -->
 <figure id="fig-ai-json-shapes" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 440" role="img" aria-labelledby="t-ai-json-shapes d-ai-json-shapes" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-json-shapes">Six shapes a model produces when you ask for JSON in the prompt</title><desc id="d-ai-json-shapes">A table of six responses and three checks: does it parse, is the intent in the enum, and are there no stray fields. Clean passes all. A prose wrapper, a markdown fence and single quotes fail to parse. An extra field parses but has a stray field, and a value outside the enum parses but breaks the enum.</desc><defs><marker id="ah-ai-json-shapes" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="330" y="24" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">parses?</text><text x="460" y="24" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">valid enum?</text><text x="590" y="24" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">no stray fields?</text><rect x="12" y="36" width="696" height="48" rx="8" style="fill:#8a94a6;fill-opacity:0.06"/><text x="28" y="65" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text);opacity:1">clean</text><rect x="304" y="47" width="52" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="330" y="64.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✓</text><rect x="434" y="47" width="52" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="460" y="64.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✓</text><rect x="564" y="47" width="52" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="590" y="64.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✓</text><rect x="12" y="94" width="696" height="48" rx="8" style="fill:#8a94a6;fill-opacity:0.06"/><text x="28" y="123" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text);opacity:1">prose wrapper</text><rect x="304" y="105" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="330" y="122.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="434" y="105" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="460" y="122.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="564" y="105" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="590" y="122.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="12" y="152" width="696" height="48" rx="8" style="fill:#8a94a6;fill-opacity:0.06"/><text x="28" y="181" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text);opacity:1">markdown fence</text><rect x="304" y="163" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="330" y="180.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="434" y="163" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="460" y="180.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="564" y="163" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="590" y="180.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="12" y="210" width="696" height="48" rx="8" style="fill:#8a94a6;fill-opacity:0.06"/><text x="28" y="239" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:400;fill:var(--text);opacity:1">single quotes</text><rect x="304" y="221" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="330" y="238.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="434" y="221" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="460" y="238.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="564" y="221" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="590" y="238.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="12" y="268" width="696" height="48" rx="8" style="fill:#d9a441;fill-opacity:0.13"/><text x="28" y="297" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">extra field</text><rect x="304" y="279" width="52" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="330" y="296.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✓</text><rect x="434" y="279" width="52" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="460" y="296.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✓</text><rect x="564" y="279" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="590" y="296.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="12" y="326" width="696" height="48" rx="8" style="fill:#d9a441;fill-opacity:0.13"/><text x="28" y="355" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">value outside the enum</text><rect x="304" y="337" width="52" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="330" y="354.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✓</text><rect x="434" y="337" width="52" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="460" y="354.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✗</text><rect x="564" y="337" width="52" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="590" y="354.76" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">✓</text><text x="360" y="412" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">under a constrained grammar, every one of these becomes impossible</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The parse failures are the easy half. The last two rows parse perfectly and are still wrong, in different ways.</figcaption></figure>
 <!-- /fig:ai-json-shapes -->
 
 <h2 id="section-3-42-json-outputs">4.2 JSON Outputs</h2>
-<p><code>output_config.format</code> takes a <strong>json schema</strong> and guarantees the response conforms to it. A JSON schema is a description of the shape you want. The json schema is the specification: the properties, their types, which ones are required, and the enum values a string may take.</p>
+<p>Before the real API, here is the stencil idea in a few lines of plain Python. It is a toy: a real grammar works on tokens, the pieces of words from §1, and not on single characters. But the rule is the same. At every step, only the characters that can still lead to an allowed value get through.</p>
+<p>The function <code>allowed_next</code> takes the text written so far and returns every character that may come next. It looks at each enum value that starts with that text, and takes the value's next character:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">ENUM</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"refund"</span><span class="p">,</span> <span class="s2">"order_status"</span><span class="p">,</span> <span class="s2">"cancel_order"</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">allowed_next</span><span class="p">(</span><span class="n">written</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The characters the stencil lets through after `written`."""</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">({</span><span class="n">value</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">written</span><span class="p">)]</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">ENUM</span>
+                   <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">written</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">written</span><span class="p">)})</span>
+
+
+<span class="k">for</span> <span class="n">written</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">""</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">,</span> <span class="s2">"o"</span><span class="p">,</span> <span class="s2">"order_"</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"after </span><span class="si">{</span><span class="n">written</span><span class="si">!r:</span><span class="s2">&lt;10</span><span class="si">}</span><span class="s2"> the stencil allows </span><span class="si">{</span><span class="n">allowed_next</span><span class="p">(</span><span class="n">written</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"can the reply start with 'm' (for 'money back')?"</span><span class="p">,</span>
+      <span class="s2">"m"</span> <span class="ow">in</span> <span class="n">allowed_next</span><span class="p">(</span><span class="s2">""</span><span class="p">))</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>after ''         the stencil allows ['c', 'o', 'r']
+after 'r'        the stencil allows ['e']
+after 'c'        the stencil allows ['a']
+after 'o'        the stencil allows ['r']
+after 'order_'   the stencil allows ['s']
+
+can the reply start with 'm' (for 'money back')? False
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li>Before anything is written, only <code>c</code>, <code>o</code> and <code>r</code> are allowed, because the three values start with those letters.</li>
+<li>After <code>r</code>, the only value left is <code>refund</code>, so only <code>e</code> may follow.</li>
+<li>After <code>c</code> and after <code>o</code>, there is again exactly one way to go on.</li>
+<li>After <code>order_</code>, only <code>s</code> may follow, on the way to <code>order_status</code>.</li>
+<li>The last line is the puzzle's second reply. "money back" starts with <code>m</code>, and <code>m</code> is never allowed, so the model cannot even begin to write it.</li>
+</ul>
+<p>That is what "unreachable" means. The model is not asked to avoid "money back". The stencil has no hole for it.</p>
+<p>Now the real feature. <code>output_config.format</code> takes a <strong>json schema</strong> and guarantees the response conforms to it. A JSON schema is a description of the shape you want, written in JSON itself. The json schema is the specification, and it has four parts:</p>
+<ul>
+<li>the <em>properties</em>, meaning the fields;</li>
+<li>their types, such as <code>string</code> (text) or <code>number</code>;</li>
+<li>which ones are required;</li>
+<li>and the enum values a string may take.</li>
+</ul>
+<p>The example below sends one customer question with a schema attached. It is a real API call, so it needs the <code>anthropic</code> package and an API key, as in §2. The one new line is <code>output_config={"format": SCHEMA}</code>, and the program prints the raw reply, then each field of the parsed record:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 
@@ -3295,22 +3467,37 @@ confidence: 0.94
 stop_reason: end_turn
 </code></pre></div>
 
+<p>Read the output line by line:</p>
+<ul>
+<li>The first line is the raw text, exactly as the model wrote it: one JSON object, holding the three fields.</li>
+<li>The next three lines are those fields, read out of the parsed record. The model picked <code>order_status</code> from the enum, and copied the order id out of the question.</li>
+<li>The last line is the stop reason from §2.6. <code>end_turn</code> means the model finished on its own.</li>
+</ul>
 <p>Three things to notice.</p>
 <p><strong>The JSON arrives in an ordinary text block.</strong> There is no new block type, and <code>content[0].text</code> is a JSON string. You still call <code>json.loads</code>, and it cannot fail.</p>
-<p><strong><code>additionalProperties: false</code> is required for objects.</strong> This is not optional styling, because the API rejects a schema without it. It is also what makes the "extra field" row from §4.1 impossible.</p>
-<p><strong>Changing the format invalidates your prompt cache</strong> for that conversation. Structured outputs inject an additional system prompt describing the expected format, so <code>output_config.format</code> is part of the cached prefix (§9.5). Alternating between two schemas on the same conversation means alternating between two prefixes.</p>
-<p>The SDK also offers <code>messages.parse</code>, a helper that validates the response for you and works with schema libraries such as Pydantic. The value you get back is then a typed object and not a string. Use it where it fits. The manual form above is shown because it makes the mechanism visible.</p>
+<p><strong><code>additionalProperties: false</code> is required for objects.</strong> This is not optional styling, because the API rejects a schema without it. It is also what makes the "extra field" row from §4.1 impossible. In the picture, it is the card with no margin.</p>
+<p><strong>Changing the format invalidates your prompt cache</strong> for that conversation. A <em>prompt cache</em>, from §1, keeps the start of a long prompt on file, so that sending it again is cheaper and faster. Structured outputs inject an additional system prompt describing the expected format. So <code>output_config.format</code> is part of the cached <em>prefix</em>, the start of the prompt that the cache matches on (§9.5). Alternating between two schemas on the same conversation means alternating between two prefixes.</p>
+<p>The SDK also offers <code>messages.parse</code>. The <em>SDK</em> is the Python library from §2 that sends requests for you, and <code>messages.parse</code> is a helper in it that validates the response for you. It works with schema libraries such as Pydantic, a popular Python library that describes the shape of data as classes. The value you get back is then a typed object and not a string. Use it where it fits. The manual form above is shown because it makes the mechanism visible.</p>
 <p>Reach for <code>messages.parse</code> when you already have a schema library in the project. The manual <code>json.loads</code> is fine when you do not.</p>
-<p>One note on what "guaranteed" means precisely: <strong>schema conformance</strong> covers structure and types. Schema conformance is not validation, and §4.3 is the whole of that distinction. The response <em>will</em> be an object with your required properties at your declared types. It will not necessarily be an object whose values are in range, and that is §4.3's subject.</p>
+<p>One note on what "guaranteed" means precisely: <strong>schema conformance</strong> covers structure and types. Schema conformance is not validation, and §4.3 is the whole of that distinction. The response <em>will</em> be an object with your required properties at your declared types. It will not necessarily be an object whose values are in range, and that is §4.3's subject. In the picture, the stencil makes sure a number goes in the number box. It cannot make sure the number is a sensible one.</p>
 <h2 id="section-3-43-what-the-schema-may-contain">4.3 What the Schema May Contain</h2>
-<p>The grammar is compiled, and compilation constrains what can be expressed. The supported subset is generous and the gaps are specific, so it is worth knowing them and not discovering them as 400s.</p>
+<p>The grammar is compiled, and compilation constrains what can be expressed. Not every rule you can write in a JSON schema can be turned into a stencil. The supported subset is generous and the gaps are specific, so it is worth knowing them and not discovering them as 400s, the "fix your form" errors from §2.9.</p>
+<p>Here is the whole list:</p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#35b37e">Supported</div><div style="font-weight:600;color:#e06c75">Not supported</div>
 <div>All basic types; <code>enum</code> (scalars only); <code>const</code>; <code>anyOf</code> and <code>allOf</code>; <code>$ref</code>, <code>$def</code> and <code>definitions</code> (internal only); <code>default</code>; <code>required</code>; <code>additionalProperties: false</code>; string formats <code>date-time</code>, <code>date</code>, <code>time</code>, <code>duration</code>, <code>email</code>, <code>hostname</code>, <code>uri</code>, <code>ipv4</code>, <code>ipv6</code>, <code>uuid</code>; array <code>minItems</code> of 0 or 1.</div>
 <div>Recursive schemas; complex types inside <code>enum</code>; external <code>$ref</code>; numeric constraints (<code>minimum</code>, <code>maximum</code>, <code>multipleOf</code>); string constraints (<code>minLength</code>, <code>maxLength</code>); array constraints beyond <code>minItems</code> 0 or 1; <code>additionalProperties</code> set to anything but <code>false</code>.</div>
 </div>
 
+<p>A few of those names, in plain words:</p>
+<ul>
+<li><code>anyOf</code> means "any one of these shapes", and <code>allOf</code> means "all of these shapes at once".</li>
+<li><code>$ref</code> points at a shape defined somewhere else. <em>Internal</em> means somewhere in the same schema; <em>external</em> means another file or web address.</li>
+<li>A <em>recursive</em> schema is one that contains itself, such as a comment whose replies are comments.</li>
+<li><code>minItems</code> is the least number of items an array, a JSON list, must hold.</li>
+</ul>
 <p>The omission that surprises people most is <strong>numeric and string constraints</strong>. You cannot say "confidence between 0 and 1" or "at most 200 characters" in the schema. Those still have to be validated in your code. The grammar guarantees a <em>number</em>, and not a number in range.</p>
+<p>The example below makes that concrete for three fields. For each one it prints what the grammar guarantees, and what you must still check yourself:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">SCHEMA_PROPS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"confidence"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"number"</span><span class="p">},</span>
     <span class="s2">"summary"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">},</span>
@@ -3339,10 +3526,25 @@ tags        is an array of strings      has at most 5 entries
 the schema removes parse errors and type errors, not validation
 </code></pre></div>
 
-<p>Regex <code>pattern</code> is supported for the common cases: anchored and partial matching, <code>*</code>, <code>+</code>, <code>?</code>, simple <code>{n,m}</code>, character classes and groups. It does <strong>not</strong> support backreferences, lookahead or lookbehind, or <code>\b</code>. A complex pattern is a 400 and not a silent degradation.</p>
-<p>There are also complexity limits, and they are shared across the whole request and not per schema. You get at most <strong>20 strict tools</strong>, <strong>24 optional parameters</strong> in total, and <strong>16 parameters using union types</strong>. That last one is low because <code>anyOf</code> makes compilation cost grow exponentially. Four strict tools with six optional parameters each already reach the 24 limit, which is the kind of thing that fails on the day you add the fourth tool.</p>
+<p>Each row splits a field in two. The left half is about the type, and the stencil enforces it. The right half is a rule about the value, and nothing enforces it but your own code. Exercise 4.1 asks you to write that code.</p>
+<p>A schema may also give a string a <code>pattern</code>, a regex the string must match. Regex <code>pattern</code> is supported for the common cases:</p>
+<ul>
+<li>anchored and partial matching (an anchored pattern, written with <code>^</code> and <code>$</code>, must match the whole string);</li>
+<li><code>*</code>, <code>+</code> and <code>?</code>, meaning zero or more, one or more, and zero or one;</li>
+<li>simple <code>{n,m}</code>, meaning between n and m repetitions;</li>
+<li>character classes and groups.</li>
+</ul>
+<p>It does <strong>not</strong> support backreferences, lookahead or lookbehind, or <code>\b</code>. Those are the regex features that match an earlier match again, peek ahead or behind without moving on, or mark a word boundary. A complex pattern is a 400 and not a silent degradation. That is the good kind of failure: you find out on the first request, not in production.</p>
+<p>There are also complexity limits, and they are shared across the whole request and not per schema. An <em>optional parameter</em> is a field your schema does not list as required. You get at most:</p>
+<ul>
+<li><strong>20 strict tools</strong>;</li>
+<li><strong>24 optional parameters</strong> in total;</li>
+<li><strong>16 parameters using union types</strong>, where a <em>union type</em> means "one of several types", written with <code>anyOf</code>.</li>
+</ul>
+<p>That last one is low because <code>anyOf</code> makes compilation cost grow exponentially: each one added multiplies the work, instead of adding to it. The limits add up faster than you expect. Four strict tools with six optional parameters each already reach the 24 limit, which is the kind of thing that fails on the day you add the fourth tool.</p>
 <h2 id="section-3-44-where-the-guarantee-stops">4.4 Where the Guarantee Stops</h2>
-<p>This is the part to read twice, because "guaranteed schema-compliant" is stated in the documentation with three exceptions, and each one produces output your parser will choke on.</p>
+<p>This is the part to read twice. The documentation states "guaranteed schema-compliant" with three exceptions, and each one produces output your parser will choke on. In the picture, these are the three ways a card can come back wrong even with the stencil on.</p>
+<p>The example below shows a good reply and the first two exceptions, each with the stop reason that arrives with it. It tries <code>json.loads</code> on each one:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 
 <span class="n">CASES</span> <span class="o">=</span> <span class="p">[</span>
@@ -3375,9 +3577,17 @@ refusal       False     empty content; the refusal takes precedence over the sch
 guaranteed conformance applies to a COMPLETED, non-refused response
 </code></pre></div>
 
-<p><strong><code>max_tokens</code> truncation produces invalid JSON.</strong> The grammar constrains which tokens may be emitted, but it cannot make the response finish. Cut it off and you get a fragment. So a structured-output call still needs <code>stop_reason</code> checked before parsing. That is the same rule as §2.6, and the one most likely to be skipped precisely because the output is "guaranteed".</p>
-<p><strong>A refusal takes precedence over the schema.</strong> You get <code>stop_reason: "refusal"</code>, a 200, and content that does not match. Note that, unlike the pre-output refusals in §14.6, you <em>are</em> billed for tokens generated here.</p>
-<p><strong>Enum capitalisation is not guaranteed.</strong> This one is genuinely surprising. The model may return a value that differs from your enum only in capitalisation, typically the first letter of a word after a space. The response completes normally with no error and no special stop reason. Given <code>["Conversation topic 3"]</code> you may receive <code>"Conversation Topic 3"</code>.</p>
+<p>Line by line:</p>
+<ul>
+<li>The <code>end_turn</code> reply parses.</li>
+<li>The <code>max_tokens</code> reply stops in the middle of the word "confidence", so it is not JSON at all.</li>
+<li>The <code>refusal</code> reply is empty, and empty text is not JSON either.</li>
+<li>The last line is the rule for this whole subsection.</li>
+</ul>
+<p><strong><code>max_tokens</code> truncation produces invalid JSON.</strong> <code>max_tokens</code>, from §2.6, is the most tokens the reply may use, and the model stops there even in the middle of a word. The grammar constrains which tokens may be emitted, but it cannot make the response finish. Cut it off and you get a fragment. In the picture, the telegram runs out of words halfway across the card. So a structured-output call still needs <code>stop_reason</code> checked before parsing. That is the same rule as §2.6, and the one most likely to be skipped precisely because the output is "guaranteed".</p>
+<p><strong>A refusal takes precedence over the schema.</strong> A <em>refusal</em> is the model declining to answer, for example because the request asks for something harmful. You get <code>stop_reason: "refusal"</code>, a 200, and content that does not match. A 200 is HTTP's "OK" code, so nothing about the reply looks like an error. Note that, unlike the pre-output refusals in §14.6 (refusals that happen before the model writes anything), you <em>are</em> billed for tokens generated here.</p>
+<p><strong>Enum capitalisation is not guaranteed.</strong> This one is genuinely surprising. The model may return a value that differs from your enum only in capitalisation, typically the first letter of a word after a space. The response completes normally with no error and no special stop reason. Given <code>["Conversation topic 3"]</code> you may receive <code>"Conversation Topic 3"</code>. In the picture, the writer copies an allowed answer out by hand, and capitalises one letter on the way.</p>
+<p>The example below compares that returned value with the enum in two ways: exactly, and after lowering every letter with <code>.lower()</code>. Its second half looks at a different enum, one whose own members differ only in capitalisation:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">ENUM</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Conversation Topic 1"</span><span class="p">,</span> <span class="s2">"Conversation Topic 2"</span><span class="p">,</span> <span class="s2">"Conversation topic 3"</span><span class="p">]</span>
 <span class="n">RETURNED</span> <span class="o">=</span> <span class="s2">"Conversation Topic 3"</span>          <span class="c1"># note the capital T</span>
 
@@ -3409,13 +3619,64 @@ distinct once lowercased    : 1
 case-insensitive comparison is ambiguous: True
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li>The first two lines show the declared value and the returned one. They differ by one letter, the <code>T</code>.</li>
+<li>An exact comparison says <code>False</code>, so code using <code>in</code> would reject a perfectly good answer.</li>
+<li>After lowering both sides, they match.</li>
+<li>The second half has three members, <code>Draft</code>, <code>draft</code> and <code>DRAFT</code>. Lowered, all three become <code>draft</code>, so three members become one.</li>
+</ul>
 <p>These are two separate rules, and the block shows why they are separate. <strong>Compare enum values case-insensitively.</strong> That repairs the first case, where the returned value differs from a schema member only in capitalisation. And <strong>never define two enum values that differ only in capitalisation.</strong> That is the second block, where case-insensitive comparison collapses three distinct members into one and no strategy recovers the intended value. The first rule saves you, and the second is a hole the first rule cannot patch.</p>
+<p>Here are all three exceptions handled in one place. <code>read_record</code> takes the stop reason and the raw text of a reply. It turns away the two kinds that cannot be parsed. For the rest, it maps the returned enum value back to the declared one, through a dictionary keyed by the lowered value:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
+<span class="n">TOPICS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Conversation Topic 1"</span><span class="p">,</span> <span class="s2">"Conversation Topic 2"</span><span class="p">,</span> <span class="s2">"Conversation topic 3"</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">read_record</span><span class="p">(</span><span class="n">stop_reason</span><span class="p">,</span> <span class="n">raw</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Return (record, None) for a usable reply, or (None, why) for any other."""</span>
+    <span class="k">if</span> <span class="n">stop_reason</span> <span class="o">==</span> <span class="s2">"refusal"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"refused: nothing to parse"</span>
+    <span class="k">if</span> <span class="n">stop_reason</span> <span class="o">==</span> <span class="s2">"max_tokens"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">"cut off: retry with a larger max_tokens"</span>
+    <span class="n">record</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
+    <span class="n">by_lower</span> <span class="o">=</span> <span class="p">{</span><span class="n">value</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">value</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">TOPICS</span><span class="p">}</span>
+    <span class="n">record</span><span class="p">[</span><span class="s2">"topic"</span><span class="p">]</span> <span class="o">=</span> <span class="n">by_lower</span><span class="p">[</span><span class="n">record</span><span class="p">[</span><span class="s2">"topic"</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()]</span>
+    <span class="k">return</span> <span class="n">record</span><span class="p">,</span> <span class="kc">None</span>
+
+
+<span class="n">REPLIES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">"end_turn"</span><span class="p">,</span> <span class="s1">'{"topic": "Conversation Topic 1"}'</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"end_turn"</span><span class="p">,</span> <span class="s1">'{"topic": "Conversation Topic 3"}'</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"max_tokens"</span><span class="p">,</span> <span class="s1">'{"topic": "Conver'</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"refusal"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span>
+<span class="p">]</span>
+<span class="k">for</span> <span class="n">stop_reason</span><span class="p">,</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">REPLIES</span><span class="p">:</span>
+    <span class="n">record</span><span class="p">,</span> <span class="n">why</span> <span class="o">=</span> <span class="n">read_record</span><span class="p">(</span><span class="n">stop_reason</span><span class="p">,</span> <span class="n">raw</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">stop_reason</span><span class="si">:</span><span class="s2">&lt;11</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">record</span><span class="w"> </span><span class="ow">or</span><span class="w"> </span><span class="n">why</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>end_turn    -&gt; {'topic': 'Conversation Topic 1'}
+end_turn    -&gt; {'topic': 'Conversation topic 3'}
+max_tokens  -&gt; cut off: retry with a larger max_tokens
+refusal     -&gt; refused: nothing to parse
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li>The first reply is fine as it is.</li>
+<li>The second reply said <code>Conversation Topic 3</code>, and the record now holds the declared <code>Conversation topic 3</code>. Code that branches on it sees a value it knows.</li>
+<li>The cut-off reply and the refused one never reach <code>json.loads</code>. Each returns a reason instead, and the caller decides what to do next.</li>
+</ul>
+<p>That repair works only because no two <code>TOPICS</code> differ only in capitalisation. Build the same dictionary from <code>Draft</code>, <code>draft</code> and <code>DRAFT</code> and it holds a single entry, so two of the three members could never come back out.</p>
+<p>The figure sums up where the guarantee stops:</p>
 <!-- fig:ai-json-guard -->
 <figure id="fig-ai-json-guard" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 520" role="img" aria-labelledby="t-ai-json-guard d-ai-json-guard" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-json-guard">Where the schema guarantee stops</title><desc id="d-ai-json-guard">The guarantee applies to a completed, non-refused response. If the stop reason is end turn the output conforms. If it is max tokens the JSON is cut off and invalid. If it is a refusal the content is empty and the refusal takes precedence. Even a conforming response is only guaranteed on types and structure: ranges and lengths are still yours to check.</desc><defs><marker id="ah-ai-json-guard" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="20" y="20" width="250" height="76" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="145" y="53.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">A response arrives</text><text x="145" y="72.675" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">with a json_schema</text><path d="M276,58 L344,52" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-json-guard)"/><rect x="350" y="20" width="350" height="64" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="525" y="46.5875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">stop_reason: end_turn</text><text x="525" y="66.1875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">conforms to the schema</text><path d="M276,58 L344,144" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-json-guard)"/><rect x="350" y="112" width="350" height="64" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="525" y="138.588" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">stop_reason: max_tokens</text><text x="525" y="158.188" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">cut off mid-token: not valid JSON</text><path d="M276,58 L344,236" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-json-guard)"/><rect x="350" y="204" width="350" height="64" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="525" y="230.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">stop_reason: refusal</text><text x="525" y="250.187" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">empty content: the refusal wins</text><rect x="12" y="300" width="340" height="190" rx="14" style="fill:none;stroke:#35b37e;stroke-width:1.4"/><text x="26" y="320" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#35b37e;opacity:1">THE GRAMMAR GUARANTEES</text><text x="34" y="350" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#35b37e;opacity:1">✓</text><text x="56" y="350" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">the types</text><text x="34" y="380" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#35b37e;opacity:1">✓</text><text x="56" y="380" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">the required fields</text><text x="34" y="410" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#35b37e;opacity:1">✓</text><text x="56" y="410" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">the enum values</text><text x="34" y="440" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#35b37e;opacity:1">✓</text><text x="56" y="440" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">no additional properties</text><rect x="368" y="300" width="340" height="190" rx="14" style="fill:none;stroke:#d9a441;stroke-width:1.4"/><text x="382" y="320" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#d9a441;opacity:1">YOUR CODE STILL CHECKS</text><text x="390" y="350" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#d9a441;opacity:1">→</text><text x="414" y="350" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">numeric ranges: 0 to 1</text><text x="390" y="380" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#d9a441;opacity:1">→</text><text x="414" y="380" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">string lengths: at most 200</text><text x="390" y="410" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#d9a441;opacity:1">→</text><text x="414" y="410" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">that the value is right</text><text x="390" y="440" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:700;fill:#d9a441;opacity:1">→</text><text x="414" y="440" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">a refusal or a truncation</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Guaranteed conformance means a completed, non-refused response. The grammar guarantees a number, not a number in range.</figcaption></figure>
 <!-- /fig:ai-json-guard -->
 
 <h2 id="section-3-45-property-ordering">4.5 Property Ordering</h2>
-<p>Here is a small behaviour with a large capacity to confuse: <strong>required properties are emitted first, then optional ones</strong>, each group in schema order.</p>
+<p>Here is a small behaviour with a large capacity to confuse: <strong>required properties are emitted first, then optional ones</strong>, each group in schema order. <em>Emitted</em> means written out by the model, and <em>schema order</em> is the order you listed the properties in. In the picture, the writer fills in every required box first, then goes back for the optional ones.</p>
+<p>The example below works out the order for a schema of four properties, two of them required. It builds the list in two passes, the required properties first and then the rest:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">SCHEMA_ORDER</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"notes"</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">"email"</span><span class="p">,</span> <span class="s2">"age"</span><span class="p">]</span>
 <span class="n">REQUIRED</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"name"</span><span class="p">,</span> <span class="s2">"email"</span><span class="p">]</span>
 
@@ -3438,9 +3699,22 @@ if order matters to you, mark everything required —
 or stop depending on the order of keys in a JSON object
 </code></pre></div>
 
-<p>This matters in exactly two situations: when you are diffing JSON as text, and when a downstream consumer is order-sensitive. Both are worth avoiding on their own merits. If you cannot avoid them, marking every property required restores schema order.</p>
+<p>The schema lists <code>notes</code> first, but <code>notes</code> is optional, so it comes out third, after the two required fields. <code>age</code> is optional too, and stays last.</p>
+<p>This matters in exactly two situations:</p>
+<ul>
+<li>when you are <em>diffing</em> JSON as text, meaning comparing two replies line by line, where a different key order looks like a change;</li>
+<li>when a downstream consumer, the next program to read the record, is order-sensitive.</li>
+</ul>
+<p>Both are worth avoiding on their own merits, because the order of a JSON object's keys is not supposed to mean anything. If you cannot avoid them, marking every property required restores schema order.</p>
 <h2 id="section-3-46-strict-tool-use-and-using-both-together">4.6 Strict Tool Use, and Using Both Together</h2>
-<p>§6.8 introduced <code>strict: true</code>. It is the same constrained-decoding machinery applied to tool <em>inputs</em> and not to the response, and the two work together.</p>
+<p>Recall the tool call from §1. The model writes a request such as "run <code>lookup_order</code> with this order id", and your program decides whether to run it. The request's inputs are JSON too, so they can go wrong in all the ways §4.1 showed.</p>
+<p>§6.8 teaches <code>strict: true</code> in full, once tools have been introduced properly. It is the same constrained-decoding machinery applied to tool <em>inputs</em> and not to the response, and the two work together. <em>Constrained decoding</em> is the stencil's proper name: generating the reply under the grammar. In the picture, the request slip the writer sends to your clerk is stencilled too.</p>
+<p>The example below uses both at once:</p>
+<ul>
+<li>The tool's <code>order_id</code> has a <code>pattern</code>: <code>ORD-</code>, then exactly four digits.</li>
+<li>The response has its own schema, with a <code>status</code> enum.</li>
+</ul>
+<p>The program prints the tool input the model asked for. Then it checks that input against the pattern with <code>re.fullmatch</code>, which is true only when the whole string matches:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 
@@ -3491,10 +3765,20 @@ or stop depending on the order of keys in a JSON object
 matches the pattern: True
 </code></pre></div>
 
-<p><strong>The tool input is constrained on the way in, and the final response is constrained on the way out.</strong> A <code>pattern</code> on the tool's <code>order_id</code> means the model cannot even propose a malformed id. That is stronger than validating it in your executor, though §14.4's argument still stands: validate anyway, because the executor is reachable by other callers.</p>
-<p>There are two incompatibilities to remember. Strict tools cannot be used with <strong>programmatic tool calling</strong> (§7.6), so a tool that needs to be callable from inside code execution cannot also be schema-guaranteed. And the 20-strict-tool limit is a limit on the <em>request</em>, so a large tool surface has to choose which tools get the guarantee.</p>
+<p>The model asked for <code>ORD-4471</code>, and the check confirms it matches. With the stencil on, a request for <code>order 4471</code> could not have been written.</p>
+<p><strong>The tool input is constrained on the way in, and the final response is constrained on the way out.</strong> A <code>pattern</code> on the tool's <code>order_id</code> means the model cannot even propose a malformed id. That is stronger than validating it in your executor, the code of yours that actually runs the tool. Still, §14.4's argument stands: validate anyway, because the executor is reachable by other callers. Other code can call the same function without going through the model, and no stencil protects it there.</p>
+<p>There are two incompatibilities to remember:</p>
+<ul>
+<li>Strict tools cannot be used with <strong>programmatic tool calling</strong> (§7.6), where the model writes a small program that calls your tools for it. So a tool that needs to be callable from inside code execution cannot also be schema-guaranteed.</li>
+<li>The 20-strict-tool limit is a limit on the <em>request</em>. So a large tool surface, meaning the full set of tools you offer, has to choose which tools get the guarantee.</li>
+</ul>
 <h2 id="section-3-47-what-it-costs">4.7 What It Costs</h2>
-<p>Constrained decoding is not free, and the costs are unusual enough to be worth naming.</p>
+<p>Constrained decoding is not free, and the costs are unusual enough to be worth naming. There are two of them:</p>
+<ul>
+<li>every request carries some extra input tokens;</li>
+<li>every new schema pays a one-off wait while its grammar is compiled.</li>
+</ul>
+<p>The example below works out the first cost for three schema sizes, at 50,000 requests a day for 30 days, at $5 per million input tokens. Then it prints the compile wait, and the changes that throw a compiled grammar away:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">SCHEMA_SIZES</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"a 3-field classification"</span><span class="p">,</span> <span class="mi">180</span><span class="p">,</span> <span class="mi">40</span><span class="p">),</span>
                 <span class="p">(</span><span class="s2">"a 12-field extraction"</span><span class="p">,</span> <span class="mi">640</span><span class="p">,</span> <span class="mi">140</span><span class="p">),</span>
                 <span class="p">(</span><span class="s2">"a nested report schema"</span><span class="p">,</span> <span class="mi">2_100</span><span class="p">,</span> <span class="mi">460</span><span class="p">)]</span>
@@ -3532,15 +3816,83 @@ the cache is invalidated by:
   - (but NOT by changing only a name or description)
 </code></pre></div>
 
-<p><strong>A system prompt describing the format is injected on your behalf</strong>, so your input token count rises. It is small per request and real at volume.</p>
-<p><strong>The grammar is compiled and cached for 24 hours from last use.</strong> The first request with a new schema pays compilation latency, and the rest do not. This is a separate cache from prompt caching, with separate invalidation rules. Note that changing only a <code>name</code> or <code>description</code> does <em>not</em> invalidate it, while changing the set of tools does.</p>
+<p>Read the money column first. Each <code>$/month</code> figure is the injected tokens times 50,000 requests times 30 days, priced at $5 per million. So 40 tokens make 60 million a month, which is $300, and 460 tokens make 690 million, which is $3450.</p>
+<p><strong>A system prompt describing the format is injected on your behalf</strong>, so your input token count rises. It is small per request and real at volume. In the picture, the office staples a sheet of instructions to every card it sends, and you pay for the sheet's words.</p>
+<p><strong>The grammar is compiled and cached for 24 hours from last use.</strong> The first request with a new schema pays compilation latency, the extra waiting time, and the rest do not. This is a separate cache from prompt caching, with separate invalidation rules. Note that changing only a <code>name</code> or <code>description</code> does <em>not</em> invalidate it, while changing the set of tools does. In the picture, the office cuts the stencil once and keeps it in a drawer for a day.</p>
 <p>The practical consequence is this: <strong>do not generate schemas dynamically per request.</strong> A schema assembled from user input is a new grammar every time, so you pay compilation on every call and never hit the cache. Define a fixed set of schemas and choose between them.</p>
+<p>Here is that rule as a toy. It models the rules above, not the server's real cache. <code>structure</code> removes every <code>description</code> from a schema, since descriptions do not count. <code>send</code> keeps every structure it has seen in a set, and reports a compile the first time it meets each one:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
+<span class="n">compiled</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">structure</span><span class="p">(</span><span class="n">schema</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The schema without its descriptions: the part the grammar is built from."""</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">structure</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">schema</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">"description"</span><span class="p">}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">structure</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">schema</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">schema</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">send</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">schema</span><span class="p">):</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">structure</span><span class="p">(</span><span class="n">schema</span><span class="p">),</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">compiled</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s2">&lt;34</span><span class="si">}</span><span class="s2"> cache hit"</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">compiled</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s2">&lt;34</span><span class="si">}</span><span class="s2"> compile (~340 ms)"</span><span class="p">)</span>
+
+
+<span class="n">BASE</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"object"</span><span class="p">,</span>
+        <span class="s2">"properties"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"intent"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">,</span>
+                                  <span class="s2">"description"</span><span class="p">:</span> <span class="s2">"What the customer wants."</span><span class="p">}},</span>
+        <span class="s2">"required"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"intent"</span><span class="p">],</span> <span class="s2">"additionalProperties"</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+<span class="n">REWORDED</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">BASE</span><span class="p">))</span>
+<span class="n">REWORDED</span><span class="p">[</span><span class="s2">"properties"</span><span class="p">][</span><span class="s2">"intent"</span><span class="p">][</span><span class="s2">"description"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"The customer's goal."</span>
+<span class="n">WIDER</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">BASE</span><span class="p">))</span>
+<span class="n">WIDER</span><span class="p">[</span><span class="s2">"properties"</span><span class="p">][</span><span class="s2">"order_id"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">}</span>
+
+<span class="n">send</span><span class="p">(</span><span class="s2">"first request"</span><span class="p">,</span> <span class="n">BASE</span><span class="p">)</span>
+<span class="n">send</span><span class="p">(</span><span class="s2">"same schema again"</span><span class="p">,</span> <span class="n">BASE</span><span class="p">)</span>
+<span class="n">send</span><span class="p">(</span><span class="s2">"only the description changed"</span><span class="p">,</span> <span class="n">REWORDED</span><span class="p">)</span>
+<span class="n">send</span><span class="p">(</span><span class="s2">"a field added"</span><span class="p">,</span> <span class="n">WIDER</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">user</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"ana"</span><span class="p">,</span> <span class="s2">"bruno"</span><span class="p">,</span> <span class="s2">"carla"</span><span class="p">]:</span>
+    <span class="n">per_user</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">BASE</span><span class="p">))</span>
+    <span class="n">per_user</span><span class="p">[</span><span class="s2">"properties"</span><span class="p">][</span><span class="sa">f</span><span class="s2">"note_for_</span><span class="si">{</span><span class="n">user</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"string"</span><span class="p">}</span>
+    <span class="n">send</span><span class="p">(</span><span class="sa">f</span><span class="s2">"schema built for </span><span class="si">{</span><span class="n">user</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">per_user</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"grammars compiled:"</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">compiled</span><span class="p">),</span> <span class="s2">"for 7 requests"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>first request                      compile (~340 ms)
+same schema again                  cache hit
+only the description changed       cache hit
+a field added                      compile (~340 ms)
+
+schema built for ana               compile (~340 ms)
+schema built for bruno             compile (~340 ms)
+schema built for carla             compile (~340 ms)
+
+grammars compiled: 5 for 7 requests
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li>The first request compiles, and sending the same schema again is a hit.</li>
+<li>Rewording a description is still a hit, because the structure did not change.</li>
+<li>Adding a field is a new structure, so it compiles.</li>
+<li>The last three requests each build a schema for one user. Each one is new, so each one compiles, and the cache never helps.</li>
+</ul>
+<p>Three of the five compiles came from the per-user schemas, and that is exactly the cost the rule tells you to avoid.</p>
+<p>The figure puts both costs side by side:</p>
 <!-- fig:ai-grammar-cost -->
 <figure id="fig-ai-grammar-cost" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 480" role="img" aria-labelledby="t-ai-grammar-cost d-ai-grammar-cost" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-grammar-cost">What a schema costs: tokens every request, compilation once</title><desc id="d-ai-grammar-cost">A schema injects a format description into every request, which at 50,000 requests a day costs $300, $1,050 and $3,450 a month for three schema sizes. The grammar is compiled on first use, about 340 milliseconds, and cached for 24 hours; changing the structure or the set of tools invalidates it, but changing only a name or description does not.</desc><defs><marker id="ah-ai-grammar-cost" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="24" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:650;fill:var(--text-dim);opacity:1">INJECTED TOKENS PER REQUEST, AT 50,000 REQUESTS A DAY, $5 PER MILLION INPUT TOKENS</text><text x="20" y="68" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">a 3-field classification</text><rect x="220" y="48" width="26.087" height="30" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="256.087" y="68" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">40 tokens  →  $300 a month</text><text x="20" y="124" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">a 12-field extraction</text><rect x="220" y="104" width="91.3043" height="30" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="321.304" y="124" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">140 tokens  →  $1,050 a month</text><text x="20" y="180" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">a nested report schema</text><rect x="220" y="160" width="300" height="30" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="530" y="180" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text);opacity:1">460 tokens  →  $3,450 a month</text><text x="20" y="236" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text-dim);opacity:1">THE GRAMMAR, COMPILED ONCE</text><rect x="20" y="252" width="200" height="78" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="120" y="286.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">First request</text><text x="120" y="305.675" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">~340 ms to compile</text><path d="M226,291 L254,291" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-grammar-cost)"/><rect x="260" y="252" width="200" height="78" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="360" y="286.075" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Every request after</text><text x="360" y="305.675" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">0 ms: cached 24 hours</text><path d="M466,291 L494,291" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-ai-grammar-cost)"/><rect x="500" y="252" width="200" height="78" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="600" y="278.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">Recompiled when</text><text x="600" y="297.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">structure or the</text><text x="600" y="313.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">tool set changes</text><rect x="20" y="362" width="370.625" height="23.5" rx="11.75" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="205.312" y="376" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">a name or description change does not invalidate it</text><rect x="20" y="402" width="343.125" height="23.5" rx="11.75" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="191.562" y="416" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">a schema built per request never hits the cache</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Do not generate schemas dynamically: a schema built from user input is a new grammar every time, so you pay compilation on every call.</figcaption></figure>
 <!-- /fig:ai-grammar-cost -->
 
 <h2 id="section-3-48-when-not-to-use-it">4.8 When Not to Use It</h2>
-<p>Structured outputs are so clearly better than prompting for JSON that the failure mode becomes using them where prose was the right choice.</p>
+<p>Structured outputs are so clearly better than prompting for JSON that the failure mode becomes using them where prose was the right choice. Here is the rule of thumb, in four rows:</p>
 <div style="display:grid;grid-template-columns:190px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#35b37e">Use it</div><div><strong>Whenever the output feeds code.</strong> Classification, extraction, routing, scoring, anything with an enum. This is the large majority of production LLM traffic and it should all be constrained.</div>
 <div style="font-weight:600;color:#d9a441">Consider a forced tool</div><div><strong>When you also want the model to choose whether to answer.</strong> §6.7's <code>tool_choice</code> pattern predates this feature and remains useful when structure is one option among several.</div>
@@ -3548,7 +3900,15 @@ the cache is invalidated by:
 <div style="font-weight:600;color:#e06c75">Do not use it</div><div><strong>To smuggle prose into a field.</strong> A schema whose only property is <code>{"answer": {"type": "string"}}</code> has bought you a pair of braces and paid an injected system prompt for them.</div>
 </div>
 
-<p>That last row is a real pattern and worth naming. Wrapping a free-text answer in a one-field object gives the appearance of structure with none of its properties. Nothing is validated, nothing is enumerated, and the parse could not have failed anyway. If the schema has no enum, no required numeric field and no branching, ask whether you wanted structure at all.</p>
+<p>A <em>forced tool</em>, in the second row, means telling the model it must call one particular tool, so that its answer arrives as that tool's input (§6.7).</p>
+<p>That last row is a real pattern and worth naming. Wrapping a free-text answer in a one-field object gives the appearance of structure with none of its properties:</p>
+<ul>
+<li>Nothing is validated.</li>
+<li>Nothing is enumerated.</li>
+<li>The parse could not have failed anyway.</li>
+</ul>
+<p>If the schema has no enum, no required numeric field and no branching, ask whether you wanted structure at all. In the picture, that is a love letter written in a form's one big box. It pays for the stencil, and the stencil does nothing for it.</p>
+<p>Back to the opening puzzle one last time. Send §4.2's schema with <code>output_config.format</code>, and neither reply can be written. The card has no margin for <code>urgency</code>, and the stencil has no hole for the <code>m</code> of "money back". What is left for your code is what §4.3 and §4.4 listed: ranges and lengths, truncation, refusals and capitalisation.</p>
 <h2 id="section-3-exercises">Exercises</h2>
 <p><strong>Exercise 4.1 — Fix this schema.</strong> It fails with a 400. Find every reason, then write the version that works and say what you still have to validate yourself.</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">SCHEMA</span> <span class="o">=</span> <span class="p">{</span>
