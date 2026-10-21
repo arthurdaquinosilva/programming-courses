@@ -84119,14 +84119,136 @@ next request reads from:     replica
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-21">← Back</button><button class="btn-next" data-next="section-23">Next: Capstone: a Box Office, and the Interview Question Bank →</button></div>
 </section>
-<section class="course-section" id="section-23" data-section-id="section-23"><div class="section-header-meta">  <span class="section-tag">SECTION 24</span>  <button class="btn-complete" data-complete="section-23"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Capstone: a Box Office, and the Interview Question Bank</h1><p>Twenty-three sections taught Django one subject at a time. Real work does not arrive that way. A feature touches the models, the database's locks, a form, a cache, a background task and the deployment settings all at once, and the bugs live where those pieces meet. This last section builds one complete feature from nothing, using every part of the course together, and then turns the course into preparation for an interview.</p>
-<p>The feature is <strong>a box office</strong>: a small service that sells tickets for events. It is a good capstone for three reasons:</p>
+<section class="course-section" id="section-23" data-section-id="section-23"><div class="section-header-meta">  <span class="section-tag">SECTION 24</span>  <button class="btn-complete" data-complete="section-23"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Capstone: a Box Office, and the Interview Question Bank</h1><p>Start with a puzzle. An opera has 40 seats left. Twenty customers try to buy one seat each at the same moment. The code that sells a seat is four ordinary steps: read how many seats are left, check that at least one is, subtract one, save the new number. Every one of the twenty purchases succeeds. Afterwards the database holds twenty new bookings, and the seat counter says <code>39</code>.</p>
+<p>Nothing crashed. No error was raised, and no database rule was broken: 39 is a perfectly sensible number of seats. And yet twenty people now hold tickets while the counter says one seat was sold. Where did the other nineteen go? Keep the question in mind. §24.5 runs this exact experiment and answers it, and the answer is the most important idea in this section.</p>
+<p>Twenty-three sections taught Django one subject at a time. Real work does not arrive that way. A single feature touches many parts at once:</p>
+<ul>
+<li>the models and the rules the database enforces on them,</li>
+<li>the database's locks,</li>
+<li>a form,</li>
+<li>a cache,</li>
+<li>a background task,</li>
+<li>and the deployment settings.</li>
+</ul>
+<p>The bugs live where those pieces meet, like the bug in the puzzle, which lives between Python and the database. This last section builds one complete feature from nothing, using every part of the course together. Then it turns the course into preparation for a job interview.</p>
+<p>The feature is <strong>a box office</strong>: a small web service that sells tickets for events, like the window at a theatre where you buy a seat for tonight's show. It is a good capstone for three reasons:</p>
 <ul>
 <li><strong>It is small enough to build in one section</strong>, with two apps, three models and about four hundred lines of code.</li>
-<li><strong>It is hard in exactly the places Django is hard.</strong> Many people try to buy the last few seats at the same moment, a payment provider calls the site back and sometimes calls twice, unpaid seats must be given back automatically, and the busiest page is read far more often than anything is bought.</li>
+<li><strong>It is hard in exactly the places Django is hard.</strong> Many people try to buy the last few seats at the same moment. A payment company calls the site back to say a customer has paid, and sometimes calls twice. Seats that were set aside but never paid for must be given back automatically. And the busiest page is read far more often than anything is bought.</li>
 <li><strong>"Design a ticket booking system" is a common interview question.</strong> Building one, and measuring every claim about it, is the best preparation for answering it.</li>
 </ul>
-<p>Every one of the following was reproduced below:</p>
+<p>Here is a picture to keep in mind for the whole section: a real theatre box office, from the days before computers.</p>
+<ul>
+<li><strong>The seat board.</strong> Behind the window hangs a board with one number per kind of seat: "Standing: 25. Tables: 8." When a clerk sells seats, they rub out the number and write the new one. That board is the counter of seats left, in the database.</li>
+<li><strong>The clerks.</strong> Several clerks serve customers at once, each at their own window, and all of them use the same board. That is several requests running at the same time.</li>
+<li><strong>Envelopes set aside.</strong> A customer can ask the clerk to put tickets aside while they fetch the money. The clerk puts the tickets in an envelope with the customer's name and a time ten minutes from now. That is a hold.</li>
+<li><strong>The bank's phone call.</strong> The customer pays at the bank next door, and the bank phones the box office: "the money for envelope 42 has arrived". That is the payment webhook.</li>
+<li><strong>The usher's round.</strong> Every minute, an usher walks along the shelf of envelopes and puts the tickets from any expired envelope back on sale. That is the release job.</li>
+<li><strong>The poster outside.</strong> A poster by the door shows how many seats are left, so passers-by need not queue to ask. It is repainted from time to time, so it can be slightly out of date. That is the cached list of events.</li>
+</ul>
+<p>The box office maps onto the project like this. Each row is explained in the subsection named beside it, so there is no need to learn the table now:</p>
+<table>
+<thead>
+<tr>
+<th>In the box office</th>
+<th>In the project</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The seat board, one number per kind of seat</td>
+<td>the <code>remaining</code> counter on each tier</td>
+<td>§24.3</td>
+</tr>
+<tr>
+<td>Rules painted on the board's frame: never below zero, never more than the room holds</td>
+<td>check constraints</td>
+<td>§24.3</td>
+</tr>
+<tr>
+<td>A clerk who keeps one hand on the board while checking and rubbing out the number, in one movement</td>
+<td>one conditional <code>UPDATE</code>, which takes the row's lock</td>
+<td>§24.4</td>
+</tr>
+<tr>
+<td>An envelope of tickets set aside, with a time written on it</td>
+<td>a held booking and its <code>expires_at</code></td>
+<td>§24.4</td>
+</tr>
+<tr>
+<td>The order number a customer writes on their form, and a ledger where each customer's number may appear only once</td>
+<td>an idempotency key and its unique constraint</td>
+<td>§24.4, §24.5</td>
+</tr>
+<tr>
+<td>A clerk who reads the board, turns away to think, then writes a number based on what they read</td>
+<td>the read, check and save version that oversells</td>
+<td>§24.5</td>
+</tr>
+<tr>
+<td>The bank's phone call saying a customer has paid</td>
+<td>the payment webhook</td>
+<td>§24.6</td>
+</tr>
+<tr>
+<td>A code word that only the bank and the box office can produce</td>
+<td>the HMAC signature</td>
+<td>§24.6</td>
+</tr>
+<tr>
+<td>A clerk holding an envelope in their hand while they deal with the bank's call</td>
+<td><code>select_for_update()</code> on the booking</td>
+<td>§24.6</td>
+</tr>
+<tr>
+<td>The usher's round, which skips any envelope a clerk is holding</td>
+<td>the release job with <code>skip_locked=True</code></td>
+<td>§24.7</td>
+</tr>
+<tr>
+<td>The window, the forms and the leaflets the customer sees</td>
+<td>views, forms and templates</td>
+<td>§24.8</td>
+</tr>
+<tr>
+<td>The poster outside, taken down only once a sale is final</td>
+<td>the cached event list, deleted with <code>on_commit</code></td>
+<td>§24.9</td>
+</tr>
+<tr>
+<td>A small side window that only answers "how many seats are left?"</td>
+<td>the async availability endpoint</td>
+<td>§24.10</td>
+</tr>
+<tr>
+<td>The accountant's report</td>
+<td>the sales report</td>
+<td>§24.11</td>
+</tr>
+<tr>
+<td>A rehearsal of every tricky situation before opening night</td>
+<td>the test suite</td>
+<td>§24.12</td>
+</tr>
+<tr>
+<td>The inspector's visit before the doors open</td>
+<td>production settings and <code>check --deploy</code></td>
+<td>§24.13</td>
+</tr>
+<tr>
+<td>An experienced manager walking round and listing what is still missing</td>
+<td>what a reviewer would still ask</td>
+<td>§24.14</td>
+</tr>
+<tr>
+<td>An audition for the job of running a box office</td>
+<td>a senior interview</td>
+<td>§24.15</td>
+</tr>
+</tbody>
+</table>
+<p>Every one of the following was reproduced below. The first item is the puzzle:</p>
 <ul>
 <li>Twenty buyers who each <strong>read the seat count in Python, checked it and saved it</strong> all succeeded: 20 bookings were created and the counter fell by <strong>one</strong>. The same check written as one conditional <code>UPDATE</code> let exactly 8 of 40 simultaneous buyers through for 8 seats (§24.5).</li>
 <li>The same form submitted twice at the same moment, as a double click does, created <strong>one booking and took the seats once</strong>, because a unique constraint and the idempotency key it protects caught the second submission (§24.5).</li>
@@ -84139,30 +84261,32 @@ next request reads from:     replica
 </ul>
 <p>The section has two parts:</p>
 <ol>
-<li><strong>The build</strong> (§24.1 to §24.14): the requirements and the design, the data model and its constraints, the service functions that hold, confirm and release seats, the pages, the cache, an async endpoint, a report, the test suite, the production settings, and an honest list of what a reviewer would still ask for.</li>
-<li><strong>The interview</strong> (§24.15 to §24.17): how senior Django interviews are run and how to answer in them, a set of design questions whose answers draw on several sections at once, and <strong>the question bank</strong>, the 386 questions from the end of every earlier section, gathered in one place and grouped by subject.</li>
+<li><strong>The build</strong> (§24.1 to §24.14). It starts with the requirements and the design. Then come the data model and its constraints, the service functions that hold, confirm and release seats, the pages, the cache, an async endpoint, a report, the test suite and the production settings. It ends with an honest list of what a reviewer would still ask for.</li>
+<li><strong>The interview</strong> (§24.15 to §24.17). It covers how senior Django interviews are run and how to answer in them, and a set of design questions whose answers draw on several sections at once. Last comes <strong>the question bank</strong>: the 386 questions from the end of every earlier section, gathered in one place and grouped by subject.</li>
 </ol>
 <p>Every output below was produced by running the example with Django 6.1.2 on Python 3.14 against PostgreSQL 18, with Redis 8.10 as the cache, on one macOS machine. Times printed by the test runner differ from machine to machine; everything else should match what you see.</p>
 <h2 id="section-23-241-the-brief-what-the-box-office-must-do">24.1 The Brief: What the Box Office Must Do</h2>
-<p>A capstone that starts with code skips the most important step, the one a senior engineer is paid for: deciding what the code must guarantee. So this one starts with the brief, the short list of requirements a product owner might hand over.</p>
-<p>The box office sells tickets for <strong>events</strong>, such as a concert on a given evening. Each event has one or more <strong>tiers</strong>: groups of seats with one price and a fixed number of places, such as 25 standing tickets at $25 and 8 table seats at $60. A customer buys tickets like this:</p>
+<p>A capstone that starts with code skips the most important step. It is the step a senior engineer is paid for: deciding what the code must guarantee. So this one starts with the brief, the short list of requirements a product owner might hand over. (A product owner is the person who decides what the product should do.)</p>
+<p>The box office sells tickets for <strong>events</strong>, such as a concert on a given evening. Each event has one or more <strong>tiers</strong>. A tier is a group of seats with one price and a fixed number of places, such as 25 standing tickets at $25 and 8 table seats at $60.</p>
+<p>A customer buys tickets in four steps:</p>
 <ol>
 <li>They choose a tier and a quantity, from one to six tickets.</li>
-<li>The site <strong>holds</strong> those seats for ten minutes. Nobody else can buy them during that time, and the customer is sent to the payment provider.</li>
-<li>The payment provider takes the money and then calls the site's <strong>webhook</strong>: a URL that another company's server calls to report an event, here "booking 42 has been paid, under payment reference <code>pay_1001</code>". The site marks the booking as <strong>confirmed</strong> and emails the tickets.</li>
+<li>The site <strong>holds</strong> those seats for ten minutes. Nobody else can buy them during that time, and the customer is sent to the payment provider, the outside company that takes the money.</li>
+<li>The payment provider takes the money and then calls the site's <strong>webhook</strong>. A webhook is a URL on your site that another company's server calls to report that something happened. Here the message is "booking 42 has been paid, under payment reference <code>pay_1001</code>". The site marks the booking as <strong>confirmed</strong> and emails the tickets.</li>
 <li>If no payment arrives within ten minutes, the hold <strong>expires</strong> and the seats go back on sale.</li>
 </ol>
-<p>Those four steps sound simple. The requirements that make them hard are the ones a product owner rarely writes down, because they seem obvious:</p>
+<p>Those four steps sound simple. The hard requirements are the ones a product owner rarely writes down, because they seem obvious:</p>
 <ul>
 <li><strong>Never sell more seats than exist</strong>, even when forty people press "buy" in the same second for the last eight seats.</li>
-<li><strong>A double click must not book twice.</strong> Browsers, impatient users and retrying networks all send the same form more than once.</li>
-<li><strong>A webhook may arrive twice, late, or forged.</strong> Payment providers retry deliveries that time out, so the same payment can be reported more than once. A delivery can arrive after the hold has expired. And anyone on the internet can send a request to the webhook's URL.</li>
+<li><strong>A double click must not book twice.</strong> Browsers, impatient users and networks that retry all send the same form more than once.</li>
+<li><strong>A webhook may arrive twice, late, or forged.</strong> Payment providers send a message again when the first delivery times out, so the same payment can be reported more than once. A delivery can arrive after the hold has expired. And anyone on the internet can send a request to the webhook's URL, pretending to be the provider.</li>
 <li><strong>Expired seats must come back by themselves</strong>, without a person doing anything, and without fighting the webhook over the same booking.</li>
 <li><strong>The list of events must stay fast</strong> when it is visited a hundred times for every ticket sold.</li>
 <li><strong>Staff need a sales report</strong> whose numbers are right.</li>
 </ul>
+<p>In the picture: the board must never promise seats that are not there, a customer who hands in the same form twice gets one envelope, the bank's calls must be checked, and the usher must never take back an envelope a clerk is holding.</p>
 <h3 id="section-23-the-design-decided-before-the-code">The design, decided before the code</h3>
-<p>Each requirement is a problem an earlier section solved. The design is the choice of which solution to use, and the reason for it:</p>
+<p>Each requirement is a problem an earlier section already solved. Designing the box office means choosing which solution to use for each one, and being able to say why. The table lists every decision. Read it now for its shape, not its details: each row gets its own subsection below, where the code and a measured example explain it.</p>
 <table>
 <thead>
 <tr>
@@ -84223,13 +84347,19 @@ next request reads from:     replica
 </tr>
 </tbody>
 </table>
+<p>The figure shows the same design as the life of one booking. Every booking starts as a hold and ends in one of two states, and each arrow is one piece of code with its own lock:</p>
 <!-- fig:dj-booking-life -->
 <figure id="fig-dj-booking-life" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 760 450" role="img" aria-labelledby="t-dj-booking-life d-dj-booking-life" style="display:block;width:100%;min-width:540px;height:auto;max-width:760px;margin:0 auto"><title id="t-dj-booking-life">The life of a booking, and the lock each step takes</title><desc id="d-dj-booking-life">A hold_seats box on the left takes n seats from the tier with one conditional UPDATE and creates a booking in the held state, which expires ten minutes later. From held, an arrow goes up to confirmed, caused by the payment webhook, which locks the booking with SELECT FOR UPDATE, stores the payment reference and emails the tickets after the commit. Another arrow goes down to expired, caused by the release_holds job, which locks due bookings with SKIP LOCKED and returns their n seats to the tier.</desc><defs><marker id="ah-dj-booking-life" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="24" y="176" width="190" height="84" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="119" y="204.95" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">hold_seats()</text><text x="119" y="224.55" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">UPDATE … WHERE</text><text x="119" y="240.15" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">remaining ≥ n</text><rect x="330" y="176" width="170" height="84" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="415" y="205.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">held</text><text x="415" y="224.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">expires_at =</text><text x="415" y="240.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">now + 10 min</text><rect x="560" y="40" width="176" height="84" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="648" y="69.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">confirmed</text><text x="648" y="88.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">payment_ref stored</text><text x="648" y="104.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">tickets emailed</text><rect x="560" y="312" width="176" height="84" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="648" y="341.275" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">expired</text><text x="648" y="360.875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">seats returned</text><text x="648" y="376.475" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">remaining + n</text><path d="M220,218 L324,218" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-booking-life)"/><text x="272" y="204" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">− n seats</text><path d="M506,200 L522,200 Q530,200 530,192 L530,90 Q530,82 538,82 L554,82" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-booking-life)"/><path d="M506,236 L522,236 Q530,236 530,244 L530,346 Q530,354 538,354 L554,354" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-dj-booking-life)"/><text x="415" y="120" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">webhook: FOR UPDATE</text><text x="415" y="324" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text-dim);opacity:1">release_holds: SKIP LOCKED</text><text x="380" y="432" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">a payment after expires_at is answered 409 and refunded, never confirmed</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The design of §24.1 as a state diagram. Only the hold and the release change the seat counter; the webhook changes the booking alone, and refuses a payment once expires_at has passed (§24.6).</figcaption></figure>
 <!-- /fig:dj-booking-life -->
 
-<p>The rest of this section builds that design one piece at a time. Each piece is followed by an example that tries to break it.</p>
+<p>The rest of this section builds that design one piece at a time. After each piece comes an example that tries to break it.</p>
 <h2 id="section-23-242-the-project-and-its-settings">24.2 The Project and Its Settings</h2>
-<p>The project has two apps. <strong><code>accounts</code></strong> holds the user model and nothing else. <strong><code>boxoffice</code></strong> holds the events, tiers and bookings, and every piece of code that changes them.</p>
+<p>The project has two apps:</p>
+<ul>
+<li><strong><code>accounts</code></strong> holds the user model and nothing else.</li>
+<li><strong><code>boxoffice</code></strong> holds the events, tiers and bookings, and every piece of code that changes them.</li>
+</ul>
+<p>Create the project, the two apps, the database, and the folders for the templates and the management command:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">django-admin</span><span class="w"> </span>startproject<span class="w"> </span>config<span class="w"> </span>.
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>startapp<span class="w"> </span>accounts
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>startapp<span class="w"> </span>boxoffice
@@ -84237,15 +84367,16 @@ next request reads from:     replica
 <span class="cmd">mkdir</span><span class="w"> </span><span class="flag">-p</span><span class="w"> </span>templates/boxoffice<span class="w"> </span>boxoffice/management/commands
 </code></pre></div>
 
-<p>The settings are the development settings. Production overrides them in a separate module that §24.13 writes. A few lines deserve a note:</p>
+<p>These are the development settings, the ones used on your own machine. Production overrides some of them in a separate module that §24.13 writes. Most lines are the same as in earlier sections. A few deserve a note:</p>
 <ul>
-<li><strong><code>AUTH_USER_MODEL = "accounts.User"</code></strong> points Django at the project's own user model. §3.17 explained why every new project should do this before its first migration, even when the model adds nothing yet: changing the user model after the first migration means rewriting every table that refers to users.</li>
-<li><strong><code>CACHES</code></strong> uses Redis, read from the <code>REDIS_URL</code> environment variable with the standard local address as the fallback. §23.18 measured why a cache in each process's memory is wrong as soon as there are two application servers.</li>
-<li><strong><code>MAILERS</code></strong> sends email to the <strong>locmem</strong> backend while developing: messages are kept in a list in memory, <code>django.core.mail.outbox</code>, instead of being sent. That is what lets the examples below count the emails.</li>
-<li><strong><code>PAYMENT_WEBHOOK_SECRET</code></strong> is the secret shared with the payment provider, which signs every webhook with it (§24.6). In development it is a fixed string; in production it comes from the environment.</li>
+<li><strong><code>AUTH_USER_MODEL = "accounts.User"</code></strong> points Django at the project's own user model. §3.17 explained why every new project should do this before its first migration, even when the model adds nothing yet. Changing the user model after the first migration means rewriting every table that refers to users.</li>
+<li><strong><code>CACHES</code></strong> uses Redis, a separate program that keeps data in memory and is shared by every process. Its address is read from the <code>REDIS_URL</code> environment variable, with the standard local address as the fallback. §23.18 measured why a cache kept in each process's own memory is wrong as soon as there are two application servers.</li>
+<li><strong><code>MAILERS</code></strong> sends email to the <strong>locmem</strong> backend while developing. Messages are not sent. They are kept in a list in memory, <code>django.core.mail.outbox</code>, and that is what lets the examples below count the emails.</li>
+<li><strong><code>PAYMENT_WEBHOOK_SECRET</code></strong> is the secret shared with the payment provider. The provider signs every webhook with it (§24.6). In development it is a fixed string; in production it comes from the environment.</li>
 <li><strong><code>HOLD_MINUTES</code></strong> is the length of a hold. Keeping it in settings lets the tests and the production configuration change it without touching code.</li>
-<li><strong><code>LOGGING</code></strong> sends the <code>boxoffice</code> loggers' messages to the console in a short format, so the warnings the webhook writes are visible in the examples. It also quiets <code>django.tasks</code>, which otherwise logs a line with a random task ID every time a task starts and finishes.</li>
+<li><strong><code>LOGGING</code></strong> sends the messages of the <code>boxoffice</code> loggers to the console in a short format, so the warnings the webhook writes are visible in the examples. It also quiets <code>django.tasks</code>, which otherwise logs a line with a random task ID every time a task starts and finishes.</li>
 </ul>
+<p>Here is the whole file:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/settings.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
@@ -84318,7 +84449,7 @@ next request reads from:     replica
 <span class="p">}</span>
 </code></pre></div>
 
-<p><code>PASSWORD_HASHERS</code> lists the fast, insecure MD5 hasher only so that the examples and tests that create users run quickly. §14.11 explains why production must never use it, and §24.13's production settings do not inherit it silently: they are checked below.</p>
+<p><code>PASSWORD_HASHERS</code> lists only the fast, insecure MD5 hasher. It is there so that the examples and tests that create users run quickly, because a real password hasher is slow on purpose. §14.11 explains why production must never use MD5. §24.13's production settings do not inherit it silently: they are checked below.</p>
 <p>The user model adds nothing to Django's own. It exists so that a field can be added later with an ordinary migration:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># accounts/models.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">AbstractUser</span>
@@ -84328,13 +84459,19 @@ next request reads from:     replica
     <span class="k">pass</span>
 </code></pre></div>
 
-<p><code>startproject</code> wrote a <code>config/urls.py</code> that imports the admin, which this project does not install, so it would stop every command with <code>LookupError: No installed app with label 'admin'</code>. It is replaced by an empty URL configuration for now. §24.6 adds the webhook's URL and §24.8 the pages':</p>
+<p><code>startproject</code> wrote a <code>config/urls.py</code> that imports the admin. This project does not install the admin, so that file would stop every command with <code>LookupError: No installed app with label 'admin'</code>. Replace it with an empty URL configuration for now. §24.6 adds the webhook's URL, and §24.8 adds the URLs of the pages:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[]</span>
 </code></pre></div>
 
 <h2 id="section-23-243-the-data-model-constraints-as-the-last-line-of-defence">24.3 The Data Model: Constraints as the Last Line of Defence</h2>
-<p>Three models carry the whole service. An <strong><code>Event</code></strong> is something that happens at a venue at a given time. A <strong><code>Tier</code></strong> is a group of seats of one event, with a price, a <code>capacity</code> that never changes and a <code>remaining</code> counter that the service decreases and increases. A <strong><code>Booking</code></strong> is one customer's claim on some seats of one tier, which moves from <code>held</code> to either <code>confirmed</code> or <code>expired</code>.</p>
+<p>Three models carry the whole service:</p>
+<ul>
+<li>An <strong><code>Event</code></strong> is something that happens at a venue at a given time.</li>
+<li>A <strong><code>Tier</code></strong> is a group of seats of one event. It has a price, a <code>capacity</code> that never changes and a <code>remaining</code> counter that the service decreases and increases. In the box office picture, <code>remaining</code> is the number on the seat board.</li>
+<li>A <strong><code>Booking</code></strong> is one customer's claim on some seats of one tier: the envelope. It moves from <code>held</code> to either <code>confirmed</code> or <code>expired</code>.</li>
+</ul>
+<p>Each model also carries constraints: rules the database itself enforces on every row, whatever code writes it (§8). They are the rules painted on the board's frame. Here is the file:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/models.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span>
@@ -84408,14 +84545,14 @@ next request reads from:     replica
         <span class="k">return</span> <span class="sa">f</span><span class="s2">"Booking </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">pk</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">)"</span>
 </code></pre></div>
 
-<p>Each line in <code>Meta</code> records a decision:</p>
+<p>Each line in <code>Meta</code> records a decision. Read them one at a time:</p>
 <ul>
-<li><strong><code>remaining</code> is a <code>PositiveIntegerField</code></strong>, so PostgreSQL itself refuses a negative value (§3.3), and <strong><code>remaining_within_capacity</code></strong> compares two columns of the same row with <code>F()</code> (§8.3). Together they say: the counter is always between 0 and the tier's size. Nothing in the service relies on them. They are there for the day someone writes a new code path, or an <code>UPDATE</code> in a shell, that gets the arithmetic wrong.</li>
-<li><strong><code>one_booking_per_key</code></strong> is what makes the idempotency key safe under concurrency (§24.5). Note that it is on (user, key), not on the key alone: two customers can never collide by accident, and one customer cannot learn about another's booking by guessing a key.</li>
-<li><strong><code>confirmed_has_payment</code></strong> reads "either the status is not confirmed, or there is a payment reference". It is the usual way of writing "if A then B" as a check constraint (§8.3).</li>
-<li><strong><code>payment_ref</code> is unique but nullable.</strong> In PostgreSQL, <code>NULL</code> is never equal to another <code>NULL</code>, so any number of unpaid bookings can have no reference while a reference can only ever be used once (§8.5).</li>
-<li><strong><code>held_by_expiry</code> is a partial index</strong> (§5.12): it indexes <code>expires_at</code> only for rows whose status is <code>held</code>. The release job of §24.7 asks exactly "which held bookings have expired?" every minute, and the index stays small because confirmed and expired bookings, the vast majority over time, are not in it.</li>
-<li><strong><code>on_delete=models.PROTECT</code></strong> on the booking's user and tier: a tier with bookings, or a customer with bookings, cannot be deleted by accident. Bookings are financial records.</li>
+<li><strong><code>remaining</code> is a <code>PositiveIntegerField</code></strong>, so PostgreSQL itself refuses a negative value (§3.3). <strong><code>remaining_within_capacity</code></strong> compares two columns of the same row with <code>F()</code> (§8.3). Together they say: the counter is always between 0 and the tier's size. Nothing in the service relies on them. They are there for the day someone writes a new code path, or an <code>UPDATE</code> in a shell, that gets the arithmetic wrong.</li>
+<li><strong><code>one_booking_per_key</code></strong> is what makes the idempotency key safe when two requests arrive at once (§24.5). It is on the pair (user, key), not on the key alone. That way two customers can never collide by accident, and one customer cannot learn about another's booking by guessing a key.</li>
+<li><strong><code>confirmed_has_payment</code></strong> reads "either the status is not confirmed, or there is a payment reference". In plain words: a confirmed booking must have a payment reference. It is the usual way of writing "if A then B" as a check constraint (§8.3).</li>
+<li><strong><code>payment_ref</code> is unique but nullable.</strong> It may be left empty. In PostgreSQL, <code>NULL</code> (the empty value) is never equal to another <code>NULL</code>. So any number of unpaid bookings can have no reference, while a reference can only ever be used once (§8.5).</li>
+<li><strong><code>held_by_expiry</code> is a partial index</strong> (§5.12). An index is a sorted lookup structure the database keeps beside a table, like the index at the back of a book; a partial index covers only some rows. This one indexes <code>expires_at</code> only for rows whose status is <code>held</code>. The release job of §24.7 asks exactly "which held bookings have expired?" every minute. The index stays small, because confirmed and expired bookings, the vast majority over time, are not in it.</li>
+<li><strong><code>on_delete=models.PROTECT</code></strong> on the booking's user and tier means that a tier with bookings, or a customer with bookings, cannot be deleted by accident. Bookings are financial records.</li>
 </ul>
 <p>Make the migrations and apply them:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>makemigrations<span class="w"> </span>accounts<span class="w"> </span>boxoffice<span class="w"> </span><span class="flag">-v</span><span class="w"> </span><span class="m">0</span>
@@ -84423,7 +84560,13 @@ next request reads from:     replica
 </code></pre></div>
 
 <h3 id="section-23-sample-data">Sample data</h3>
-<p>Every example in this section starts from the same small catalogue: a jazz night with 25 standing places and 8 tables, an opera gala with 40 seats in the stalls, and three customers. A function creates it, so that the tests of §24.12 can create the same data in the test database:</p>
+<p>Every example in this section starts from the same small catalogue:</p>
+<ul>
+<li>a jazz night with 25 standing places and 8 tables,</li>
+<li>an opera gala with 40 seats in the stalls,</li>
+<li>and three customers: Ana, Bruno and Carla.</li>
+</ul>
+<p>A function creates it, so that the tests of §24.12 can create exactly the same data in the test database:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/fixtures.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">UTC</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
@@ -84448,7 +84591,7 @@ next request reads from:     replica
     <span class="k">return</span> <span class="p">{</span><span class="s2">"jazz-night"</span><span class="p">:</span> <span class="n">jazz</span><span class="p">,</span> <span class="s2">"opera-gala"</span><span class="p">:</span> <span class="n">opera</span><span class="p">}</span>
 </code></pre></div>
 
-<p>The shell imports every model by itself (§2.1), so <code>Tier</code> and <code>User</code> need no import:</p>
+<p>Run it once in the shell. The shell imports every model by itself (§2.1), so <code>Tier</code> and <code>User</code> need no import:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">boxoffice.fixtures</span><span class="w"> </span><span class="kn">import</span> <span class="n">seed</span>
 
@@ -84459,8 +84602,9 @@ next request reads from:     replica
 <div class="highlight" data-lang="text"><pre><span></span><code>&lt;QuerySet [('jazz-night', 'Standing', 25), ('jazz-night', 'Table', 8), ('opera-gala', 'Stalls', 40)]&gt;
 </code></pre></div>
 
+<p>The catalogue is in place: three tiers, each with all its seats still <code>remaining</code>.</p>
 <h3 id="section-23-the-constraints-at-work">The constraints at work</h3>
-<p>Before any service code exists, it is worth seeing the constraints refuse bad data. Each attempt below runs in its own <code>atomic</code> block, so one failure does not abort the others (§7.4):</p>
+<p>Before any service code exists, it is worth seeing the constraints refuse bad data. The example tries four bad writes, one for each rule. Each attempt runs in its own <code>atomic</code> block, so one failure does not abort the others (§7.4):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">IntegrityError</span><span class="p">,</span> <span class="n">transaction</span>
 
@@ -84485,15 +84629,23 @@ seven seats -&gt; new row for relation "boxoffice_booking" violates check constr
 confirmed, unpaid -&gt; new row for relation "boxoffice_booking" violates check constraint "confirmed_has_payment"
 </code></pre></div>
 
-<p>The second line names a constraint the model never declared, <code>boxoffice_tier_remaining_check</code>. That is the check PostgreSQL adds for a <code>PositiveIntegerField</code>; Django creates it with the column (§3.3).</p>
-<p>The first number of each line is the important one: the booking's id. The two bookings that the constraints refused still used up ids 1 and 2, because a PostgreSQL sequence hands out numbers outside the transaction and never takes them back. The first real booking below is number 3. Gaps in ids are normal, and code must never assume ids are consecutive.</p>
+<p>Each line is one refused write, and it names the rule that refused it:</p>
+<ul>
+<li>A tier with 6 places left out of 5 broke <code>remaining_within_capacity</code>.</li>
+<li>A negative count broke a constraint the model never declared, <code>boxoffice_tier_remaining_check</code>. That is the check PostgreSQL adds for a <code>PositiveIntegerField</code>; Django creates it with the column (§3.3).</li>
+<li>Seven seats in one booking broke <code>quantity_1_to_6</code>.</li>
+<li>A confirmed booking with no payment broke <code>confirmed_has_payment</code>.</li>
+</ul>
+<p>One more thing happened that the output does not show. The two bookings that the constraints refused still used up booking ids 1 and 2. A PostgreSQL sequence, the counter that hands out new ids, gives out numbers outside the transaction and never takes them back. So the first real booking below is number 3. Gaps in ids are normal, and code must never assume ids are consecutive.</p>
 <h2 id="section-23-244-holding-seats-without-overselling">24.4 Holding Seats Without Overselling</h2>
-<p>A <strong>hold</strong> is the first write a customer causes: it takes seats out of a tier's <code>remaining</code> counter and records who has them. Everything the brief asks of it fits in one short function:</p>
+<p>A <strong>hold</strong> is the first write a customer causes. It takes seats out of a tier's <code>remaining</code> counter and records who has them. In the picture, the clerk rubs out the number on the board and puts the tickets in an envelope with the customer's name on it.</p>
+<p>The brief asks three things of a hold:</p>
 <ul>
 <li>take the seats only if enough remain, <strong>in one statement</strong>, so nobody else can take the same seats between the check and the write;</li>
 <li>record the booking in the <strong>same transaction</strong>, so the counter and the bookings can never disagree;</li>
 <li>if the same customer sends the same <strong>idempotency key</strong> again, return the booking already made instead of making a second one.</li>
 </ul>
+<p>Everything the brief asks of it fits in one short function:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/holds.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
 
@@ -84551,21 +84703,21 @@ confirmed, unpaid -&gt; new row for relation "boxoffice_booking" violates check 
         <span class="k">return</span> <span class="n">existing</span>
 </code></pre></div>
 
-<p>Read it from the middle outwards, because the middle is what makes it correct:</p>
+<p>The function is short, but every line matters. Read it from the middle outwards, because the middle is what makes it correct:</p>
 <ol>
-<li><strong>The conditional <code>UPDATE</code>.</strong> <code>filter(pk=tier_id, remaining__gte=quantity).update(remaining=F("remaining") - quantity)</code> becomes one SQL statement: <code>UPDATE boxoffice_tier SET remaining = remaining - 3 WHERE id = 2 AND remaining &gt;= 3</code>. PostgreSQL locks the row before it changes it. If another transaction changed the row first, PostgreSQL waits for it to finish and then <strong>checks the <code>WHERE</code> condition again against the new value</strong> before deciding (§7.10). So the check and the write cannot be separated by anyone else. <code>update()</code> returns the number of rows it changed: <code>1</code> means the seats are taken, <code>0</code> means not enough were left.</li>
-<li><strong><code>SoldOut</code> inside the <code>atomic</code> block.</strong> Raising an exception inside <code>atomic</code> rolls the block back. Here nothing has been written yet when it is raised, but the habit matters: any error after the <code>UPDATE</code> would put the seats back automatically, and the counter can never lose seats to a half-finished hold.</li>
+<li><strong>The conditional <code>UPDATE</code>.</strong> <code>filter(pk=tier_id, remaining__gte=quantity).update(remaining=F("remaining") - quantity)</code> becomes one SQL statement: <code>UPDATE boxoffice_tier SET remaining = remaining - 3 WHERE id = 2 AND remaining &gt;= 3</code>. In words: "take 3 seats from tier 2, but only if at least 3 are left". PostgreSQL locks the row before it changes it. If another transaction changed the row first, PostgreSQL waits for it to finish. Then it <strong>checks the <code>WHERE</code> condition again against the new value</strong> before deciding (§7.10). So nobody can slip in between the check and the write. This is the clerk who keeps one hand on the board while checking and rubbing out the number. <code>update()</code> returns the number of rows it changed: <code>1</code> means the seats are taken, <code>0</code> means not enough were left.</li>
+<li><strong><code>SoldOut</code> inside the <code>atomic</code> block.</strong> Raising an exception inside <code>atomic</code> rolls the block back: everything it wrote is undone. Here nothing has been written yet when <code>SoldOut</code> is raised, but the habit matters. Any error after the <code>UPDATE</code> would put the seats back automatically, so the counter can never lose seats to a half-finished hold.</li>
 <li><strong>The booking in the same transaction.</strong> The <code>UPDATE</code> and the <code>INSERT</code> commit together or not at all. There is no moment at which another request can see seats taken with no booking for them.</li>
-<li><strong><code>availability_changed()</code></strong> registers a callback with <code>on_commit</code> (§7.7). The cached event list of §24.9 is deleted after the transaction commits, never before, and never if it rolls back.</li>
+<li><strong><code>availability_changed()</code></strong> registers a callback with <code>on_commit</code> (§7.7): a function Django runs only after the transaction commits. The cached event list of §24.9 is deleted after the commit, never before, and never if the transaction rolls back.</li>
 </ol>
-<p>The two lines around the transaction handle the idempotency key:</p>
+<p>The lines before and after the transaction handle the idempotency key. An idempotency key is a random identifier that the browser sends with a request. Sending the same key again means "this is the same request, not a new one". It is the order number the customer writes on their form: hand the same form in twice, and the clerk finds the envelope already made. The function deals with a repeated key in two places:</p>
 <ul>
-<li><strong>The first query</strong> returns the earlier booking when the key was already used. This is the common case of a repeated request that arrives after the first has finished: one indexed lookup, no lock, no write.</li>
-<li><strong><code>except IntegrityError</code></strong> handles the rare case of two requests with the same key running at the same moment. Both pass the first query, because neither booking exists yet. Then the second <code>INSERT</code> hits the <code>one_booking_per_key</code> constraint, the <code>atomic</code> block rolls back the second request's <code>UPDATE</code> with it, and the function returns the booking the first request made. Any other <code>IntegrityError</code> finds no existing booking, so it is raised again rather than hidden.</li>
+<li><strong>The first query</strong> returns the earlier booking when the key was already used. This is the common case: a repeated request that arrives after the first one has finished. It costs one indexed lookup, with no lock and no write.</li>
+<li><strong><code>except IntegrityError</code></strong> handles the rare case of two requests with the same key running at the same moment. Both pass the first query, because neither booking exists yet. Then the second <code>INSERT</code> hits the <code>one_booking_per_key</code> constraint. The <code>atomic</code> block rolls back the second request's <code>UPDATE</code> with it, and the function returns the booking the first request made. Any other <code>IntegrityError</code> finds no existing booking, so it is raised again rather than hidden.</li>
 </ul>
-<p>The <code>try</code> is <strong>outside</strong> the <code>atomic</code> block on purpose. Catching a database error inside the block that caused it leaves the transaction unusable (§7.4); catching it outside means the block has already been rolled back, and the query in the <code>except</code> runs in a clean state. If the caller has its own transaction around <code>hold_seats</code>, as a view with <code>ATOMIC_REQUESTS</code> would, the inner <code>atomic</code> becomes a savepoint and the same reasoning holds.</p>
-<p><code>NotOnSale</code> is checked in Python, before the transaction. A tier's event being taken off sale is a slow, rare change made by staff, not something two customers race on, so it needs no lock. The seat count is the opposite, and that is why it is checked inside the <code>UPDATE</code>.</p>
-<p>Ana holds two standing places, sends the same request again, and then asks for more seats than remain:</p>
+<p>The <code>try</code> is <strong>outside</strong> the <code>atomic</code> block on purpose. Catching a database error inside the block that caused it leaves the transaction unusable (§7.4). Catching it outside means the block has already been rolled back, so the query in the <code>except</code> runs in a clean state. A caller may have its own transaction around <code>hold_seats</code>, as a view with <code>ATOMIC_REQUESTS</code> would. Then the inner <code>atomic</code> becomes a savepoint, a point inside the outer transaction that can be rolled back to on its own, and the same reasoning holds.</p>
+<p><code>NotOnSale</code> is checked in Python, before the transaction, with no lock. Taking an event off sale is a slow, rare change made by staff, not something two customers race on. The seat count is the opposite: customers race on it all the time. That is why it is checked inside the <code>UPDATE</code>.</p>
+<p>Now try it. Ana holds two standing places, sends the same request again, and then asks for more seats than remain:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">boxoffice.holds</span><span class="w"> </span><span class="kn">import</span> <span class="n">hold_seats</span><span class="p">,</span> <span class="n">SoldOut</span>
@@ -84592,11 +84744,23 @@ SoldOut 1
 remaining 23
 </code></pre></div>
 
-<p>The repeated call returned booking 3 again and took no more seats: 25 − 2 = 23. The request for 30 seats raised <code>SoldOut</code> with the tier's id and changed nothing.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li><code>3 3 held 50.00</code>: the first call made booking 3, and the repeated call returned booking 3 again. It is held, and costs two standing places at $25.00.</li>
+<li><code>remaining 23</code>: the repeat took no more seats: 25 − 2 = 23.</li>
+<li><code>SoldOut 1</code>: the request for 30 seats raised <code>SoldOut</code> with the tier's id.</li>
+<li><code>remaining 23</code> again: the refused request changed nothing.</li>
+</ul>
 <h2 id="section-23-245-proving-it-under-concurrency">24.5 Proving It Under Concurrency</h2>
-<p>A function that handles concurrency correctly looks exactly like one that does not, until two requests arrive at once. The only way to know is to make them arrive at once. The examples below use real threads, each with its own database connection, and a <code>threading.Barrier</code>, which makes every thread wait until all of them have reached the same line. That forces the dangerous timing every time, instead of hoping for it (§7.9). Each thread closes its connection when it finishes, because Django cannot know when a thread you started is done (§7.9).</p>
+<p><strong>Concurrency</strong> means several things happening at the same time: here, several requests running the same code at once. A function that handles concurrency correctly looks exactly like one that does not, until two requests arrive at once. Reading the code is not enough. The only way to know is to make the requests arrive at once, on purpose.</p>
+<p>The examples below do that with three tools:</p>
+<ul>
+<li><strong>Real threads.</strong> A thread is a separate line of work inside one program; here, each thread plays one customer. Each thread gets its own database connection, as a real request would.</li>
+<li><strong>A <code>threading.Barrier</code>.</strong> A barrier makes every thread wait until all of them have reached the same line, and then lets them all go together, like a starter's pistol. That forces the dangerous timing every time, instead of hoping for it (§7.9).</li>
+<li><strong><code>connection.close()</code> at the end of each thread.</strong> Django cannot know when a thread you started is done, so each thread closes its own connection when it finishes (§7.9).</li>
+</ul>
 <h3 id="section-23-the-version-that-oversells">The version that oversells</h3>
-<p>First, the way the hold is often written by someone who has not met this problem: read the tier, check the count in Python, save the new count, create the booking. Twenty customers try at once. The barrier sits between the read and the write, which is the gap a real race falls into:</p>
+<p>This is the puzzle from the start of the section. First, the way the hold is often written by someone who has not met this problem: read the tier, check the count in Python, save the new count, create the booking. It is the clerk who reads the board, turns away to think, and then writes a number based on what they read. Twenty customers try at once. The barrier sits between the read and the write, which is exactly the gap a real race falls into:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span><span class="o">,</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
@@ -84631,9 +84795,17 @@ remaining 23
 after 39 | new bookings 20
 </code></pre></div>
 
-<p>Every thread read 40, every thread wrote 39, and twenty bookings now share one seat's worth of counter. This is §7.9's <strong>lost update</strong>, and no constraint caught it: each individual write was a perfectly valid number. With 40 seats the damage is a wrong count; with the last 8 seats of a tier it is twelve people holding tickets for places that do not exist. Wrapping the function in <code>atomic</code> would not help either: at PostgreSQL's default isolation level, Read Committed, each thread still reads 40 and writes 39 (§7.9).</p>
+<p>Before the race there were 40 seats. After it there are 39, and 20 new bookings.</p>
+<p>This is the answer to the puzzle. Follow one thread:</p>
+<ol>
+<li>It reads the tier: 40 seats left.</li>
+<li>It waits at the barrier until all twenty have read. All twenty have now seen 40.</li>
+<li>It checks that 40 is at least 1, subtracts one in Python, and saves 39.</li>
+</ol>
+<p>Every thread read 40, every thread wrote 39, and twenty bookings now share one seat's worth of counter. Each save overwrote the one before it with the same out-of-date number. This is §7.9's <strong>lost update</strong>: a change lost because another write replaced it. No constraint caught it, because each individual write was a perfectly valid number. With 40 seats the damage is a wrong count. With the last 8 seats of a tier, it is twelve people holding tickets for places that do not exist.</p>
+<p>Wrapping the function in <code>atomic</code> would not help either. At PostgreSQL's default isolation level, Read Committed, each thread still reads 40 and writes 39 (§7.9). A transaction groups writes together; it does not stop two transactions from reading the same old value.</p>
 <h3 id="section-23-forty-buyers-eight-seats">Forty buyers, eight seats</h3>
-<p>Now <code>hold_seats</code> itself, with forty threads asking for one table seat each, all released at the same instant by the barrier. A separate customer, <code>crowd</code>, makes all forty requests, so that the other examples' customers are not affected:</p>
+<p>Now the real <code>hold_seats</code>, with forty threads each asking for one table seat. The table tier has 8. The barrier releases all forty at the same instant. A separate customer, <code>crowd</code>, makes all forty requests, so that the other examples' customers are not affected:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span><span class="o">,</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">Counter</span>
@@ -84668,10 +84840,11 @@ after 39 | new bookings 20
 <div class="highlight" data-lang="text"><pre><span></span><code>{'held': 8, 'sold out': 32} remaining 0 bookings 8
 </code></pre></div>
 
-<p>Exactly eight holds, thirty-two refusals, a counter of zero and eight bookings: the counter and the rows agree. Which eight threads won changes from run to run; how many won does not. The forty <code>UPDATE</code> statements queued on the tier row's lock, each one re-checked <code>remaining &gt;= 1</code> against the value the previous one committed, and the ninth found 0.</p>
-<p>The cost of this design is that <strong>every hold for a tier waits for the same row</strong>. Each wait lasts one short transaction, an <code>UPDATE</code> and an <code>INSERT</code>, a millisecond or two. For a tier selling a few hundred tickets that is invisible. For a stadium release where tens of thousands of people buy in the first minute, one row becomes the bottleneck, and §24.14 discusses what changes then.</p>
+<p>Exactly eight holds, thirty-two refusals, a counter of zero and eight bookings: the counter and the rows agree. Which eight threads won changes from run to run; how many won does not.</p>
+<p>Here is what happened inside the database. The forty <code>UPDATE</code> statements queued on the tier row's lock, like forty customers in one line in front of one board. Each one re-checked <code>remaining &gt;= 1</code> against the value the previous one committed. The first eight each found a seat, and the ninth found 0.</p>
+<p>The cost of this design is that <strong>every hold for a tier waits for the same row</strong>. Each wait lasts one short transaction, an <code>UPDATE</code> and an <code>INSERT</code>: a millisecond or two. For a tier selling a few hundred tickets that is invisible. For a stadium release, where tens of thousands of people buy in the first minute, one row becomes the bottleneck, and §24.14 discusses what changes then.</p>
 <h3 id="section-23-the-double-click">The double click</h3>
-<p>The last race is the same customer sending the same form twice at the same moment. Bruno's browser sends two identical requests, with the same key, for four seats in the stalls:</p>
+<p>The last race is the same customer sending the same form twice at the same moment. That is what a double click does: the browser sends the form, and a split second later sends it again. Bruno's browser sends two identical requests, with the same key, for four seats in the stalls:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span><span class="o">,</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
@@ -84700,12 +84873,19 @@ after 39 | new bookings 20
 <div class="highlight" data-lang="text"><pre><span></span><code>same booking: True | bookings: 1 | remaining: 35
 </code></pre></div>
 
-<p>Both requests got the same booking back, and the stalls went from 39 to 35: four seats, taken once. The second request did take four seats inside its own transaction, then its <code>INSERT</code> failed on <code>one_booking_per_key</code>, and the rollback gave the four seats back before anyone could see them.</p>
-<p>Without the unique constraint, the code would look just as correct and the first query would still catch every repeat that arrives <em>after</em> the first request finished. It is only the simultaneous case, the real double click, that needs the constraint. §7.14 showed the same thing for <code>get_or_create</code>: a check in Python followed by a write is only safe when a constraint stands behind it.</p>
+<p>Both requests got the same booking back, only one booking has that key, and the stalls went from 39 to 35: four seats, taken once.</p>
+<p>Look at what the second request did, because it is not what most people guess. It did take four seats, inside its own transaction. Then its <code>INSERT</code> failed on <code>one_booking_per_key</code>, and the rollback gave the four seats back before anyone could see them. Then the <code>except IntegrityError</code> found the first request's booking and returned it.</p>
+<p>Without the unique constraint, the code would look just as correct. The first query would still catch every repeat that arrives <em>after</em> the first request finished. It is only the simultaneous case, the real double click, that needs the constraint. §7.14 showed the same thing for <code>get_or_create</code>: a check in Python followed by a write is only safe when a constraint stands behind it. In the picture, the clerk looks up the customer's order number in the ledger first. But only the rule "each order number appears once in the ledger" stops two clerks writing the same number at the same moment.</p>
 <h2 id="section-23-246-the-payment-webhook">24.6 The Payment Webhook</h2>
-<p>When the customer has paid, the payment provider calls the box office's webhook with a small JSON body: which booking, and the provider's reference for the payment. The view that receives it is the most exposed code in the project. Anyone can send a request to its URL, the provider will send the same request again whenever a delivery times out, and a delivery can arrive at any moment, including after the hold has expired.</p>
+<p>When the customer has paid, the payment provider calls the box office's webhook. It sends a small JSON body with two facts: which booking, and the provider's reference for the payment. This is the bank's phone call in the picture.</p>
+<p>The view that receives it is the most exposed code in the project, for three reasons:</p>
+<ul>
+<li>Anyone can send a request to its URL, not only the provider.</li>
+<li>The provider will send the same request again whenever a delivery times out.</li>
+<li>A delivery can arrive at any moment, including after the hold has expired.</li>
+</ul>
 <h3 id="section-23-confirming-a-booking">Confirming a booking</h3>
-<p>The confirmation is a service function, like the hold, so that the view stays thin and the tests can call it directly:</p>
+<p>The confirmation is a service function, like the hold: a plain Python function that does the work, kept separate from the view. That keeps the view thin, and lets the tests call the function directly:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/payments.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
 
@@ -84737,12 +84917,12 @@ after 39 | new bookings 20
 
 <p>The decisions in it:</p>
 <ul>
-<li><strong><code>select_for_update()</code></strong> locks the booking row until the transaction ends (§7.11). Unlike the hold, the decision here cannot be written as one <code>UPDATE</code>: it compares the reference, the status and the expiry time, and returns different answers for each. While one delivery holds the lock, a second delivery of the same payment waits, then sees the reference already stored.</li>
-<li><strong>A repeat returns <code>changed=False</code> instead of raising.</strong> For the provider, a repeated delivery that was already processed is a success: if the site answered with an error, the provider would keep retrying. The rule is that a webhook handler must be <strong>idempotent</strong>: handling the same message twice has the same effect as handling it once (§19.14).</li>
-<li><strong><code>expires_at</code> is the truth, not <code>status</code>.</strong> A hold whose time has passed is expired even if the release job of §24.7 has not reached it yet. Otherwise a payment could confirm a booking whose seats were about to be given back, and the same seats could be sold twice.</li>
-<li><strong>The email is enqueued with <code>on_commit</code>.</strong> <code>partial(send_tickets.enqueue, booking.pk)</code> makes a callable that enqueues the task with that argument, without a lambda. The task is enqueued only after the confirmation commits. If anything after <code>save()</code> failed and the transaction rolled back, no email would describe a payment the database does not record (§19.13).</li>
+<li><strong><code>select_for_update()</code></strong> locks the booking row until the transaction ends (§7.11). It is the clerk holding the envelope in their hand while they deal with the bank's call. Unlike the hold, this decision cannot be written as one <code>UPDATE</code>: it compares the reference, the status and the expiry time, and gives a different answer for each. While one delivery holds the lock, a second delivery of the same payment waits. When it gets the row, it sees the reference already stored.</li>
+<li><strong>A repeat returns <code>changed=False</code> instead of raising.</strong> For the provider, a repeated delivery that was already processed is a success. If the site answered with an error, the provider would keep retrying. The rule is that a webhook handler must be <strong>idempotent</strong>: handling the same message twice has the same effect as handling it once (§19.14).</li>
+<li><strong><code>expires_at</code> is the truth, not <code>status</code>.</strong> A hold whose time has passed is expired, even if the release job of §24.7 has not reached it yet. Otherwise a payment could confirm a booking whose seats were about to be given back, and the same seats could be sold twice.</li>
+<li><strong>The email is enqueued with <code>on_commit</code>.</strong> <code>partial(send_tickets.enqueue, booking.pk)</code> makes a callable that enqueues the task with that argument, without needing a lambda. The task is enqueued only after the confirmation commits. If anything after <code>save()</code> failed and the transaction rolled back, no email would describe a payment the database does not record (§19.13).</li>
 </ul>
-<p>The task itself sends the tickets. It takes the booking's id, not the booking, because a task's arguments must be serializable to JSON and because the task should read the current row when it runs (§19.8):</p>
+<p>The task itself sends the tickets. It takes the booking's id, not the booking object, for two reasons. A task's arguments must be serializable to JSON, which means plain data that can be written as text. And the task should read the current row when it runs, not a copy made earlier (§19.8):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/tasks.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.core.mail</span><span class="w"> </span><span class="kn">import</span> <span class="n">send_mail</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.tasks</span><span class="w"> </span><span class="kn">import</span> <span class="n">task</span>
@@ -84761,9 +84941,16 @@ after 39 | new bookings 20
     <span class="p">)</span>
 </code></pre></div>
 
-<p>With no <code>TASKS</code> setting, Django uses the <code>ImmediateBackend</code>, which runs the task inside <code>enqueue()</code> (§19.8). That keeps this section's examples simple. §24.14 lists what changes for a real worker.</p>
+<p>With no <code>TASKS</code> setting, Django uses the <code>ImmediateBackend</code>, which runs the task straight away, inside <code>enqueue()</code> (§19.8). That keeps this section's examples simple. §24.14 lists what changes for a real worker.</p>
 <h3 id="section-23-checking-who-is-calling">Checking who is calling</h3>
-<p>The view must make sure the request really comes from the payment provider. Providers do this by <strong>signing</strong> each delivery: they compute an <strong>HMAC</strong>, a short code computed from the request body and a secret that only the provider and the site know, and send it in a header. The site computes the same code from the body it received. If the two match, the body was produced by someone who knows the secret and was not changed on the way. That is the same mechanism Django's own signing uses (§16.19).</p>
+<p>The view must make sure the request really comes from the payment provider. Anyone can phone the box office and say "I am the bank". So the two sides agree on a secret in advance, and the bank uses it to produce a code word that depends on the message itself. A stranger cannot produce the code, and cannot copy a real one onto a different message.</p>
+<p>Providers do this by <strong>signing</strong> each delivery:</p>
+<ol>
+<li>The provider computes an <strong>HMAC</strong>, a short code computed from the request body and a secret that only the provider and the site know.</li>
+<li>It sends that code in a header with the request.</li>
+<li>The site computes the same code from the body it received, with its own copy of the secret.</li>
+</ol>
+<p>If the two codes match, the body was produced by someone who knows the secret, and it was not changed on the way. That is the same mechanism Django's own signing uses (§16.19). Here is the view:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/webhooks.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hmac</span>
@@ -84814,13 +85001,18 @@ after 39 | new bookings 20
 
 <p>Three details carry the security of this view:</p>
 <ul>
-<li><strong><code>@csrf_exempt</code></strong> is correct here and nowhere else in the project. CSRF protection defends against a <em>browser</em> sending a user's cookies to the site on another site's behalf. The provider's server sends no cookies; it proves who it is with the signature instead, which another site cannot produce (§16.7).</li>
-<li><strong>The signature is computed over <code>request.body</code>, the raw bytes</strong>, before anything parses them. Parsing the JSON and serialising it again could change spacing or key order, and the codes would no longer match.</li>
-<li><strong><code>hmac.compare_digest()</code></strong> compares the two codes in a time that does not depend on where they first differ. An ordinary <code>==</code> stops at the first different character, and by timing many attempts an attacker can learn the correct code one character at a time.</li>
+<li><strong><code>@csrf_exempt</code></strong> is correct here and nowhere else in the project. CSRF protection defends against a <em>browser</em> that sends a user's cookies to the site on another site's behalf. The provider's server sends no cookies. It proves who it is with the signature instead, which another site cannot produce (§16.7).</li>
+<li><strong>The signature is computed over <code>request.body</code>, the raw bytes</strong>, before anything parses them. Parsing the JSON and turning it back into text could change the spacing or the order of the keys, and the codes would no longer match.</li>
+<li><strong><code>hmac.compare_digest()</code></strong> compares the two codes in a time that does not depend on where they first differ. An ordinary <code>==</code> stops at the first different character. By timing many attempts, an attacker could learn the correct code one character at a time.</li>
 </ul>
-<p>The view's answers are chosen for the provider, not for a person. <code>403</code> means "you are not who you claim to be". <code>409 Conflict</code> with <code>"refund"</code> means "this payment cannot be accepted", and a real integration would call the provider's refund API at that point; this one logs a warning. <code>404</code> covers a booking id that does not exist.</p>
+<p>The view's answers are chosen for the provider's server, not for a person:</p>
+<ul>
+<li><code>403</code> means "you are not who you claim to be".</li>
+<li><code>409 Conflict</code> with <code>"refund"</code> means "this payment cannot be accepted". A real integration would call the provider's refund API at that point; this one logs a warning.</li>
+<li><code>404</code> covers a booking id that does not exist.</li>
+</ul>
 <h3 id="section-23-a-forged-a-real-and-a-repeated-delivery">A forged, a real and a repeated delivery</h3>
-<p>Ana holds two standing places. A delivery with a made-up signature arrives, then a correctly signed one, then the same signed one again:</p>
+<p>Ana holds two standing places. Three deliveries arrive for that booking: one with a made-up signature, then a correctly signed one, then the same signed one again:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span><span class="o">,</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">mail</span>
@@ -84853,9 +85045,16 @@ confirmed pay_1001 1 Your tickets for Jazz Night
 2 x Standing, paid 50.00. Reference pay_1001.
 </code></pre></div>
 
-<p>The forgery was refused and logged with the caller's address. The real delivery confirmed the booking. The repeat answered <code>200</code>, so the provider stops retrying, and changed nothing: one email in the outbox. The shell has no transaction around its statements, so each <code>on_commit</code> callback ran as soon as <code>confirm_payment</code>'s block committed, and the <code>ImmediateBackend</code> sent the mail inside it.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li>The <code>WARNING</code> line and <code>(403, '')</code>: the forgery was refused, and logged with the caller's address.</li>
+<li><code>(200, '{"status": "confirmed"}')</code>: the real delivery confirmed the booking.</li>
+<li><code>(200, '{"status": "already confirmed"}')</code>: the repeat answered <code>200</code>, so the provider stops retrying, and it changed nothing.</li>
+<li>The last two lines: the booking is <code>confirmed</code> with reference <code>pay_1001</code>, and there is exactly one email in the outbox, with the tickets in it.</li>
+</ul>
+<p>Why had the email already been sent by the time the shell printed it? The shell has no transaction around its statements. So each <code>on_commit</code> callback ran as soon as the block in <code>confirm_payment</code> committed, and the <code>ImmediateBackend</code> sent the mail inside it.</p>
 <h3 id="section-23-a-payment-that-arrives-too-late">A payment that arrives too late</h3>
-<p>Bruno holds three seats, and his hold expires before the payment arrives. The example moves <code>expires_at</code> one second into the past instead of waiting ten minutes:</p>
+<p>Bruno holds three seats, and the hold expires before the payment arrives. Instead of waiting ten minutes, the example moves <code>expires_at</code> one second into the past:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span><span class="o">,</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
@@ -84882,10 +85081,17 @@ WARNING boxoffice.webhooks payment pay_1002 arrived for booking 35, which is no 
 held None
 </code></pre></div>
 
-<p>The webhook refused the payment although the booking's <code>status</code> still says <code>held</code>: the expiry time had passed, and that is the rule. The three seats are still out of the counter. Giving them back is the release job's work, and §24.7 runs it on this very booking.</p>
-<p>The other possible design, accepting a late payment if the seats happen to be still free, is a legitimate product decision; some box offices make it. It needs the payment confirmation to take the seats again with the same conditional <code>UPDATE</code> as a hold, and to refund when that fails. What a design must never do is accept the payment <em>without</em> that check.</p>
+<p>Read the output line by line:</p>
+<ul>
+<li><code>remaining 35</code>: the stalls before Bruno's new hold.</li>
+<li>The <code>WARNING</code> line: the webhook logged the late payment, for booking 35.</li>
+<li><code>409 {'status': 'refund'}</code>: the provider is told to refund the money.</li>
+<li><code>held None</code>: the booking was not confirmed, and no payment reference was stored.</li>
+</ul>
+<p>The webhook refused the payment although the booking's <code>status</code> still says <code>held</code>. The expiry time had passed, and that is the rule. The three seats are still out of the counter. Giving them back is the release job's work, and §24.7 runs it on this very booking.</p>
+<p>There is another possible design: accept a late payment if the seats happen to be still free. That is a legitimate product decision, and some box offices make it. It needs the payment confirmation to take the seats again, with the same conditional <code>UPDATE</code> as a hold, and to refund when that fails. What a design must never do is accept the payment <em>without</em> that check.</p>
 <h2 id="section-23-247-releasing-expired-holds">24.7 Releasing Expired Holds</h2>
-<p>Expired holds must give their seats back without anyone asking. The usual way is a <strong>management command</strong> (§2.15), run every minute by whatever schedules jobs in production: cron, a systemd timer or the platform's scheduler (§19.16). The work itself is a function, so tests can call it without a command line:</p>
+<p>Expired holds must give their seats back without anyone asking. This is the usher's round in the picture. The usual way is a <strong>management command</strong> (§2.15), a command of your own that you run through <code>manage.py</code>. Whatever schedules jobs in production runs it every minute: cron, a systemd timer or the platform's scheduler (§19.16). The work itself is a plain function, so tests can call it without a command line:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/expiry.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">Counter</span>
 
@@ -84919,11 +85125,11 @@ held None
 
 <p>Every line of it answers a "what if":</p>
 <ul>
-<li><strong>What if two copies run at once?</strong> A slow run can overlap the next minute's, and a deployment can briefly run two schedulers. <code>select_for_update(skip_locked=True)</code> locks the rows it selects and <strong>skips rows another transaction has locked</strong>, instead of waiting for them (§7.11). Two copies divide the expired holds between them, and neither releases a hold twice.</li>
-<li><strong>What if a webhook is confirming that booking right now?</strong> <code>confirm_payment</code> holds a lock on the booking's row. The release job skips it rather than waiting. When the webhook finishes, the booking is either confirmed, and no longer <code>held</code>, or still held and past its time, and the next run releases it.</li>
-<li><strong>What if a million holds expired during an outage?</strong> <code>[:limit]</code> takes a batch, so one transaction never locks a million rows. The order by <code>expires_at</code> releases the oldest first, and it matches the partial index of §24.3, so finding the batch reads the index rather than the table.</li>
-<li><strong>What if two runs update the same tiers in different orders?</strong> Each batch adds the seats up per tier with a <code>Counter</code> and updates the tiers <strong>in order of their id</strong>. Two transactions that lock the same rows in the same order cannot deadlock (§7.12): one simply waits for the other. A loop that updated a tier for each booking, in expiry order, could lock tier 3 then tier 1 in one run and tier 1 then tier 3 in another.</li>
-<li><strong>Why one <code>UPDATE</code> per tier, not per booking?</strong> The same reason: fewer statements and fewer lock acquisitions. A batch of 500 expired holds over three tiers makes three <code>UPDATE</code>s, plus one <code>bulk_update</code> for the bookings (§5.13).</li>
+<li><strong>What if two copies run at once?</strong> A slow run can overlap the next minute's run, and a deployment can briefly run two schedulers. <code>select_for_update(skip_locked=True)</code> locks the rows it selects and <strong>skips rows another transaction has locked</strong>, instead of waiting for them (§7.11). Two copies divide the expired holds between them, and neither releases a hold twice. In the picture, two ushers on the same round each take only the envelopes the other has not picked up.</li>
+<li><strong>What if a webhook is confirming that booking right now?</strong> <code>confirm_payment</code> holds a lock on the booking's row. The release job skips it rather than waiting: the usher passes over an envelope a clerk is holding. When the webhook finishes, there are two possibilities. Either the booking is confirmed, and no longer <code>held</code>, or it is still held and past its time, and the next run releases it.</li>
+<li><strong>What if a million holds expired during an outage?</strong> <code>[:limit]</code> takes a batch, so one transaction never locks a million rows. The order by <code>expires_at</code> releases the oldest first. It also matches the partial index of §24.3, so finding the batch reads the small index rather than the whole table.</li>
+<li><strong>What if two runs update the same tiers in different orders?</strong> Each batch adds the seats up per tier with a <code>Counter</code>, and then updates the tiers <strong>in order of their id</strong>. Two transactions that lock the same rows in the same order cannot deadlock (§7.12): one simply waits for the other. (A deadlock is two transactions each waiting for a lock the other holds; PostgreSQL breaks it by cancelling one of them.) A loop that updated a tier for each booking, in expiry order, could lock tier 3 then tier 1 in one run, and tier 1 then tier 3 in another.</li>
+<li><strong>Why one <code>UPDATE</code> per tier, not per booking?</strong> The same reason: fewer statements and fewer locks to take. A batch of 500 expired holds over three tiers makes three <code>UPDATE</code>s, plus one <code>bulk_update</code> for the bookings (§5.13).</li>
 </ul>
 <h3 id="section-23-releasing-brunos-late-hold">Releasing Bruno's late hold</h3>
 <p>Bruno's hold from §24.6 has expired but still says <code>held</code>. One run releases it; a second run finds nothing to do:</p>
@@ -84940,8 +85146,9 @@ held None
 expired | stalls remaining 35
 </code></pre></div>
 
+<p>The first run released one hold, and the second found nothing. Bruno's booking is now <code>expired</code>, and the stalls are back to 35: the three seats came back.</p>
 <h3 id="section-23-the-release-job-meets-a-webhook">The release job meets a webhook</h3>
-<p>Carla holds two single seats, and both holds expire. While a webhook delivery has the first booking locked, the release job runs:</p>
+<p>Now the harder case. Carla holds two single seats, and both holds expire. While a webhook delivery has the first booking locked, the release job runs. The example plays the webhook with a thread that locks booking <code>a</code> and then waits for a signal before letting go:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span><span class="o">,</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
@@ -84981,9 +85188,15 @@ released afterwards: 1
 [(36, 'expired'), (37, 'expired')]
 </code></pre></div>
 
-<p>The first run released one hold, the unlocked one, and returned at once instead of waiting for the webhook. The second run, after the lock was gone, released the other. Without <code>skip_locked</code>, the first run would have waited for the webhook's transaction, and with a slow payment provider a minute's job could pile up behind it. With <code>nowait=True</code> instead, the job would have failed with an error and released nothing (§7.11).</p>
+<p>Read the output:</p>
+<ul>
+<li>The first line: the release job ran while booking 36 was locked. It released one hold, the unlocked one, and returned at once instead of waiting for the webhook.</li>
+<li>The second line: the next run, after the lock was gone, released the other.</li>
+<li>The last line: both bookings ended <code>expired</code>.</li>
+</ul>
+<p>Two other choices would have behaved worse. Without <code>skip_locked</code>, the first run would have waited for the webhook's transaction; with a slow payment provider, a job meant to run every minute could pile up behind it. With <code>nowait=True</code> instead, the job would have failed with an error and released nothing (§7.11).</p>
 <h3 id="section-23-the-command">The command</h3>
-<p>The command loops over batches until a batch comes back empty, and prints one line, which is what a scheduler's log needs. With <code>-v 2</code> it also prints each batch:</p>
+<p>The command calls the function in a loop, one batch at a time, until a batch comes back empty. Then it prints one line, which is what a scheduler's log needs. With <code>-v 2</code> it also prints each batch:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/management/commands/release_holds.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.core.management.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseCommand</span>
 
@@ -85005,7 +85218,7 @@ released afterwards: 1
         <span class="bp">self</span><span class="o">.</span><span class="n">stdout</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">"released </span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2"> expired holds"</span><span class="p">)</span>
 </code></pre></div>
 
-<p>The eight table seats the <code>crowd</code> customer is holding from §24.5 expire, and the command releases them in batches of three:</p>
+<p>To try the command, make the eight table seats that the <code>crowd</code> customer has held since §24.5 expire. The update prints how many rows it changed:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">timezone</span>
@@ -85017,6 +85230,7 @@ released afterwards: 1
 <div class="highlight" data-lang="text"><pre><span></span><code>8
 </code></pre></div>
 
+<p>Eight holds have now expired. Run the command with batches of three, and ask it to print each batch:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>release_holds<span class="w"> </span><span class="flag">--batch</span><span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="flag">-v</span><span class="w"> </span><span class="m">2</span>
 </code></pre></div>
 
@@ -85026,11 +85240,23 @@ batch: 2
 released 8 expired holds
 </code></pre></div>
 
-<p>Three batches of 3, 3 and 2, each its own short transaction, then a fourth call that found nothing and ended the loop. Each transaction commits on its own, so if the command is stopped halfway, everything released so far stays released, and the next run continues from there.</p>
+<p>Three batches of 3, 3 and 2, then the total. A fourth call found nothing and ended the loop, which is why no fourth batch line appears. Each batch is its own short transaction and commits on its own. So if the command is stopped halfway, everything released so far stays released, and the next run continues from there.</p>
 <h2 id="section-23-248-the-pages-views-forms-and-their-queries">24.8 The Pages: Views, Forms and Their Queries</h2>
-<p>The service functions are done. The pages are the part a customer sees, and they are deliberately thin: each view reads the request, calls one service or runs one query, and renders a template. Everything that must be correct under concurrency already lives in the services, where it can be tested without HTTP.</p>
+<p>The service functions are done. The pages are the part a customer sees: the window, the forms and the leaflets. They are deliberately thin. Each view does three things:</p>
+<ol>
+<li>it reads the request;</li>
+<li>it calls one service, or runs one query;</li>
+<li>it renders a template.</li>
+</ol>
+<p>Everything that must be correct under concurrency already lives in the services, where it can be tested without HTTP.</p>
 <h3 id="section-23-the-form">The form</h3>
-<p>The hold form has three fields. The <strong>tier</strong> is a choice limited to the tiers of the event being shown. The <strong>quantity</strong> is 1 to 6, the same rule as the <code>quantity_1_to_6</code> constraint, checked here so that a customer sees a friendly message instead of a database error. The <strong>key</strong> is the idempotency key, a hidden field whose <code>initial</code> value is a fresh UUID each time the form is rendered:</p>
+<p>The hold form has three fields:</p>
+<ul>
+<li>The <strong>tier</strong> is a choice limited to the tiers of the event being shown.</li>
+<li>The <strong>quantity</strong> is 1 to 6, the same rule as the <code>quantity_1_to_6</code> constraint. The form checks it too, so that a customer sees a friendly message instead of a database error.</li>
+<li>The <strong>key</strong> is the idempotency key: a hidden field whose <code>initial</code> value is a fresh UUID each time the form is rendered. (A UUID is a random 128-bit identifier, so two of them are practically never equal.)</li>
+</ul>
+<p>Here is the form:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/forms.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 
@@ -85049,9 +85275,11 @@ released 8 expired holds
         <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="s2">"tier"</span><span class="p">]</span><span class="o">.</span><span class="n">queryset</span> <span class="o">=</span> <span class="n">event</span><span class="o">.</span><span class="n">tiers</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </code></pre></div>
 
-<p><code>initial=uuid.uuid4</code> passes the function, not a UUID. Django calls a callable <code>initial</code> every time it renders the form (§13.11), so each page view gets its own key, while the two submissions of one double-clicked page share it. That is the whole idempotency scheme from the browser's side.</p>
+<p>Two lines need a closer look.</p>
+<p><code>initial=uuid.uuid4</code> passes the function, not a UUID. Django calls a callable <code>initial</code> every time it renders the form (§13.11). So each page view gets its own key, while the two submissions of one double-clicked page share it. That is the whole idempotency scheme from the browser's side: the order number is printed on the form when the customer picks it up.</p>
 <p>The queryset is set in <code>__init__</code> because it depends on the event (§13.15). Setting it on the class would let a customer submit the id of a tier from a different event, and <code>ModelChoiceField</code> would accept it.</p>
 <h3 id="section-23-the-views">The views</h3>
+<p>There are four views: the list of events, one event's page with the hold form, one booking, and the customer's own bookings:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/views.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth.decorators</span><span class="w"> </span><span class="kn">import</span> <span class="n">login_required</span>
@@ -85111,12 +85339,12 @@ released 8 expired holds
 
 <p>What each view decides, and where it was taught:</p>
 <ul>
-<li><strong><code>event_list</code></strong> computes each event's lowest price and seats left in one query, with <code>annotate()</code> over the tiers (§6.3). Both aggregates follow the same single join to <code>tiers</code>, so nothing is multiplied; §24.11 shows the query where that stops being true. It returns plain dictionaries rather than model instances, because the result is cached (§24.9), and a list of dictionaries is small, quick to pickle and cannot run a query by accident in the template.</li>
-<li><strong><code>event_detail</code></strong> shows the event and accepts the hold form. Anonymous visitors may see the page but must log in to post, and are sent to the login page with <code>?next=</code> so they come back (§14.18). A valid form calls <code>hold_seats</code> and <strong>redirects</strong> to the booking, the POST/Redirect/GET pattern (§10.10): reloading the page the customer lands on repeats a harmless GET, not the purchase. A sold-out tier answers <strong><code>409 Conflict</code></strong> with the form and an error, so the customer can choose another tier.</li>
-<li><strong><code>booking_detail</code></strong> filters by <code>user=request.user</code> as well as by <code>pk</code>. Without that filter any logged-in customer could read any booking by changing the number in the URL, a flaw called an <strong>insecure direct object reference</strong> (§14.19). Answering <code>404</code> rather than <code>403</code> does not even confirm that the booking exists.</li>
+<li><strong><code>event_list</code></strong> computes each event's lowest price and seats left in one query, with <code>annotate()</code> over the tiers (§6.3). Both aggregates follow the same single join to <code>tiers</code>, so nothing is counted twice; §24.11 shows the query where that stops being true. The view returns plain dictionaries rather than model instances, because the result is cached (§24.9). A list of dictionaries is small, quick to pickle (Python's way of turning objects into bytes for the cache) and cannot run a query by accident in the template.</li>
+<li><strong><code>event_detail</code></strong> shows the event and accepts the hold form. Anonymous visitors may see the page but must log in to post. They are sent to the login page with <code>?next=</code>, so they come back afterwards (§14.18). A valid form calls <code>hold_seats</code> and <strong>redirects</strong> to the booking. That is the POST/Redirect/GET pattern (§10.10): reloading the page the customer lands on repeats a harmless GET, not the purchase. A sold-out tier answers <strong><code>409 Conflict</code></strong> with the form and an error, so the customer can choose another tier.</li>
+<li><strong><code>booking_detail</code></strong> filters by <code>user=request.user</code> as well as by <code>pk</code>. Without that filter, any logged-in customer could read any booking by changing the number in the URL. That flaw is called an <strong>insecure direct object reference</strong> (§14.19). Answering <code>404</code> rather than <code>403</code> does not even confirm that the booking exists.</li>
 <li><strong><code>my_bookings</code></strong> lists the customer's bookings with <code>select_related("tier__event")</code>, so the template's <code>b.tier.event.title</code> costs no extra query per row (§5.4).</li>
 </ul>
-<p>The URL configuration replaces the one §24.6 wrote and adds the pages. <code>LoginView</code> is Django's own (§14.14):</p>
+<p>The URL configuration replaces the one §24.6 wrote and adds the pages. <code>LoginView</code> is Django's own login page (§14.14):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">views</span> <span class="k">as</span> <span class="n">auth_views</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
@@ -85134,13 +85362,15 @@ released 8 expired holds
 </code></pre></div>
 
 <h3 id="section-23-the-templates">The templates</h3>
-<p>The templates are short. The event page renders the form with <code>{% csrf_token %}</code> and <code>form.as_div</code>, which also prints errors that belong to the whole form, such as "Not enough seats left" (§13.12). Every value is escaped automatically (§12.14), so an event title containing <code>&lt;script&gt;</code> would be shown, not run:</p>
+<p>The templates are short. The event page renders the form with <code>{% csrf_token %}</code> and <code>form.as_div</code>, which also prints errors that belong to the whole form, such as "Not enough seats left" (§13.12). Every value is escaped automatically (§12.14), so an event title containing <code>&lt;script&gt;</code> would be shown as text, not run.</p>
+<p>There are five templates. Every page extends the same base:</p>
 <div class="highlight" data-lang="django"><pre><span></span><code><span class="c">{# templates/base.html #}</span>
 <span class="x">&lt;!doctype html&gt;</span>
 <span class="x">&lt;title&gt;</span><span class="cp">{%</span> <span class="k">block</span> <span class="nv">title</span> <span class="cp">%}</span><span class="x">Box office</span><span class="cp">{%</span> <span class="k">endblock</span> <span class="cp">%}</span><span class="x">&lt;/title&gt;</span>
 <span class="cp">{%</span> <span class="k">block</span> <span class="nv">content</span> <span class="cp">%}{%</span> <span class="k">endblock</span> <span class="cp">%}</span>
 </code></pre></div>
 
+<p>The list of events, one line per event, built from the cached dictionaries:</p>
 <div class="highlight" data-lang="django"><pre><span></span><code><span class="c">{# templates/boxoffice/event_list.html #}</span>
 <span class="cp">{%</span> <span class="k">extends</span> <span class="s2">"base.html"</span> <span class="cp">%}</span>
 <span class="cp">{%</span> <span class="k">block</span> <span class="nv">content</span> <span class="cp">%}</span><span class="x">&lt;ul&gt;</span>
@@ -85148,6 +85378,7 @@ released 8 expired holds
 <span class="cp">{%</span> <span class="k">endfor</span> <span class="cp">%}</span><span class="x">&lt;/ul&gt;</span><span class="cp">{%</span> <span class="k">endblock</span> <span class="cp">%}</span>
 </code></pre></div>
 
+<p>One event's page, with its tiers and the hold form:</p>
 <div class="highlight" data-lang="django"><pre><span></span><code><span class="c">{# templates/boxoffice/event_detail.html #}</span>
 <span class="cp">{%</span> <span class="k">extends</span> <span class="s2">"base.html"</span> <span class="cp">%}</span>
 <span class="cp">{%</span> <span class="k">block</span> <span class="nv">title</span> <span class="cp">%}{{</span> <span class="nv">event.title</span> <span class="cp">}}{%</span> <span class="k">endblock</span> <span class="cp">%}</span>
@@ -85156,11 +85387,13 @@ released 8 expired holds
 <span class="x">&lt;form method="post"&gt;</span><span class="cp">{%</span> <span class="k">csrf_token</span> <span class="cp">%}{{</span> <span class="nv">form.as_div</span> <span class="cp">}}</span><span class="x">&lt;button&gt;Hold seats&lt;/button&gt;&lt;/form&gt;</span><span class="cp">{%</span> <span class="k">endblock</span> <span class="cp">%}</span>
 </code></pre></div>
 
+<p>One booking:</p>
 <div class="highlight" data-lang="django"><pre><span></span><code><span class="c">{# templates/boxoffice/booking_detail.html #}</span>
 <span class="cp">{%</span> <span class="k">extends</span> <span class="s2">"base.html"</span> <span class="cp">%}</span>
 <span class="cp">{%</span> <span class="k">block</span> <span class="nv">content</span> <span class="cp">%}</span><span class="x">&lt;p&gt;Booking </span><span class="cp">{{</span> <span class="nv">booking.pk</span> <span class="cp">}}</span><span class="x">: </span><span class="cp">{{</span> <span class="nv">booking.quantity</span> <span class="cp">}}</span><span class="x"> x </span><span class="cp">{{</span> <span class="nv">booking.tier.name</span> <span class="cp">}}</span><span class="x"> for </span><span class="cp">{{</span> <span class="nv">booking.tier.event.title</span> <span class="cp">}}</span><span class="x">, $</span><span class="cp">{{</span> <span class="nv">booking.amount</span> <span class="cp">}}</span><span class="x">, </span><span class="cp">{{</span> <span class="nv">booking.status</span> <span class="cp">}}</span><span class="x">.&lt;/p&gt;</span><span class="cp">{%</span> <span class="k">endblock</span> <span class="cp">%}</span>
 </code></pre></div>
 
+<p>The customer's own bookings, with a line for an empty list:</p>
 <div class="highlight" data-lang="django"><pre><span></span><code><span class="c">{# templates/boxoffice/my_bookings.html #}</span>
 <span class="cp">{%</span> <span class="k">extends</span> <span class="s2">"base.html"</span> <span class="cp">%}</span>
 <span class="cp">{%</span> <span class="k">block</span> <span class="nv">content</span> <span class="cp">%}</span><span class="x">&lt;ul&gt;</span>
@@ -85170,7 +85403,7 @@ released 8 expired holds
 </code></pre></div>
 
 <h3 id="section-23-what-the-event-page-costs">What the event page costs</h3>
-<p>A page's query count is a number to know, not to guess. The test client fetches the jazz night's page, and <code>CaptureQueriesContext</code> records every query (§5.2). The loop prints the first table each query reads, and marks the ones that open a cursor:</p>
+<p>How many database queries does one page make? That number is something to know, not to guess. The test client fetches the jazz night's page, and <code>CaptureQueriesContext</code> records every query (§5.2). The loop prints the first table each query reads, and marks the ones that open a cursor:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
@@ -85193,10 +85426,24 @@ released 8 expired holds
 ['&lt;li&gt;Standing: $25.00, 21 left&lt;/li&gt;', '&lt;li&gt;Table: $60.00, 8 left&lt;/li&gt;']
 </code></pre></div>
 
-<p>Three queries, and the third is a surprise. The first reads the event. The second reads its tiers, for the template's <code>{% for tier in event.tiers.all %}</code>. The third reads <strong>the same tiers again</strong>, for the <code>&lt;select&gt;</code> of the form's <code>tier</code> field, and it does so through a <code>DECLARE ... CURSOR</code>. A <code>ModelChoiceField</code> iterates its queryset with <code>.iterator()</code> so that a choice list of a million rows is not loaded at once, and on PostgreSQL <code>.iterator()</code> uses a <strong>server-side cursor</strong> (§5.10). For two tiers that is wasted effort: a cursor costs extra round trips to declare, fetch from and close. It is harmless here, but it is the kind of detail an interviewer who has run Django in production will recognise, and exercise 4 removes it.</p>
-<p>The page shows 21 standing places: 25, minus the two Ana holds in §24.4 and the two she paid for in §24.6. Carla's two single-seat holds were released in §24.7, and so were the <code>crowd</code> customer's eight table seats, so the tables are back to 8.</p>
+<p>Three queries, and the third is a surprise:</p>
+<ol>
+<li>The first reads the event.</li>
+<li>The second reads its tiers, for the template's <code>{% for tier in event.tiers.all %}</code>.</li>
+<li>The third reads <strong>the same tiers again</strong>, for the <code>&lt;select&gt;</code> of the form's <code>tier</code> field, and it does so through a <code>DECLARE ... CURSOR</code>.</li>
+</ol>
+<p>Why a cursor? A <code>ModelChoiceField</code> goes through its queryset with <code>.iterator()</code>, so that a choice list of a million rows is not loaded into memory all at once. On PostgreSQL, <code>.iterator()</code> uses a <strong>server-side cursor</strong> (§5.10): the database keeps the result and hands it over in pieces. For two tiers that is wasted effort, because a cursor costs extra round trips to declare it, fetch from it and close it. It is harmless here. But it is the kind of detail an interviewer who has run Django in production will recognise, and exercise 4 removes it.</p>
+<p>The last line shows 21 standing places: 25, minus the two Ana holds in §24.4 and the two Ana paid for in §24.6. Carla's two single-seat holds were released in §24.7, and so were the <code>crowd</code> customer's eight table seats, so the tables are back to 8.</p>
 <h3 id="section-23-holding-seats-through-the-page">Holding seats through the page</h3>
-<p>A visitor who is not logged in posts the form and is sent to the login page. Then Carla logs in and tries, in order: nine standing places (more than six), a tier from another event, a valid request for two standing places, the same request again with the same key, and then two requests for six table seats each, with two different keys:</p>
+<p>Now the hold form, through the test client. First a visitor who is not logged in posts it, and is sent to the login page. Then Carla logs in and tries five things, in order:</p>
+<ol>
+<li>nine standing places, which is more than six;</li>
+<li>a tier from another event;</li>
+<li>a valid request for two standing places;</li>
+<li>the same request again, with the same key;</li>
+<li>two requests for six table seats each, with two different keys.</li>
+</ol>
+<p>The <code>errors()</code> helper pulls the error messages out of each page:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span><span class="o">,</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
@@ -85238,12 +85485,13 @@ Booking 38: 2 x Standing for Jazz Night, $50.00, held.
 <p>Each answer comes from a different layer:</p>
 <ul>
 <li><strong><code>302</code> to the login page</strong> comes from the view's own check. <code>@login_required</code> cannot be used on <code>event_detail</code>, because the page itself is public; only the POST needs a user.</li>
-<li><strong><code>200</code> with "less than or equal to 6"</strong> and <strong>"not one of the available choices"</strong> come from the form. Neither request reached the service: an invalid form is re-rendered with status 200, the usual Django convention (§13.3). The stalls tier belongs to the opera, so the jazz night's form does not offer it, and submitting its id directly is refused.</li>
-<li><strong>Two <code>302</code>s to the same booking</strong> come from the idempotency key: the second submission found the first booking and returned it.</li>
-<li><strong>The first request for six tables succeeded and the second answered <code>409</code></strong> with "Not enough seats left in that tier": the form was valid, and the database said no, because only two tables were left.</li>
+<li><strong><code>200</code> with "less than or equal to 6"</strong> and <strong>"not one of the available choices"</strong> come from the form. Neither request reached the service. An invalid form is re-rendered with status 200, the usual Django convention (§13.3). The stalls tier belongs to the opera, so the jazz night's form does not offer it, and submitting its id directly is refused.</li>
+<li><strong>Two <code>302</code>s to the same booking</strong> come from the idempotency key: the second submission found the first booking and returned it. The booking page confirms it: two standing places, held.</li>
+<li><strong>The first request for six tables succeeded and the second answered <code>409</code></strong> with "Not enough seats left in that tier". The form was valid, and the database said no, because only two tables were left.</li>
 </ul>
-<p>The <code>errors()</code> helper's regular expression allows for two shapes of error list: Django renders an error that belongs to the whole form with an extra class, <code>errorlist nonfield</code>, and a field's errors with an <code>id</code> attribute.</p>
+<p>The <code>errors()</code> helper's regular expression allows for two shapes of error list. Django renders an error that belongs to the whole form with an extra class, <code>errorlist nonfield</code>, and a field's errors with an <code>id</code> attribute.</p>
 <h3 id="section-23-someone-elses-booking-and-a-forged-form">Someone else's booking, and a forged form</h3>
+<p>Two last checks on the pages. Bruno tries to open Carla's latest booking. Then a test client that enforces CSRF checks, as the real site does, posts the form without a CSRF token:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
 
@@ -85263,8 +85511,14 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
 403
 </code></pre></div>
 
-<p>Carla sees her booking; Bruno, logged in, gets <code>404</code> for the same URL. The test client skips CSRF checks unless it is created with <code>enforce_csrf_checks=True</code> (§16.7). With them on, a POST without the CSRF cookie and token, which is what a form on another site would send with Carla's session cookie, is refused with <code>403</code>, and the <code>django.security.csrf</code> logger records why.</p>
+<p>Read the output:</p>
+<ul>
+<li><code>200 404</code>: Carla sees the booking; Bruno, logged in, gets <code>404</code> for the same URL.</li>
+<li>The <code>Forbidden</code> line and <code>403</code>: the POST without a token was refused.</li>
+</ul>
+<p>The test client skips CSRF checks unless it is created with <code>enforce_csrf_checks=True</code> (§16.7). With them on, a POST without the CSRF cookie and token is refused with <code>403</code>. That is exactly what a form on another site would send, along with Carla's session cookie. The <code>django.security.csrf</code> logger records why.</p>
 <h3 id="section-23-the-customers-own-bookings">The customer's own bookings</h3>
+<p>The last page lists a customer's bookings. Count its queries too, logged in as Ana:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">connection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">Client</span>
@@ -85284,20 +85538,21 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
   &lt;li&gt;Jazz Night: 2 x Standing (held)&lt;/li&gt;
 </code></pre></div>
 
-<p>Three queries: the session, the user, and the bookings joined to their tiers and events. That number does not depend on how many bookings Ana has, which is the property to protect. §24.12 turns it into a test with <code>assertNumQueries</code>, which fails the day someone removes the <code>select_related</code> (§5.14).</p>
+<p>Three queries: the session, the user, and the bookings joined to their tiers and events. Ana's two bookings are listed newest first. That number of queries does not depend on how many bookings Ana has, and that is the property to protect. §24.12 turns it into a test with <code>assertNumQueries</code>, which fails the day someone removes the <code>select_related</code> (§5.14).</p>
 <h2 id="section-23-249-caching-the-event-list-and-what-the-cache-may-get-wrong">24.9 Caching the Event List, and What the Cache May Get Wrong</h2>
-<p>The event list is the busiest page: everyone who visits the site sees it, and most of them buy nothing. Its query joins every event to its tiers and aggregates them. That is cheap with two events and not cheap with two thousand, on every page view. So <code>event_list</code> caches the rows:</p>
+<p>The event list is the busiest page. Everyone who visits the site sees it, and most of them buy nothing. Its query joins every event to its tiers and adds them up. That is cheap with two events, and not cheap with two thousand, on every page view. So <code>event_list</code> caches the rows, like the poster outside the theatre:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">rows</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">get_or_set</span><span class="p">(</span><span class="s2">"event-list"</span><span class="p">,</span> <span class="n">event_rows</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
 </code></pre></div>
 
-<p><code>get_or_set</code> returns the cached value if there is one and otherwise calls <code>event_rows</code>, stores the result for 30 seconds and returns it (§17.8). The function is passed without parentheses, so it only runs on a miss.</p>
-<p>A cache always raises the same question: <strong>what happens when the cached value is wrong?</strong> Here it is wrong whenever a hold or a release changes a seat count, until the entry is deleted or expires. The design accepts that, for a reason worth being able to say in one sentence: <strong>the cached number is only a display, and no decision is made from it.</strong> A customer who sees "1 seat left" when there are none will get "Not enough seats left" from <code>hold_seats</code>, which always asks the database. A stale page can disappoint; it cannot oversell.</p>
+<p><code>get_or_set</code> returns the cached value if there is one. Otherwise it calls <code>event_rows</code>, stores the result for 30 seconds and returns it (§17.8). The function is passed without parentheses, so it only runs on a miss, when the cache has nothing.</p>
+<p>A cache always raises the same question: <strong>what happens when the cached value is wrong?</strong> Here it is wrong whenever a hold or a release changes a seat count, until the entry is deleted or expires. The design accepts that, for a reason worth being able to say in one sentence: <strong>the cached number is only a display, and no decision is made from it.</strong> A customer who sees "1 seat left" when there are none will get "Not enough seats left" from <code>hold_seats</code>, which always asks the database. The poster outside can be out of date; the board behind the window never is. A stale page can disappoint; it cannot oversell.</p>
 <p>Even so, the list should not stay wrong for 30 seconds after every sale. <code>hold_seats</code> and <code>release_expired</code> both call <code>availability_changed()</code>, which deletes the entry with <code>transaction.on_commit</code>. Two properties follow, and the example checks both:</p>
 <ul>
 <li><strong>After a commit</strong>, the next visit rebuilds the list with the new numbers.</li>
 <li><strong>After a rollback</strong>, nothing changed in the database, so the entry is not deleted and the cache keeps serving.</li>
 </ul>
-<p>Deleting with <code>on_commit</code> matters more than it looks. If the entry were deleted inside the transaction, a visitor arriving between the delete and the commit would rebuild the cache from the database <em>before</em> the change was visible, and the old number would then be cached for another 30 seconds (§17.17).</p>
+<p>Deleting with <code>on_commit</code> matters more than it looks. Suppose the entry were deleted inside the transaction instead. A visitor arriving between the delete and the commit would rebuild the cache from the database <em>before</em> the change was visible. The old number would then be cached for another 30 seconds (§17.17). In the picture, the poster is taken down only once the sale is final, never while the clerk is still writing.</p>
+<p>The example visits the list twice, makes a hold that is rolled back, visits again, makes a hold that commits, and visits twice more. Each visit prints its query count and the jazz night's line:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.core.cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache</span>
@@ -85338,15 +85593,23 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
 0 queries | &lt;li&gt;&lt;a href="/events/jazz-night/"&gt;Jazz Night&lt;/a&gt;, 20 Nov 2026 20:00, from $25.00, 20 seats left&lt;/li&gt;
 </code></pre></div>
 
-<p>The first visit ran one query and filled the cache; the second ran none. The hold that was rolled back left the cache alone, and the page still said 21, which was still true: 19 standing places and the 2 tables Carla left in §24.8. The hold that committed deleted the entry, and the next visit ran the query again and showed 20. An anonymous visitor costs no query for the session, because no session exists yet.</p>
-<p>This design has known limits, each a decision rather than an accident:</p>
+<p>Read the five lines in order:</p>
+<ol>
+<li>The first visit ran one query and filled the cache.</li>
+<li>The second ran none: it was served from the cache.</li>
+<li>The hold that was rolled back left the cache alone, and the page still said 21. That was still true: 19 standing places and the 2 tables Carla left in §24.8.</li>
+<li>The hold that committed deleted the entry. The next visit ran the query again and showed 20.</li>
+<li>The visit after that was served from the rebuilt cache.</li>
+</ol>
+<p>An anonymous visitor costs no query for the session, because no session exists yet. That is why a cache hit costs no query at all here.</p>
+<p>This design has known limits. Each is a decision rather than an accident:</p>
 <ul>
-<li><strong>One key for the whole list.</strong> Any sale anywhere deletes it. With two thousand events selling at once, the cache would almost never be warm, and the right change is one entry per event, or caching only the parts that do not change with sales (§17.16).</li>
+<li><strong>One key for the whole list.</strong> Any sale anywhere deletes it. With two thousand events selling at once, the cache would almost never be warm. The right change then is one entry per event, or caching only the parts that do not change with sales (§17.16).</li>
 <li><strong>A cache stampede is possible.</strong> When the entry is deleted, every request that arrives before it is rebuilt runs the query at the same time. For a 30-second entry on a query of a few milliseconds that is acceptable. §17.18 shows the fixes for when it is not.</li>
-<li><strong>Redis down means slower, not broken.</strong> The low-level cache API raises if Redis cannot be reached. A site that must keep selling when the cache is down wraps the call, or uses a client that ignores connection errors; §17.21 discusses the choice.</li>
+<li><strong>Redis down means slower, not broken.</strong> That is the goal, and it takes work: the low-level cache API raises an error if Redis cannot be reached. A site that must keep selling when the cache is down wraps the call, or uses a client that ignores connection errors; §17.21 discusses the choice.</li>
 </ul>
 <h2 id="section-23-2410-an-async-endpoint-for-live-availability">24.10 An Async Endpoint for Live Availability</h2>
-<p>The event page could refresh its seat counts every few seconds with JavaScript. That request is small, frequent and read-only: a good candidate for an <strong>async view</strong>, which lets one process serve many waiting requests when it runs under an ASGI server (§18.2). The view uses the ORM's async interface, an <code>async for</code> over a QuerySet (§18.9):</p>
+<p>The event page could refresh its seat counts every few seconds with JavaScript. That request is small, frequent and read-only: a good candidate for an <strong>async view</strong>. An async view can pause while it waits for something, and let the same process serve other requests in the meantime, when it runs under an ASGI server (§18.2). In the picture, it is a small side window that only answers "how many seats are left?". The view uses the ORM's async interface, an <code>async for</code> over a QuerySet (§18.9):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/api.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">JsonResponse</span>
 
@@ -85360,7 +85623,7 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
     <span class="k">return</span> <span class="n">JsonResponse</span><span class="p">({</span><span class="s2">"event"</span><span class="p">:</span> <span class="n">slug</span><span class="p">,</span> <span class="s2">"tiers"</span><span class="p">:</span> <span class="n">tiers</span><span class="p">})</span>
 </code></pre></div>
 
-<p>The URL configuration gains one line:</p>
+<p>The URL configuration gains one line, the <code>availability</code> path:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.contrib.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">views</span> <span class="k">as</span> <span class="n">auth_views</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
@@ -85378,7 +85641,7 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
 <span class="p">]</span>
 </code></pre></div>
 
-<p><code>AsyncClient</code> calls it the way an ASGI server would (§18.21):</p>
+<p><code>AsyncClient</code> calls the view the way an ASGI server would (§18.21). It asks for the jazz night, and for an event that does not exist:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncClient</span>
@@ -85396,16 +85659,17 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
 404 {'error': 'no such event'}
 </code></pre></div>
 
+<p>The jazz night has 18 standing places and 2 tables left, and the unknown event gets <code>404</code>. The 18 is one fewer than the 19 of §24.9, because of the hold that committed there.</p>
 <p>Two honest remarks belong next to this view, and an interviewer will ask for both:</p>
 <ul>
-<li><strong>Async does not make the query faster.</strong> The ORM's async methods still run the database driver in a thread (§18.9). What async buys is that a process waiting on the database can serve other requests meanwhile, which only matters under an ASGI server and with many concurrent, mostly-waiting requests.</li>
-<li><strong>The middleware stack decides whether the view really runs async.</strong> Every middleware in <code>MIDDLEWARE</code> here supports both modes, so Django does not have to switch between threads around the view; one sync-only middleware would add that switch to every request (§18.14).</li>
+<li><strong>Async does not make the query faster.</strong> The ORM's async methods still run the database driver in a thread (§18.9). What async buys is that a process waiting on the database can serve other requests meanwhile. That only matters under an ASGI server, with many requests at once that spend most of their time waiting.</li>
+<li><strong>The middleware stack decides whether the view really runs async.</strong> Every middleware in <code>MIDDLEWARE</code> here supports both modes, so Django does not have to switch between threads around the view. One sync-only middleware would add that switch to every request (§18.14).</li>
 </ul>
 <p>For a site this size, a plain sync view would serve the endpoint perfectly well. The async version is here because it is the right tool once the polling grows, and because it is what §18 taught.</p>
 <h2 id="section-23-2411-the-sales-report">24.11 The Sales Report</h2>
-<p>Staff want one table: for each event, how many seats exist, how many are paid for, and the money taken. It looks like one <code>annotate()</code> call. It is not, and the reason is the most common aggregation bug in Django projects.</p>
+<p>Staff want one table: for each event, how many seats exist, how many are paid for, and the money taken. This is the accountant's report in the picture. It looks like one <code>annotate()</code> call. It is not, and the reason is the most common aggregation bug in Django projects.</p>
 <h3 id="section-23-the-report-that-is-wrong">The report that is wrong</h3>
-<p>The obvious version follows both relations from the event in one query: <code>tiers__capacity</code> for the seats, <code>tiers__bookings__quantity</code> for the sales:</p>
+<p>The obvious version follows both relations from the event in one query: <code>tiers__capacity</code> for the seats, and <code>tiers__bookings__quantity</code> for the sales. The file below holds that version, <code>sales_naive()</code>, and also the correct one, <code>sales_by_event()</code>, which the next subsection explains:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/reports.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
 
@@ -85440,6 +85704,7 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
     <span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">"starts_at"</span><span class="p">)</span><span class="o">.</span><span class="n">values_list</span><span class="p">(</span><span class="s2">"slug"</span><span class="p">,</span> <span class="s2">"capacity"</span><span class="p">,</span> <span class="s2">"sold"</span><span class="p">,</span> <span class="s2">"revenue"</span><span class="p">)</span>
 </code></pre></div>
 
+<p>Run both, one after the other:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">boxoffice.reports</span><span class="w"> </span><span class="kn">import</span> <span class="n">sales_naive</span><span class="p">,</span> <span class="n">sales_by_event</span>
 
@@ -85451,20 +85716,24 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
 [('jazz-night', 33, 2, Decimal('50.00')), ('opera-gala', 40, 0, Decimal('0.00'))]
 </code></pre></div>
 
-<p>The jazz night has 25 standing places and 8 tables: 33 seats. The naive report counts 222. To aggregate across <code>tiers__bookings</code>, Django joins the event to its tiers and each tier to its bookings, so <strong>each tier appears once per booking</strong>. A tier with 20 bookings contributes its capacity 20 times to <code>Sum("tiers__capacity")</code>. The <code>sold</code> column happens to be right here, because each booking row appears once, but nothing in the query guarantees that either: add a second one-to-many join, to refunds for example, and it would be multiplied too. §6.5 showed this with counts; with sums it is worse, because the wrong number looks plausible.</p>
+<p>Compare the two lines. The jazz night has 25 standing places and 8 tables: 33 seats. The naive report counts 222. The opera has 40 seats, and the naive report counts 880.</p>
+<p>Here is why. To add up <code>tiers__bookings</code>, Django joins the event to its tiers and each tier to its bookings, so <strong>each tier appears once per booking</strong>. A tier with 20 bookings contributes its capacity 20 times to <code>Sum("tiers__capacity")</code>. It is like an accountant who copies the size of the room onto every receipt, and then adds up the receipts.</p>
+<p>The numbers check out exactly. By now the standing tier has 6 bookings and the table tier 9, so the jazz night's capacity is counted as 25 × 6 + 8 × 9 = 222. The stalls have 22 bookings, so the opera's 40 seats are counted 22 times: 880.</p>
+<p>The <code>sold</code> column happens to be right here, because each booking row appears once. But nothing in the query guarantees that either: add a second one-to-many join, to refunds for example, and it would be multiplied too. §6.5 showed this with counts. With sums it is worse, because the wrong number looks plausible.</p>
 <p><code>Count(..., distinct=True)</code> can repair a count. It cannot repair a sum: two tiers of the same capacity would be counted once.</p>
 <h3 id="section-23-the-report-that-is-right">The report that is right</h3>
-<p><code>sales_by_event()</code> computes each total in its own <strong>correlated subquery</strong>, a query inside the main one that is re-evaluated for each event with <code>OuterRef("pk")</code> (§6.13). Each subquery touches one relation only, so nothing multiplies. The helper builds the usual Django idiom for "a sum per outer row":</p>
+<p><code>sales_by_event()</code> computes each total in its own <strong>correlated subquery</strong>. That is a query inside the main one that is run again for each event, with <code>OuterRef("pk")</code> standing for the current event's id (§6.13). Each subquery touches one relation only, so nothing multiplies. The helper <code>total_per_event()</code> builds the usual Django idiom for "a sum per outer row" in three steps:</p>
 <ol>
 <li><code>filter(**{event_path: OuterRef("pk")})</code> keeps the rows of the current event;</li>
 <li><code>.values(event_path)</code> groups them by event, so the <code>annotate</code> that follows produces one sum, not one per row;</li>
 <li><code>.annotate(total=Sum(field)).values("total")</code> selects that one sum as the subquery's only column.</li>
 </ol>
-<p><strong><code>Coalesce</code></strong> turns the <code>NULL</code> that a sum over no rows produces into 0 (§6.10). The revenue needs <code>output_field=DecimalField()</code> because <code>Coalesce</code> mixes a subquery and a <code>Value</code>, and Django must be told the type of the result (§6.8).</p>
-<p>The opera has no confirmed booking, so its <code>sold</code> and <code>revenue</code> come from <code>Coalesce</code>. The jazz night's revenue is exactly the two standing places Ana paid for in §24.6. Holds do not count: until a payment arrives, a hold is a promise, not a sale.</p>
-<p>A report like this is a candidate for the replica of §23.15 once the site is busy: it reads a lot and can tolerate data a second old. It is also the query to look at with <code>explain()</code> (§5.11) when the events table grows, because a correlated subquery runs once per event: fine for a page of events, slow for a report over every event ever held, where a <code>GROUP BY</code> over each table separately, joined afterwards, is the better plan.</p>
+<p><strong><code>Coalesce</code></strong> turns the <code>NULL</code> that a sum over no rows produces into 0 (§6.10). The revenue also needs <code>output_field=DecimalField()</code>, because <code>Coalesce</code> mixes a subquery and a <code>Value</code>, and Django must be told the type of the result (§6.8).</p>
+<p>Now read the second line of the output. The opera has no confirmed booking, so its <code>sold</code> and <code>revenue</code> come from <code>Coalesce</code>. The jazz night's revenue is exactly the two standing places Ana paid for in §24.6. Holds do not count: until a payment arrives, a hold is a promise, not a sale.</p>
+<p>A report like this is a candidate for the replica of §23.15 once the site is busy, because it reads a lot and can tolerate data a second old. It is also the query to look at with <code>explain()</code> (§5.11) when the events table grows. A correlated subquery runs once per event. That is fine for a page of events, and slow for a report over every event ever held, where a <code>GROUP BY</code> over each table separately, joined afterwards, is the better plan.</p>
 <h2 id="section-23-2412-the-test-suite">24.12 The Test Suite</h2>
-<p>Every example so far was a demonstration: it ran once, printed something, and was checked by eye. A <strong>test</strong> is the same demonstration written so that a machine checks it on every change, forever (§21.2). The suite below is small, and it is deliberately aimed at the decisions of this section, not at Django's own behaviour:</p>
+<p>Every example so far was a demonstration: it ran once, printed something, and was checked by eye. A <strong>test</strong> is the same demonstration written so that a machine checks it on every change, forever (§21.2). In the picture, it is the rehearsal of every tricky situation before opening night, repeated before every new show.</p>
+<p>The suite below is small. It is deliberately aimed at the decisions of this section, not at Django's own behaviour:</p>
 <ul>
 <li><strong>The service rules</strong>: a hold takes seats; more than remain is refused; the same key is one booking.</li>
 <li><strong>The webhook</strong>: a forgery is refused, a replay sends one email, a late payment is refused.</li>
@@ -85472,6 +85741,7 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
 <li><strong>The pages</strong>: the bookings page has a fixed query count, and nobody sees another customer's booking.</li>
 <li><strong>The race</strong>: forty threads, eight seats, eight holds. This test needs real commits, so it is a <code>TransactionTestCase</code> (§21.7).</li>
 </ul>
+<p>Here is the whole file:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># boxoffice/tests.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
@@ -85607,6 +85877,7 @@ Forbidden (CSRF cookie not set.): /events/jazz-night/
         <span class="bp">self</span><span class="o">.</span><span class="n">assertEqual</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">held</span><span class="p">),</span> <span class="n">table</span><span class="o">.</span><span class="n">remaining</span><span class="p">),</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
 </code></pre></div>
 
+<p>Run the suite:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span><span class="nb">test</span><span class="w"> </span>boxoffice
 </code></pre></div>
 
@@ -85621,18 +85892,27 @@ OK
 Destroying test database for alias 'default'...
 </code></pre></div>
 
-<p>Several choices in it are worth naming, because each one is the answer to a question about testing Django:</p>
+<p>Ten tests, all passing. The time on the <code>Ran</code> line will differ on your machine.</p>
+<p>Several choices in the file are worth naming, because each one answers a question about testing Django:</p>
 <ul>
-<li><strong><code>setUpTestData</code></strong> creates the sample data once per class, and <code>TestCase</code> rolls each test's changes back, so every test starts from the same seats (§21.8). <code>ExpiryTests</code> calls <code>seed()</code> inside its only test, which is the same thing for a class with one test.</li>
-<li><strong><code>captureOnCommitCallbacks(execute=True)</code></strong> is needed because a <code>TestCase</code> runs each test inside a transaction that is never committed, so <code>on_commit</code> callbacks would never run and the email would never be sent (§21.18). The test runner also replaces <code>MAILERS</code> with the locmem backend for the whole run, which is why <code>mail.outbox</code> exists even if the settings sent real mail (§21.3).</li>
-<li><strong><code>assertLogs</code></strong> both checks that the warning was logged and keeps it out of the test output, which stays readable.</li>
+<li><strong><code>setUpTestData</code></strong> creates the sample data once per class. <code>TestCase</code> rolls each test's changes back, so every test starts from the same seats (§21.8). <code>ExpiryTests</code> calls <code>seed()</code> inside its only test, which amounts to the same thing for a class with one test.</li>
+<li><strong><code>captureOnCommitCallbacks(execute=True)</code></strong> is needed because a <code>TestCase</code> runs each test inside a transaction that is never committed. Without it, <code>on_commit</code> callbacks would never run, and the email would never be sent (§21.18). The test runner also replaces <code>MAILERS</code> with the locmem backend for the whole run. That is why <code>mail.outbox</code> exists even if the settings sent real mail (§21.3).</li>
+<li><strong><code>assertLogs</code></strong> checks that the warning was logged, and also keeps it out of the test output, which stays readable.</li>
 <li><strong><code>assertNumQueries(3)</code></strong> with five bookings pins the property that matters: the count does not grow with the data (§21.18). With one booking, three queries would prove nothing.</li>
 <li><strong><code>RaceTests</code> is a <code>TransactionTestCase</code>.</strong> The forty threads open their own connections, and they cannot see rows inside the test's uncommitted transaction, so a <code>TestCase</code> version would find no tier at all. A <code>TransactionTestCase</code> commits for real and empties the tables afterwards. It is much slower, which is why only one test uses it (§21.7).</li>
-<li><strong>The webhook test signs with the real <code>signature()</code> function</strong> and swaps it for a fake one only in the forgery test, so the tests break if the signing scheme changes, rather than testing a copy of it.</li>
+<li><strong>The webhook test signs with the real <code>signature()</code> function</strong> and swaps in a fake one only in the forgery test. So the tests break if the signing scheme changes, rather than testing a copy of it.</li>
 </ul>
 <p>What the suite does <em>not</em> cover is just as deliberate. It does not test that Django's <code>LoginView</code> logs people in, or that <code>ModelChoiceField</code> rejects an unknown id. Those are Django's tests. A project's tests are for the project's decisions.</p>
 <h2 id="section-23-2413-production-settings-and-check-deploy">24.13 Production Settings and <code>check --deploy</code></h2>
-<p>The development settings are wrong for production in a dozen ways, on purpose: a secret key in the source, <code>DEBUG = True</code>, mail kept in memory, no HTTPS. Production settings live in a separate module that imports the development settings and overrides what must differ. The server is started with <code>DJANGO_SETTINGS_MODULE=config.production</code> (§2.9). §23.3 used the other common design, one settings file that reads everything from the environment; both work, and the rule they share is that <strong>secrets come from the environment, never from the repository</strong>.</p>
+<p>The development settings are wrong for production in a dozen ways, on purpose:</p>
+<ul>
+<li>a secret key written in the source,</li>
+<li><code>DEBUG = True</code>,</li>
+<li>mail kept in memory,</li>
+<li>no HTTPS.</li>
+</ul>
+<p>Production settings live in a separate module. It imports the development settings and overrides what must differ. The server is started with <code>DJANGO_SETTINGS_MODULE=config.production</code> (§2.9). §23.3 used the other common design: one settings file that reads everything from the environment. Both work, and the rule they share is that <strong>secrets come from the environment, never from the repository</strong>.</p>
+<p>Here is the production module:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/production.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 
@@ -85663,21 +85943,22 @@ Destroying test database for alias 'default'...
 
 <p>Each override has a reason taught earlier:</p>
 <ul>
-<li><strong><code>os.environ["SECRET_KEY"]</code>, with square brackets.</strong> A missing variable raises <code>KeyError</code> and the process does not start. <code>os.environ.get("SECRET_KEY", "something")</code> would start the site with a guessable key, and nothing would ever say so (§23.3).</li>
-<li><strong><code>PASSWORD_HASHERS</code></strong> puts PBKDF2, Django's default, first and keeps MD5 second. New and changed passwords are hashed with PBKDF2; a password that was hashed with MD5 still verifies, and is re-hashed with PBKDF2 the next time its owner logs in (§14.12). In a real project that never used MD5, the setting is simply left out.</li>
-<li><strong><code>CONN_MAX_AGE</code> and <code>CONN_HEALTH_CHECKS</code></strong> keep each process's database connection open between requests, and check it before reusing it after an error, so a database restart costs no failed request (§23.13).</li>
-<li><strong><code>SECURE_PROXY_SSL_HEADER</code></strong> tells Django that nginx in front of it has terminated HTTPS and says so in <code>X-Forwarded-Proto</code>. It is correct only because the application server cannot be reached except through the proxy (§23.9).</li>
+<li><strong><code>os.environ["SECRET_KEY"]</code>, with square brackets.</strong> A missing variable raises <code>KeyError</code>, and the process does not start. <code>os.environ.get("SECRET_KEY", "something")</code> would start the site with a guessable key, and nothing would ever say so (§23.3).</li>
+<li><strong><code>PASSWORD_HASHERS</code></strong> puts PBKDF2, Django's default, first and keeps MD5 second. New and changed passwords are hashed with PBKDF2. A password that was hashed with MD5 still verifies, and is re-hashed with PBKDF2 the next time its owner logs in (§14.12). In a real project that never used MD5, the setting is simply left out.</li>
+<li><strong><code>CONN_MAX_AGE</code> and <code>CONN_HEALTH_CHECKS</code></strong> keep each process's database connection open between requests, and check it before reusing it after an error. So a database restart costs no failed request (§23.13).</li>
+<li><strong><code>SECURE_PROXY_SSL_HEADER</code></strong> tells Django that nginx in front of it has dealt with the HTTPS encryption, and says so in the <code>X-Forwarded-Proto</code> header. It is correct only because the application server cannot be reached except through the proxy (§23.9).</li>
 <li><strong><code>SECURE_HSTS_SECONDS = 3600</code></strong>: an hour, not a year. HSTS tells browsers to refuse plain HTTP for the site for that long, and a mistake cannot be withdrawn until it expires. The usual practice is to start small and raise it once HTTPS has worked for a while (§16.13).</li>
 </ul>
 <h3 id="section-23-running-the-checks">Running the checks</h3>
-<p><code>check --deploy</code> runs Django's deployment checks against the settings (§2.13). The whitelisted <code>env</code> command sets environment variables for one command, as a process manager would. First, with nothing set:</p>
+<p><code>check --deploy</code> runs Django's deployment checks against the settings (§2.13). It is the inspector's visit before the doors open. The <code>env</code> command sets environment variables for one command only, as a process manager would. First, run it with nothing set:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">env</span><span class="w"> </span><span class="nv">DJANGO_SETTINGS_MODULE</span><span class="o">=</span>config.production<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>check<span class="w"> </span><span class="flag">--deploy</span>
 </code></pre></div>
 
 <div class="highlight" data-lang="text"><pre><span></span><code>KeyError: 'SECRET_KEY'
 </code></pre></div>
 
-<p>The command stops with a traceback, and its last line is the one shown. That is the intended failure: the settings refuse to load without a secret key. Now with every variable set, but a short secret key:</p>
+<p>The command stops with a traceback, and its last line is the one shown. That is the intended failure: the settings refuse to load without a secret key.</p>
+<p>Now run it with every variable set, but with a short secret key:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">env</span><span class="w"> </span><span class="nv">DJANGO_SETTINGS_MODULE</span><span class="o">=</span>config.production<span class="w"> </span><span class="nv">SECRET_KEY</span><span class="o">=</span>change-me<span class="w"> </span><span class="nv">PAYMENT_WEBHOOK_SECRET</span><span class="o">=</span>x<span class="w"> </span><span class="nv">ALLOWED_HOSTS</span><span class="o">=</span>tickets.example<span class="w"> </span><span class="nv">EMAIL_HOST</span><span class="o">=</span>smtp.example<span class="w"> </span>python<span class="w"> </span>manage.py<span class="w"> </span>check<span class="w"> </span><span class="flag">--deploy</span>
 </code></pre></div>
 
@@ -85691,12 +85972,13 @@ WARNINGS:
 System check identified 3 issues (0 silenced).
 </code></pre></div>
 
-<p><code>W009</code> catches the weak key: it checks the length, the number of different characters and the prefix Django gives generated keys. It cannot know whether a long key was committed to the repository. The other two warnings are not mistakes but <strong>decisions</strong> the check cannot make for you:</p>
+<p>Three warnings. <code>W009</code> catches the weak key: it checks the length, the number of different characters and the prefix Django gives generated keys. It cannot know whether a long key was committed to the repository.</p>
+<p>The other two warnings are not mistakes but <strong>decisions</strong> the check cannot make for you:</p>
 <ul>
-<li><strong><code>W005</code></strong>: should HSTS cover every subdomain too? Only if every subdomain is served over HTTPS. A marketing site on <code>www</code> or a status page on <code>status</code> served over plain HTTP would become unreachable in every browser that had visited the main site.</li>
+<li><strong><code>W005</code></strong>: should HSTS cover every subdomain too? Only if every subdomain is served over HTTPS. Suppose a marketing site on <code>www</code> or a status page on <code>status</code> is served over plain HTTP. It would become unreachable in every browser that had visited the main site.</li>
 <li><strong><code>W021</code></strong>: should the site ask to be <strong>preloaded</strong>, built into browsers as HTTPS-only? That is close to permanent, and requires a long <code>SECURE_HSTS_SECONDS</code> and <code>includeSubDomains</code> first.</li>
 </ul>
-<p>The answer for this site is "not yet" to both, and the honest way to record that answer is to silence the two checks with a comment that says why, rather than to leave them in every run where they train people to ignore warnings. The settings gain one line:</p>
+<p>The answer for this site is "not yet" to both. The honest way to record that answer is to silence the two checks, with a comment that says why. Leaving them in every run would train people to ignore warnings. The settings gain one line at the end, with a comment above it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/production.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 
@@ -85733,9 +86015,10 @@ System check identified 3 issues (0 silenced).
 <div class="highlight" data-lang="text"><pre><span></span><code>System check identified no issues (2 silenced).
 </code></pre></div>
 
-<p>The key in that command is an example typed for this page. A real one is generated with <code>django.core.management.utils.get_random_secret_key()</code> (§2.10), stored in the platform's secret store, and never written in a command line, where the shell's history would keep it.</p>
+<p>No issues, and two silenced: the deployment is clean, and the two decisions are on record.</p>
+<p>The key in that command is an example typed for this page. A real one is generated with <code>django.core.management.utils.get_random_secret_key()</code> (§2.10). It is stored in the platform's secret store, and never written in a command line, where the shell's history would keep it.</p>
 <h3 id="section-23-the-error-the-development-settings-would-have-produced">The error the development settings would have produced</h3>
-<p>One more check is worth seeing, because it is new in Django 6.1 and it is an <strong>error</strong>, not a warning. Run against the development settings, <code>check --deploy</code> refuses the locmem email backend; <code>grep</code> keeps only that check's two lines:</p>
+<p>One more check is worth seeing, because it is new in Django 6.1 and it is an <strong>error</strong>, not a warning. Run against the development settings, <code>check --deploy</code> refuses the locmem email backend. <code>grep</code> keeps only that check's two lines:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>check<span class="w"> </span><span class="flag">--deploy</span><span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="cmd">grep</span><span class="w"> </span><span class="flag">-A1</span><span class="w"> </span><span class="s2">"mail.E001"</span>
 </code></pre></div>
 
@@ -85743,66 +86026,81 @@ System check identified 3 issues (0 silenced).
 	HINT: Use a production-ready email backend, such as the SMTP backend, otherwise email will not be sent.
 </code></pre></div>
 
+<p>The error names the setting, the entry and the backend, and its hint says what to do instead.</p>
 <p>A site that sent its tickets to an in-memory list would look perfectly healthy and email nobody. That is the class of mistake the deployment checks exist for: configuration that works, silently, and is wrong.</p>
 <h2 id="section-23-2414-what-a-reviewer-would-still-ask">24.14 What a Reviewer Would Still Ask</h2>
-<p>The box office is correct for what it does, and every claim above was measured. It is not finished. A senior engineer reviewing it would raise the points below, and being able to raise them yourself, about your own design, is most of what a design interview tests. Each is a decision with a cost, not a bug:</p>
+<p>The box office is correct for what it does, and every claim above was measured. It is not finished. Imagine an experienced manager walking round the box office on its first day and listing what is still missing. A senior engineer reviewing the code would raise the points below. Being able to raise them yourself, about your own design, is most of what a design interview tests. Each is a decision with a cost, not a bug:</p>
 <ul>
-<li><strong>The email task runs in the request.</strong> With no <code>TASKS</code> setting, the <code>ImmediateBackend</code> sends the email inside <code>enqueue()</code>, so the webhook waits for the mail server. Production needs a real backend with a worker (§19.11). Then the task can run twice after a crash, so it must become idempotent: record that the tickets were sent, and skip a booking already marked (§19.14; exercise 5).</li>
+<li><strong>The email task runs in the request.</strong> With no <code>TASKS</code> setting, the <code>ImmediateBackend</code> sends the email inside <code>enqueue()</code>, so the webhook waits for the mail server. Production needs a real backend with a worker, a separate process that runs the tasks (§19.11). Then the task can run twice after a crash, so it must become idempotent: record that the tickets were sent, and skip a booking already marked (§19.14; exercise 5).</li>
 <li><strong><code>on_commit</code> is not durable.</strong> If the process dies between the commit and the callback, the confirmed booking never gets its email. When that is not acceptable, the email is recorded in an outbox table in the same transaction as the confirmation, and a worker delivers it (§7.7).</li>
-<li><strong>One row per tier is a hot spot.</strong> Every hold for a tier waits for one row lock. That is fine for thousands of buyers per minute and wrong for a stadium on-sale with hundreds of thousands. The usual answers are a virtual queue in front of the sale, or splitting a tier's counter into several rows ("buckets") that holds choose among, at the price of a more complicated "how many are left?".</li>
-<li><strong>No limit per customer.</strong> Nothing stops one account from holding every seat, ten minutes at a time. A per-customer limit across bookings is a rule over several rows, exposed to write skew, and needs a lock (§7.15; exercise 2). Holding seats also needs a rate limit (§17.9; exercise 3).</li>
-<li><strong>A reused key with different contents is accepted.</strong> If a client sends the same key for three tables and then for two standing places, the second request silently returns the first booking. Payment APIs that use idempotency keys refuse that with an error, because it is almost always a client bug (exercise 1).</li>
-<li><strong>Customers cannot cancel a hold.</strong> A cancellation must give the seats back exactly once, even when the button is pressed twice, and must not race with the release job. It is the same problem as the release job, for one booking: a conditional <code>UPDATE</code> of the booking's status from <code>held</code>, and the seats returned only when that <code>UPDATE</code> changed a row.</li>
-<li><strong>The webhook trusts its JSON.</strong> A signed body with a missing key raises <code>KeyError</code> and answers <code>500</code>. The provider would retry forever. A production handler validates the payload's shape and answers <code>400</code> to a malformed one, and stores every delivery before processing it, so a failure can be replayed.</li>
+<li><strong>One row per tier is a hot spot.</strong> Every hold for a tier waits for one row lock. That is fine for thousands of buyers per minute, and wrong for a stadium on-sale with hundreds of thousands. The usual answers are a virtual queue in front of the sale, or splitting a tier's counter into several rows ("buckets") that holds choose among. The price of buckets is a more complicated answer to "how many are left?".</li>
+<li><strong>No limit per customer.</strong> Nothing stops one account from holding every seat, ten minutes at a time. A per-customer limit across bookings is a rule over several rows. It is exposed to write skew, where two transactions each check a rule that the other is about to break, and it needs a lock (§7.15; exercise 2). Holding seats also needs a rate limit (§17.9; exercise 3).</li>
+<li><strong>A reused key with different contents is accepted.</strong> Say a client sends the same key for three tables, and then for two standing places. The second request silently returns the first booking. Payment APIs that use idempotency keys refuse that with an error, because it is almost always a bug in the client (exercise 1).</li>
+<li><strong>Customers cannot cancel a hold.</strong> A cancellation must give the seats back exactly once, even when the button is pressed twice, and must not race with the release job. It is the same problem as the release job, for one booking. The answer is a conditional <code>UPDATE</code> of the booking's status from <code>held</code>, with the seats returned only when that <code>UPDATE</code> changed a row.</li>
+<li><strong>The webhook trusts its JSON.</strong> A signed body with a missing key raises <code>KeyError</code> and answers <code>500</code>, and the provider would retry forever. A production handler checks the payload's shape and answers <code>400</code> to a malformed one. It also stores every delivery before processing it, so a failure can be replayed.</li>
 <li><strong>The report runs on the primary.</strong> With traffic, it belongs on a replica (§23.15), behind a router that keeps writes on the primary (§23.16).</li>
-<li><strong>The event page reads its tiers twice</strong>, once through a cursor (§24.8). Harmless at this size, and a pattern worth fixing before it is copied to a page with a large choice list (exercise 4).</li>
-<li><strong>There is no admin.</strong> Staff need to take an event off sale and look up a booking by payment reference. The admin of §15 does both in a few lines, but its actions must go through the services: a "release now" admin action that edited <code>status</code> directly would skip the seat counter.</li>
+<li><strong>The event page reads its tiers twice</strong>, once through a cursor (§24.8). That is harmless at this size, and a pattern worth fixing before it is copied to a page with a large choice list (exercise 4).</li>
+<li><strong>There is no admin.</strong> Staff need to take an event off sale and look up a booking by payment reference. The admin of §15 does both in a few lines. But its actions must go through the services: a "release now" admin action that edited <code>status</code> directly would skip the seat counter.</li>
 </ul>
+<p>That completes the build. Go back to the puzzle from the start of the section: twenty customers each read 40 seats, each wrote 39, and twenty sales left the counter one seat lower, without a single error. The cause was the gap between reading a number in Python and writing it back. Every thread decided from a value that was already out of date. The fix was to let the database do the check and the write in one statement, under the row's lock, so that the gap does not exist.</p>
+<p>Everything else in the box office follows the same rule. The clerk keeps one hand on the board (§24.4). The ledger refuses a second line for the same order number (§24.5). The clerk holds the envelope while dealing with the bank's call (§24.6), and the usher skips any envelope in someone's hand (§24.7). The poster outside may be out of date, but nothing is ever decided from it (§24.9). In each case the database, not the Python code, has the last word.</p>
 <h2 id="section-23-2415-preparing-for-a-senior-interview">24.15 Preparing for a Senior Interview</h2>
-<p>Every section of this course ended with interview questions. This subsection is about the interview itself: what a <strong>senior interview</strong> for a Django role is trying to find out, how to answer so that what you know is visible, and how to use the question bank of §24.17 to prepare.</p>
-<h3 id="section-23-what-the-interviewer-is-measuring">What the interviewer is measuring</h3>
-<p>A junior candidate is asked whether they can use Django. A senior candidate is asked whether the team can trust their judgement when nobody is checking. That changes what a good answer sounds like. Interviewers for senior roles usually listen for four things, whatever the question:</p>
+<p>Every section of this course ended with interview questions. This subsection is about the interview itself. It covers three things:</p>
 <ul>
-<li><strong>The mechanism, not just the API.</strong> "Use <code>select_related</code>" is a junior answer. "<code>select_related</code> adds a SQL join, so it only follows foreign keys and one-to-one fields; for the reverse side or a many-to-many, <code>prefetch_related</code> runs a second query and joins the results in Python" is a senior one (§5.4, §5.5). Knowing <em>why</em> a tool works is what lets you predict where it stops working.</li>
-<li><strong>The failure, and how you would see it.</strong> Seniors are hired to prevent incidents and to end them quickly. Every answer is stronger with the way the problem shows up in production: a query count that grows with the page, a <code>TransactionManagementError</code> after a caught exception, a <code>500</code> after a database restart, a log line that never appears.</li>
-<li><strong>The trade-off.</strong> Almost nothing in this course is free. <code>ATOMIC_REQUESTS</code> is simple and holds locks longer (§7.6). A cache is fast and can be stale (§17.17). <code>CONN_MAX_AGE</code> saves a connection per request and multiplies the connections the database must hold (§23.13). An answer that names the cost of its own recommendation shows that you have operated the thing, not just read about it.</li>
-<li><strong>Proportion.</strong> Knowing when <em>not</em> to use the heavy tool. Celery for one email a day, a read replica for a site with ten users, <code>SERIALIZABLE</code> for a counter that one <code>F()</code> update handles: each is a correct answer to a different question. Saying "for this size, the simple version, and here is the point at which I would change it" is often the best answer in the room.</li>
+<li>what a <strong>senior interview</strong> for a Django role is trying to find out,</li>
+<li>how to answer so that what you know is visible,</li>
+<li>and how to use the question bank of §24.17 to prepare.</li>
+</ul>
+<p>In the picture, the box office is built; now you are auditioning for the job of running one.</p>
+<h3 id="section-23-what-the-interviewer-is-measuring">What the interviewer is measuring</h3>
+<p>A junior candidate is asked whether they can use Django. A senior candidate is asked something else: can the team trust their judgement when nobody is checking? That changes what a good answer sounds like. Whatever the question, interviewers for senior roles usually listen for four things:</p>
+<ul>
+<li><strong>The mechanism, not just the API.</strong> The API is the set of functions you call; the mechanism is what they do underneath. "Use <code>select_related</code>" is a junior answer. Here is a senior one: "<code>select_related</code> adds a SQL join, so it only follows foreign keys and one-to-one fields; for the reverse side or a many-to-many, <code>prefetch_related</code> runs a second query and joins the results in Python" (§5.4, §5.5). Knowing <em>why</em> a tool works is what lets you predict where it stops working.</li>
+<li><strong>The failure, and how you would see it.</strong> Seniors are hired to prevent incidents, and to end them quickly. Every answer is stronger when it says how the problem shows up in production: a query count that grows with the page, a <code>TransactionManagementError</code> after a caught exception, a <code>500</code> after a database restart, a log line that never appears.</li>
+<li><strong>The trade-off.</strong> Almost nothing in this course is free. <code>ATOMIC_REQUESTS</code> is simple, and holds locks longer (§7.6). A cache is fast, and can be stale (§17.17). <code>CONN_MAX_AGE</code> saves a connection per request, and multiplies the connections the database must hold (§23.13). An answer that names the cost of its own recommendation shows that you have operated the thing, not just read about it.</li>
+<li><strong>Proportion.</strong> This means knowing when <em>not</em> to use the heavy tool. Celery for one email a day, a read replica for a site with ten users, <code>SERIALIZABLE</code> for a counter that one <code>F()</code> update handles: each is a correct answer to a different question. Often the best answer in the room is "for this size, the simple version, and here is the point at which I would change it".</li>
 </ul>
 <h3 id="section-23-a-shape-for-answers">A shape for answers</h3>
-<p>Most technical answers improve when they follow the same four steps. The point is not to recite a template. It is to make sure the parts interviewers look for are not left out under pressure:</p>
+<p>Most technical answers improve when they follow the same four steps. The point is not to recite a template. It is to make sure that, under pressure, you do not leave out the parts interviewers look for:</p>
 <ol>
 <li><strong>The short answer, in one sentence.</strong> "Wrap the two writes in <code>transaction.atomic</code>, and make the stock decrement a conditional <code>F()</code> update."</li>
 <li><strong>The mechanism.</strong> Why that works: what SQL it becomes, which lock it takes, what Django does around it.</li>
-<li><strong>The evidence.</strong> How you know: something you measured, a test that pins it, a failure you have seen. This course gives you real ones: "I have watched twenty threads that each read the stock in Python and saved it create twenty bookings while the counter fell by one" is more convincing than any definition (§24.5).</li>
+<li><strong>The evidence.</strong> How you know: something you measured, a test that pins it, a failure you have seen. This course gives you real ones. "I have watched twenty threads that each read the stock in Python and saved it create twenty bookings while the counter fell by one" is more convincing than any definition (§24.5).</li>
 <li><strong>The limit.</strong> When the answer stops being right, and what you would do then. "This is fine until one row becomes a hot spot; at that point I would..."</li>
 </ol>
-<p>The short answer comes first because interviews run on time, and an interviewer who has their answer in the first sentence can choose to go deeper. A candidate who starts with the history of the problem may never reach the answer.</p>
+<p>The short answer comes first because interviews run on time. An interviewer who has the answer in the first sentence can choose to go deeper. A candidate who starts with the history of the problem may never reach the answer.</p>
 <h3 id="section-23-when-you-do-not-know">When you do not know</h3>
 <p>Every senior candidate meets a question they cannot answer. What the interviewer then learns depends on what you do next:</p>
 <ul>
-<li><strong>Say so, plainly.</strong> "I haven't used <code>ExclusionConstraint</code> in production." Guessing confidently and being wrong is worse than not knowing, because it says you would do the same with production data.</li>
+<li><strong>Say so, plainly.</strong> "I haven't used <code>ExclusionConstraint</code> in production." Guessing confidently and being wrong is worse than not knowing, because it suggests you would do the same with production data.</li>
 <li><strong>Reason from what you do know.</strong> "But I know PostgreSQL enforces constraints with an index, so I'd expect it to need a GiST index and an operator that can test overlap..." Reasoning aloud from mechanisms you understand is itself the skill being tested (§8.10 has the actual answer).</li>
-<li><strong>Say how you would find out</strong>, and make it specific: the release notes, the source of the function, a five-line experiment in a shell. Every measured output in this course was produced that way, and "I'd write a shell script with two threads and a barrier to find out" is a good answer to most concurrency questions.</li>
+<li><strong>Say how you would find out</strong>, and make it specific: the release notes, the source code of the function, a five-line experiment in a shell. Every measured output in this course was produced that way. "I'd write a shell script with two threads and a barrier to find out" is a good answer to most concurrency questions.</li>
 </ul>
 <h3 id="section-23-the-kinds-of-round">The kinds of round</h3>
-<p>Senior Django interviews usually combine some of the following. Each one rewards a different part of the course:</p>
+<p>A senior Django interview is usually made of several rounds, each a different kind of conversation. Each kind rewards a different part of the course:</p>
 <ul>
-<li><strong>Questions about Django itself</strong>, such as the ones in §24.17. Depth matters more than breadth here: an interviewer will follow one answer down three levels. Sections 4 to 9, the ORM, transactions, integrity and migrations, are where those follow-ups most often go, because they are where production incidents come from.</li>
-<li><strong>System design</strong>, often "design X in Django": a booking system, a feed, a job queue, an API with rate limits. §24.1's table is the shape a good design answer takes: requirements, especially the unwritten ones; then the data model and its constraints; then the hot paths and their queries; then concurrency; then what happens when each piece fails. §24.16 has worked examples.</li>
-<li><strong>Debugging a scenario.</strong> "The orders page got slow last week. What do you do?" The answer is a procedure, not a guess: measure first (query count, query time, <code>explain()</code>), find the change, fix the cause, add a test that pins it (§5.14).</li>
-<li><strong>Code review.</strong> You are shown a view or a model and asked what is wrong. The usual planted problems are an N+1 query, a read-modify-write race, a missing <code>select_for_update</code> or constraint, a raw SQL string built with an f-string, <code>csrf_exempt</code> on a browser form, a missing ownership filter, a side effect inside a transaction, and a migration that locks a big table. Every one of them appears in this course with a measured example.</li>
+<li><strong>Questions about Django itself</strong>, such as the ones in §24.17. Depth matters more than breadth here: an interviewer will follow one answer down three levels. Sections 4 to 9, on the ORM, transactions, integrity and migrations, are where those follow-ups most often go, because they are where production incidents come from.</li>
+<li><strong>System design</strong>, often "design X in Django": a booking system, a feed, a job queue, an API with rate limits. §24.1's table is the shape a good design answer takes. Start with the requirements, especially the unwritten ones. Then give the data model and its constraints, then the hot paths and their queries, then concurrency, and finally what happens when each piece fails. §24.16 has worked examples.</li>
+<li><strong>Debugging a scenario.</strong> "The orders page got slow last week. What do you do?" The answer is a procedure, not a guess: measure first (query count, query time, <code>explain()</code>), find the change, fix the cause, and add a test that pins it (§5.14).</li>
+<li><strong>Code review.</strong> You are shown a view or a model and asked what is wrong. The usual planted problems are an N+1 query (one extra query for every row of a list), a read-modify-write race, a missing <code>select_for_update</code> or constraint, a raw SQL string built with an f-string, <code>csrf_exempt</code> on a browser form, a missing ownership filter, a side effect inside a transaction, and a migration that locks a big table. Every one of them appears in this course with a measured example.</li>
 <li><strong>A take-home or pairing exercise.</strong> Reviewers of a take-home look past whether it works. They look for constraints in the database and not only in forms, migrations that are committed and clean, tests of the decisions rather than of Django, a query count that does not grow, and a short note of what you would do with more time. §24.14 is that note for the box office.</li>
 </ul>
 <h3 id="section-23-how-to-use-the-question-bank">How to use the question bank</h3>
-<p>The bank in §24.17 is the 386 questions from the end of sections 1 to 23, grouped by subject, each with the subsection that answers it. It is built for <strong>retrieval practice</strong>: the finding, well established in learning research, that trying to recall an answer strengthens memory far more than reading the answer again. Used that way, it looks like this:</p>
+<p>The bank in §24.17 is the 386 questions from the end of sections 1 to 23. They are grouped by subject, and each comes with the subsection that answers it. The bank is built for <strong>retrieval practice</strong>: the finding, well established in learning research, that trying to recall an answer strengthens memory far more than reading the answer again. Used that way, a practice session looks like this:</p>
 <ol>
 <li><strong>Pick one group, not the whole bank.</strong> Twenty to forty questions is a session.</li>
 <li><strong>Answer each question aloud</strong>, in the shape above, before looking anything up. Out loud matters: an interview is spoken, and an answer that felt clear in your head often turns out to have a gap when you say it.</li>
 <li><strong>Then read the worked answer</strong> in the subsection named next to the question, and the example it points to. Mark the question if your answer missed the mechanism, the evidence or the limit.</li>
-<li><strong>Return to the marked questions</strong> a few days later, not the same evening. Spacing the repetitions is what makes them stick.</li>
-<li><strong>For the questions you keep missing, rerun the example.</strong> Each answer points to a measured example; running it and changing one thing, removing the <code>select_related</code>, catching the exception inside the block, is the fastest way to turn a fact you read into a fact you know.</li>
+<li><strong>Return to the marked questions</strong> a few days later, not the same evening. Spacing the repetitions out is what makes them stick.</li>
+<li><strong>For the questions you keep missing, rerun the example.</strong> Each answer points to a measured example. Run it and change one thing: remove the <code>select_related</code>, or catch the exception inside the block. That is the fastest way to turn a fact you read into a fact you know.</li>
 </ol>
-<p>The bank has one more use. Before an interview, read the questions of the groups that match the job. A role on a high-traffic site will lean on §5, §7, §17 and §23; a role on an internal tool with complex rules on §8, §13 and §15; a role building APIs on §10, §16 and §18. The interview questions for Django REST Framework are a separate subject, and the course that follows this one covers them.</p>
+<p>The bank has one more use. Before an interview, read the questions of the groups that match the job:</p>
+<ul>
+<li>a role on a high-traffic site will lean on §5, §7, §17 and §23;</li>
+<li>a role on an internal tool with complex rules, on §8, §13 and §15;</li>
+<li>a role building APIs, on §10, §16 and §18.</li>
+</ul>
+<p>The interview questions for Django REST Framework are a separate subject, and the course that follows this one covers them.</p>
 <h2 id="section-23-2416-design-questions-that-span-the-course">24.16 Design Questions That Span the Course</h2>
 <p>The questions at the end of each section stayed inside that section. Senior interviews often do not. The questions below each need several sections at once, and the answers show how the pieces combine. They are written in the four-step shape of §24.15, and they are longer than a spoken answer should be, so that the reasoning is all on the page: in an interview, say the first two sentences of each part and let the interviewer pick where to go deeper.</p>
 <p><strong>D1. Design the backend of a ticket booking system in Django.</strong></p>
