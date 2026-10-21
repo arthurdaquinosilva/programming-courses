@@ -746,8 +746,119 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <p>By the end you should be able to design an API from a brief, build it with DRF so that it stays correct under load and under attack, explain why it does, and answer the questions a senior interview will ask about it.</p>
 <div class="section-footer"><button class="btn-next" data-next="section-0">Start: HTTP API Design →</button></div>
 </section>
-<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">HTTP API Design</h1><p>An API is a contract. A client written today against <code>GET /books/9780000000101/</code> will still be sending that request in two years, and it expects the same URL, the same methods, the same status codes and the same shape of JSON. Most of that contract is decided before any DRF code is written: what the resources are, what each URL names, what each method does, what each status code promises. This section is about those decisions, and about what DRF does with each of them by default.</p>
-<p>HTTP already defines most of the vocabulary. <strong>REST</strong> is the name for using it the way the web itself does, and most of what "a well-designed REST API" means is following the rules of HTTP closely enough that clients, caches, proxies and tools can rely on them. DRF follows many of those rules by itself, and quietly breaks a few unless told otherwise. These were measured:</p>
+<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">HTTP API Design</h1><p>Start with a puzzle. A program wants to add a new book to a library's catalogue. It sends the book's details to the address <code>/books</code>, and asks the server to add them. The server answers with status <code>200</code>, which means "OK", and with a body holding the list of all the books.</p>
+<p>Was the new book added? Guess before reading on.</p>
+<p>It was not. The address was missing its final slash. Django answered "try <code>/books/</code> instead", the program went there as told, and on the way it changed its request from "add this book" to "show me the books". So it received the list, saw "OK", and reported success. Nothing was created, and nothing anywhere reported an error. §1.4 runs exactly this and prints every step.</p>
+<p>Nothing in that story is a bug in Python code. It comes from the rules of HTTP, the language browsers, servers and programs use to talk to each other on the web. This section is about those rules, and about the decisions you make with them.</p>
+<p>An <strong>API</strong> (application programming interface) is, in this course, a set of web addresses that other <em>programs</em> send requests to, rather than people. An API is a contract. A client written today against <code>GET /books/9780000000101/</code> will still be sending that request in two years, and it expects the same URL, the same methods, the same status codes and the same shape of JSON. Most of that contract is decided before any DRF code is written:</p>
+<ul>
+<li>what the resources are, the things the API lets clients work with;</li>
+<li>what each URL names;</li>
+<li>what each method does;</li>
+<li>what each status code promises.</li>
+</ul>
+<p>This section is about those decisions, and about what DRF does with each of them by default.</p>
+<p>Here is a picture to keep in mind for the whole section: <strong>a library's front desk that works by paper slips</strong>. Readers never walk into the stacks. They fill in a slip, hand it over the desk, and get a slip back.</p>
+<ul>
+<li>The slip names one thing on the shelves, by its shelf mark.</li>
+<li>A box on the slip says what the reader wants done: look at it, add one, replace it, change it, take it away.</li>
+<li>The clerk stamps the slip on its way back: done, your mistake, or our mistake.</li>
+<li>What comes back is never the book itself, only a photocopy of its catalogue card.</li>
+<li>The clerk remembers nobody. Every slip must say everything needed, on its own.</li>
+</ul>
+<p>Every idea in this section has a place at that desk:</p>
+<table>
+<thead>
+<tr>
+<th>At the library desk</th>
+<th>In an HTTP API</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A slip handed over the desk</td>
+<td>a request</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>The shelf mark written on the slip</td>
+<td>the URL, naming one resource</td>
+<td>§1.3</td>
+</tr>
+<tr>
+<td>The box ticked on the slip: look, add, replace, change, remove</td>
+<td>the method: <code>GET</code>, <code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code></td>
+<td>§1.5, §1.6</td>
+</tr>
+<tr>
+<td>A "just looking" slip</td>
+<td>a safe method</td>
+<td>§1.5</td>
+</tr>
+<tr>
+<td>A slip that does no harm if handed in twice</td>
+<td>an idempotent method</td>
+<td>§1.5</td>
+</tr>
+<tr>
+<td>The stamp on the returned slip</td>
+<td>the status code: <code>2xx</code>, <code>4xx</code>, <code>5xx</code></td>
+<td>§1.7</td>
+</tr>
+<tr>
+<td>A photocopy of the catalogue card, printed for a person or typed for a machine</td>
+<td>a representation: HTML or JSON</td>
+<td>§1.2</td>
+</tr>
+<tr>
+<td>A clerk who remembers nobody</td>
+<td>statelessness</td>
+<td>§1.2</td>
+</tr>
+<tr>
+<td>"Wrong window, go next door"</td>
+<td>a redirect</td>
+<td>§1.4</td>
+</tr>
+<tr>
+<td>A receipt with the new item's shelf mark</td>
+<td><code>201 Created</code> with a <code>Location</code> header</td>
+<td>§1.8</td>
+</tr>
+<tr>
+<td>The standard refusal form, with a reason code</td>
+<td>problem details</td>
+<td>§1.9</td>
+</tr>
+<tr>
+<td>The edition number printed on a copy</td>
+<td>an entity tag, <code>ETag</code></td>
+<td>§1.10</td>
+</tr>
+<tr>
+<td>"Only change it if it is still edition 7"</td>
+<td><code>If-Match</code>, and <code>412</code> when it is not</td>
+<td>§1.10</td>
+</tr>
+<tr>
+<td>A claim ticket: "ask at counter 5 when it is ready"</td>
+<td><code>202 Accepted</code> and a job resource</td>
+<td>§1.11</td>
+</tr>
+<tr>
+<td>"See also" references printed on a card</td>
+<td>hypermedia links</td>
+<td>§1.13</td>
+</tr>
+<tr>
+<td>An order number on the slip, checked against a ledger</td>
+<td>an idempotency key</td>
+<td>§1.14</td>
+</tr>
+</tbody>
+</table>
+<p>HTTP already defines most of the vocabulary. <strong>REST</strong> is the name for using it the way the web itself does (§1.2 explains the name). Most of what "a well-designed REST API" means is this: follow the rules of HTTP closely enough that clients, caches, proxies and tools can rely on them. A <em>cache</em> keeps copies of answers so it can reuse them, and a <em>proxy</em> is a program that sits between a client and a server and passes messages along. DRF follows many of those rules by itself, and quietly breaks a few unless told otherwise. These were measured:</p>
 <ul>
 <li><strong>A <code>POST</code> to <code>/books</code>, without the trailing slash, created nothing and returned <code>200</code></strong> with the list of books: Django's <code>301</code> redirect turned it into a <code>GET</code>. A <code>DELETE</code> deleted nothing the same way. Both happen only with <code>DEBUG = False</code> (§1.4).</li>
 <li><strong>An anonymous client borrowed two books through a <code>GET</code> endpoint</strong>, and a logged-in browser borrowed one without a CSRF token, because permissions and CSRF protection both trust <code>GET</code> to change nothing (§1.5).</li>
@@ -758,6 +869,7 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <li><strong>The same list with links instead of ids was 1,337 bytes instead of 756</strong> (§1.13).</li>
 <li><strong>A borrow sent twice made two loans</strong>; with an <code>Idempotency-Key</code> header, the retry returned the first loan (§1.14).</li>
 </ul>
+<p>Do not worry if half the words in that list are new. Each bullet is one subsection, and each subsection starts from the plain idea.</p>
 <p>The section covers:</p>
 <ol>
 <li><strong>What REST is</strong>: the constraints, resources and representations, the uniform interface, and why a request must not depend on server-side conversation state (§1.2).</li>
@@ -768,9 +880,9 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <li><strong>Representations and hypermedia</strong>: JSON conventions, HATEOAS and the Richardson Maturity Model, with links measured (§1.12, §1.13).</li>
 <li><strong>A non-CRUD operation designed end to end</strong>, with an idempotency key, and a checklist for reviewing a design (§1.14, §1.15).</li>
 </ol>
-<p>Every output below was produced by running the example with Django REST framework 3.18.3 on Django 6.1.2, Python 3.14 and PostgreSQL 18. HTTP's methods and status codes are defined by RFC 9110, which this section cites where it matters. API design in general, independent of any framework, is the subject of Backend &amp; API Design Mastery §1–§5; this section stays with what DRF does.</p>
+<p>Every output below was produced by running the example with Django REST framework 3.18.3 on Django 6.1.2, Python 3.14 and PostgreSQL 18. HTTP's methods and status codes are defined by RFC 9110, the official standard document for HTTP, which this section cites where it matters. API design in general, independent of any framework, is the subject of Backend &amp; API Design Mastery §1–§5. This section stays with what DRF does.</p>
 <h2 id="section-0-11-the-project-for-this-section">1.1 The Project for This Section</h2>
-<p>The project is the API of a small lending library. It has three kinds of thing in it:</p>
+<p>The project is the API of a small lending library: the desk from the picture above, built for programs. It has four kinds of thing in it:</p>
 <ul>
 <li>An <strong>author</strong> has a name.</li>
 <li>A <strong>book</strong> has an ISBN, a title, an author, a year, a price and the number of copies the library owns. The ISBNs are made up, thirteen digits each, so that every example is the same on every run.</li>
@@ -778,13 +890,19 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <li>An <strong>export</strong> is a request for a copy of the whole catalogue, the kind of job that takes too long to finish inside one request. §1.11 uses it.</li>
 </ul>
 <p>Two users read and borrow books: Ana (id 1) and Ben (id 2).</p>
-<p>The code in this section uses DRF before §2 explains how DRF works. That is deliberate. This section is about what an API looks like from the outside: the URLs, the methods, the status codes and the bodies a client sees. Read the views as a black box for now; §2 opens the box, and §7 and §8 explain the generic views and the router used here line by line.</p>
+<p>The code in this section uses DRF before §2 explains how DRF works. That is deliberate. This section is about what an API looks like from the <em>outside</em>: the URLs, the methods, the status codes and the bodies a client sees. In the picture, it is about the slips, not about what happens behind the desk. Read the views as a black box for now. §2 opens the box, and §7 and §8 explain the generic views and the router used here line by line.</p>
+<p>Create the project, the app and the database:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">django-admin</span><span class="w"> </span>startproject<span class="w"> </span>config<span class="w"> </span>.
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>startapp<span class="w"> </span>api
 <span class="cmd">createdb</span><span class="w"> </span>library
 </code></pre></div>
 
-<p>The settings are the minimum for an API, plus <code>CommonMiddleware</code>, whose trailing-slash redirect §1.4 measures, and sessions, which §1.2 needs.</p>
+<p>First, the settings. They are the minimum an API needs, plus two extras:</p>
+<ul>
+<li><code>CommonMiddleware</code>, whose trailing-slash redirect §1.4 measures;</li>
+<li>sessions, which §1.2 needs.</li>
+</ul>
+<p>Notice <code>DEBUG = False</code>. That is how a site runs once real people use it, and §1.4's trap only appears with it. Here is the file:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/settings.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
@@ -819,6 +937,7 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <span class="n">DATABASES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"default"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"ENGINE"</span><span class="p">:</span> <span class="s2">"django.db.backends.postgresql"</span><span class="p">,</span> <span class="s2">"NAME"</span><span class="p">:</span> <span class="s2">"library"</span><span class="p">}}</span>
 </code></pre></div>
 
+<p>Next, the models. Each class becomes one database table, one for each kind of thing in the library:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/models.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">models</span>
@@ -865,6 +984,7 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 </code></pre></div>
 
 <p><code>on_delete=models.PROTECT</code> on a book's author means an author who still has books cannot be deleted. §1.7 shows what DRF answers when a client tries.</p>
+<p>The serializers come next. A serializer turns a model object into JSON, and JSON sent by a client back into a model object. §4 and §5 teach them properly; here they simply list the fields each JSON body carries:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/serializers.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">serializers</span>
 
@@ -883,7 +1003,8 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
         <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"id"</span><span class="p">,</span> <span class="s2">"isbn"</span><span class="p">,</span> <span class="s2">"title"</span><span class="p">,</span> <span class="s2">"author"</span><span class="p">,</span> <span class="s2">"year"</span><span class="p">,</span> <span class="s2">"price"</span><span class="p">,</span> <span class="s2">"copies"</span><span class="p">]</span>
 </code></pre></div>
 
-<p>The views are two <strong>viewsets</strong>, classes that answer every request about one kind of thing, and a <strong>router</strong>, which gives them their URLs. <code>lookup_field = "isbn"</code> makes a book's URL use its ISBN rather than its database id.</p>
+<p>The views are two <strong>viewsets</strong>, classes that answer every request about one kind of thing, and a <strong>router</strong>, which gives them their URLs. In the picture, a viewset is the clerk who handles every slip about books, and the router is the sign above the desk saying which window handles what.</p>
+<p><code>lookup_field = "isbn"</code> makes a book's URL use its ISBN rather than its database id:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/views.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">permissions</span><span class="p">,</span> <span class="n">viewsets</span>
 
@@ -904,6 +1025,7 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
     <span class="n">permission_classes</span> <span class="o">=</span> <span class="p">[</span><span class="n">permissions</span><span class="o">.</span><span class="n">IsAuthenticatedOrReadOnly</span><span class="p">]</span>
 </code></pre></div>
 
+<p>The router builds the URLs for both viewsets:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.routers</span><span class="w"> </span><span class="kn">import</span> <span class="n">DefaultRouter</span>
 
@@ -916,6 +1038,7 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <span class="n">urlpatterns</span> <span class="o">=</span> <span class="n">router</span><span class="o">.</span><span class="n">urls</span>
 </code></pre></div>
 
+<p>And the project's main URL file sends every path to the app:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -924,7 +1047,13 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <span class="p">]</span>
 </code></pre></div>
 
-<p>Every example sends its requests through one helper. It prints the method, the path and the status code on one line, then any headers asked for in <code>show</code>, then the body. DRF's JSON has no spaces in it, so a body fits on one line. An HTML page is not printed, only named.</p>
+<p>Every example sends its requests through one small helper, so that every output looks the same. It prints:</p>
+<ol>
+<li>the method, the path and the status code, on one line;</li>
+<li>then any headers asked for in <code>show</code>;</li>
+<li>then the body.</li>
+</ol>
+<p>DRF's JSON has no spaces in it, so a body fits on one line. An HTML page is not printed, only named. The helper uses DRF's <code>APIClient</code>, which sends requests straight to the project without a real network, the way a test does:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/try_it.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIClient</span>
 
@@ -951,6 +1080,7 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
     <span class="k">return</span> <span class="n">response</span>
 </code></pre></div>
 
+<p>Then create the tables:</p>
 <div class="highlight" data-lang="bash"><pre><span></span><code><span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>makemigrations<span class="w"> </span>api
 <span class="cmd">python</span><span class="w"> </span>manage.py<span class="w"> </span>migrate
 </code></pre></div>
@@ -982,7 +1112,7 @@ Running migrations:
   Applying sessions.0001_initial... OK
 </code></pre></div>
 
-<p>The data: three authors, four books, two readers.</p>
+<p>Now some data to work with. The script below creates three authors, four books and two readers, and counts them:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
 
@@ -1016,24 +1146,40 @@ Running migrations:
   {"id":1,"isbn":"9780000000101","title":"Dom Casmurro","author":1,"year":1899,"price":"12.50","copies":2}
 </code></pre></div>
 
-<p>Three things are already visible in that one line of output, and the rest of this section is about each of them. The <strong>URL</strong> names one book. The <strong>method</strong>, <code>GET</code>, says what the client wants done with it: read it. And the <strong>status code</strong>, <code>200</code>, says what happened: it worked, and the body is the book. The body itself is a <strong>representation</strong> of the book, a copy of its current state in a format the client can read, here JSON.</p>
+<p>Read that output one piece at a time. Three things are already visible in that one line, and the rest of this section is about each of them:</p>
+<ul>
+<li>The <strong>URL</strong>, <code>/books/9780000000101/</code>, names one book. It is the shelf mark on the slip.</li>
+<li>The <strong>method</strong>, <code>GET</code>, says what the client wants done with it: read it. It is the box ticked on the slip.</li>
+<li>The <strong>status code</strong>, <code>200</code>, says what happened: it worked, and the body is the book. It is the stamp on the slip that comes back.</li>
+</ul>
+<p>The body itself is a <strong>representation</strong> of the book: a copy of its current state, in a format the client can read, here JSON. It is the photocopy of the catalogue card, not the book.</p>
 <h2 id="section-0-12-what-rest-is">1.2 What REST Is</h2>
-<p>An <strong>HTTP API</strong> is a program that other programs talk to over HTTP. A browser asks a web site for pages meant for people. A client of an API, such as a phone app, a single-page front end or another company's server, asks for data meant for code, and sends data back.</p>
-<p>Most HTTP APIs written today call themselves <strong>REST</strong> APIs. The word comes from <strong>Representational State Transfer</strong>, the name Roy Fielding gave, in a 2000 doctoral dissertation, to the way the web itself is designed. Fielding was one of the authors of the HTTP specification, and the dissertation describes, after the fact, why the web scaled: a set of rules, which it calls <strong>constraints</strong>, that every part of the web keeps. A system that keeps them gets the same benefits.</p>
+<p>An <strong>HTTP API</strong> is a program that other programs talk to over HTTP. The difference from an ordinary web site is who is asking:</p>
+<ul>
+<li>A browser asks a web site for pages meant for people.</li>
+<li>A client of an API asks for data meant for code, and sends data back. That client might be a phone app, a <em>single-page front end</em> (a web page whose JavaScript fetches data and draws the screen itself), or another company's server.</li>
+</ul>
+<p>Most HTTP APIs written today call themselves <strong>REST</strong> APIs. The word comes from <strong>Representational State Transfer</strong>. That is the name Roy Fielding gave, in a 2000 doctoral dissertation, to the way the web itself is designed. Fielding was one of the authors of the HTTP specification. The dissertation explains, after the fact, why the web grew so large without falling over: every part of the web keeps a set of rules, which it calls <strong>constraints</strong>. A system that keeps the same rules gets the same benefits.</p>
 <p>There are six:</p>
 <ul>
 <li><strong>Client-server.</strong> The client and the server are separate programs. The server owns the data; the client owns the interface. Either can change without the other, as long as the messages between them do not.</li>
-<li><strong>Stateless.</strong> Every request carries everything the server needs to understand it. The server keeps no memory of earlier requests from the same client between them.</li>
-<li><strong>Cacheable.</strong> Every response says whether it may be reused, so that a client or a cache in between can answer a later request without asking the server again.</li>
+<li><strong>Stateless.</strong> Every request carries everything the server needs to understand it. The server keeps no memory of earlier requests from the same client between them. That is the clerk who remembers nobody.</li>
+<li><strong>Cacheable.</strong> Every response says whether it may be reused. A client, or a cache in between, can then answer a later request without asking the server again.</li>
 <li><strong>Uniform interface.</strong> Every resource is used the same way: the same methods, the same status codes, the same headers. This is the constraint that makes REST look like REST, and it is described in more detail below.</li>
-<li><strong>Layered system.</strong> A client cannot tell whether it is talking to the server itself or to something in between, such as a load balancer, a cache or a gateway. That is what lets those things be added later.</li>
+<li><strong>Layered system.</strong> A client cannot tell whether it is talking to the server itself or to something in between, such as a load balancer (a program that spreads requests across several servers), a cache or a gateway. That is what lets those things be added later.</li>
 <li><strong>Code on demand</strong> (optional). The server may send code for the client to run, as web pages send JavaScript. APIs almost never use it.</li>
 </ul>
 <p>Notice what is <em>not</em> on the list: JSON, URLs that look a certain way, or a particular framework. Representational state transfer is a set of properties, not a format. An API is "RESTful" to the degree that it keeps the constraints, and most APIs keep some of them and not others. §1.13 describes a common way to measure how far an API goes.</p>
 <h3 id="section-0-resources-and-representations">Resources and representations</h3>
 <p>The central idea is the <strong>resource</strong>: anything important enough to have a name. A book is a resource. So is the list of all books, the current user's profile, or an export that is still running. Each resource is named by a URL, and a URL names exactly one resource.</p>
-<p>A client never receives a resource itself. It receives a <strong>representation</strong>: the resource's current state, written in some format. Every resource representation is a copy, made at the moment of the request. The same book can be represented as JSON for a program and as an HTML page for a person. The resource is the same; only the resource representation differs.</p>
-<p>DRF shows this directly. The request below asks for the same URL three times. The first asks for HTML, the way a browser does, with an <code>Accept</code> header, the header in which a client says which formats it can read. The second asks for JSON. The third asks for JSON with <code>?format=json</code> in the URL instead of a header:</p>
+<p>A client never receives a resource itself. It receives a <strong>representation</strong>: the resource's current state, written in some format. Every resource representation is a copy, made at the moment of the request. The same book can be represented as JSON for a program and as an HTML page for a person. The resource is the same; only the resource representation differs. In the picture, the desk can hand back a card printed nicely for a person, or a typed data sheet for a machine, and both describe the same book on the same shelf.</p>
+<p>DRF shows this directly. The example below asks for the same URL three times:</p>
+<ol>
+<li>The first asks for HTML, the way a browser does. It uses the <code>Accept</code> header, the header in which a client says which formats it can read.</li>
+<li>The second asks for JSON, also with <code>Accept</code>.</li>
+<li>The third asks for JSON with <code>?format=json</code> in the URL instead of a header.</li>
+</ol>
+<p>Here are the three requests:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1056,23 +1202,34 @@ GET /books/9780000000101/?format=json -&gt; 200
   {"id":1,"isbn":"9780000000101","title":"Dom Casmurro","author":1,"year":1899,"price":"12.50","copies":2}
 </code></pre></div>
 
-<p>The HTML is DRF's <strong>browsable API</strong>, a page for people that shows the same book. The JSON is for programs. Two headers in the output carry the idea:</p>
+<p>Read the output request by request:</p>
+<ul>
+<li>The first answer is HTML. It is DRF's <strong>browsable API</strong>, a page for people that shows the same book, and <code>title in page: True</code> confirms the book's title is on it.</li>
+<li>The second and third answers are the same JSON, for programs. Asking with a header or with <code>?format=json</code> made no difference.</li>
+</ul>
+<p>Two headers in the output carry the idea:</p>
 <ul>
 <li><strong><code>Content-Type</code></strong> names the format of the body that came back. A client reads it before reading the body.</li>
-<li><strong><code>Vary: Accept, Cookie</code></strong> tells any cache in between that this URL has more than one representation, and that the one returned depends on the request's <code>Accept</code> and <code>Cookie</code> headers. Without it, a cache could store the HTML page and hand it to the next program that asked for JSON.</li>
+<li><strong><code>Vary: Accept, Cookie</code></strong> tells any cache in between that this URL has more than one representation. Which one comes back depends on the request's <code>Accept</code> and <code>Cookie</code> headers. Without it, a cache could store the HTML page and hand it to the next program that asked for JSON.</li>
 </ul>
-<p>Choosing a representation from the request's headers is called <strong>content negotiation</strong>. §3 covers how DRF does it, including the parsers that read request bodies and the renderers that write response bodies.</p>
+<p>Choosing a representation from the request's headers is called <strong>content negotiation</strong>. In the picture, it is the clerk asking "printed card or data sheet?" before making the copy. §3 covers how DRF does it, including the parsers that read request bodies and the renderers that write response bodies.</p>
 <h3 id="section-0-the-uniform-interface">The uniform interface</h3>
-<p>The <strong>uniform interface</strong> is the rule that every resource is handled in the same way. Fielding splits it into four parts:</p>
+<p>The <strong>uniform interface</strong> is the rule that every resource is handled in the same way. At the desk, every slip has the same boxes, whether it is about a book, an author or a loan. Fielding splits the rule into four parts:</p>
 <ol>
 <li><strong>Resources are identified in requests</strong>, by URL. The URL <code>/books/9780000000101/</code> names one book and nothing else.</li>
 <li><strong>Resources are changed through representations.</strong> To change a book, a client sends a new representation of it, such as JSON with a different price. It does not call a function named <code>setPrice</code>.</li>
 <li><strong>Messages describe themselves.</strong> A request or response carries everything needed to understand it: the method, the status code, the <code>Content-Type</code>, the caching headers. Nobody needs to know which endpoint it came from to read it.</li>
 <li><strong>Hypermedia drives the application state.</strong> The client finds what it can do next from links in the responses, the way a person uses a web site by following links rather than typing URLs. This is often called <strong>HATEOAS</strong>, Hypermedia As The Engine Of Application State, and it is the part most APIs leave out. §1.13 measures what it costs and what it gives.</li>
 </ol>
-<p>The practical value is that a client written against one resource already knows how to use the next. If <code>GET</code> reads a book, <code>GET</code> reads an author. If <code>DELETE</code> on a book answers <code>204</code> when it works and <code>404</code> when the book is not there, so does <code>DELETE</code> on an author. A client library, a cache, a proxy, a monitoring tool and a person reading logs all rely on that sameness.</p>
+<p>The practical value is that a client written against one resource already knows how to use the next:</p>
+<ul>
+<li>If <code>GET</code> reads a book, <code>GET</code> reads an author.</li>
+<li>If <code>DELETE</code> on a book answers <code>204</code> when it works and <code>404</code> when the book is not there, so does <code>DELETE</code> on an author.</li>
+</ul>
+<p>A client library, a cache, a proxy, a monitoring tool and a person reading logs all rely on that sameness.</p>
 <h3 id="section-0-stateless-the-request-carries-everything">Stateless: the request carries everything</h3>
-<p><strong>Statelessness</strong> is the constraint most often broken by accident, so it is worth seeing what breaking it looks like. Here is a view that keeps state on the server. It hands out the books one at a time, and remembers in the user's <strong>session</strong>, server-side storage tied to a browser cookie, which book it handed out last:</p>
+<p><strong>Statelessness</strong> is the constraint most often broken by accident, so it is worth seeing what breaking it looks like. In the picture, a stateless desk is one where a slip saying "the next book, please" means nothing, because the clerk does not remember which book you had last.</p>
+<p>Here is a view that breaks the rule. It hands out the books one at a time. It remembers which book it handed out last in the user's <strong>session</strong>: storage on the server, tied to a browser cookie (a small value the browser sends back with every request). The view is short:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/stateful.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.decorators</span><span class="w"> </span><span class="kn">import</span> <span class="n">api_view</span>
@@ -1092,6 +1249,7 @@ GET /books/9780000000101/?format=json -&gt; 200
 <span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">"stateful/next/"</span><span class="p">,</span> <span class="n">next_book</span><span class="p">)]</span>
 </code></pre></div>
 
+<p>Then the project's URL file includes it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -1101,7 +1259,8 @@ GET /books/9780000000101/?format=json -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
-<p>A person opens the list in two browser tabs. The tabs share one cookie, so they share one session, and each asks for "the next book" twice. The test client below plays the browser; it keeps cookies between requests, as a browser does:</p>
+<p>Now imagine a person who opens the list in two browser tabs. The tabs share one cookie, so they share one session. Each tab asks for "the next book" twice.</p>
+<p>The test client below plays the browser. It keeps cookies between requests, as a browser does:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIClient</span>
 
@@ -1116,16 +1275,22 @@ tab 1 {'title': 'The Hour of the Star'}
 tab 2 {'title': 'Blindness'}
 </code></pre></div>
 
-<p>Each tab saw two of the four books, and neither saw the list. The same request, <code>GET /stateful/next/</code>, meant something different each time, because its meaning depended on state the request did not carry. The same thing happens without a second tab:</p>
+<p>Each tab saw two of the four books, and neither saw the list. Follow the requests in order:</p>
+<ol>
+<li>Tab 1 asks for the next book. The session says position 0, so it gets Dom Casmurro, and the session moves to 1.</li>
+<li>Tab 2 sends the very same request. The session now says 1, so it gets the second book.</li>
+<li>Tabs 1 and 2 ask again and get the third and fourth.</li>
+</ol>
+<p>The same request, <code>GET /stateful/next/</code>, meant something different each time, because its meaning depended on state the request did not carry. The same thing goes wrong without a second tab:</p>
 <ul>
 <li><strong>A retried request skips a book.</strong> If a response is lost on the network and the client sends the request again, the server has already moved on.</li>
 <li><strong>A cached response is wrong.</strong> A cache that stored the first answer would return Dom Casmurro forever, because the URL never changes.</li>
 <li><strong>A second server cannot help.</strong> If the session lived in one server's memory, as some setups store it, a request sent to another server behind the load balancer would start again from the first book.</li>
 </ul>
-<p>The stateless version puts the position in the request: <code>GET /books/?page=2</code>, or a cursor the server handed out (§14). Every request then means the same thing every time it is sent, by any client, to any server. The client holds the state of its own progress; the server holds the state of the resources.</p>
+<p>The stateless version puts the position in the request: <code>GET /books/?page=2</code>, or a cursor the server handed out (§14). A cursor is a bookmark: an opaque value that says where the next page starts. Every request then means the same thing every time it is sent, by any client, to any server. The client holds the state of its own progress; the server holds the state of the resources.</p>
 <p>Statelessness is about the <em>conversation</em>, not about the server having no data. The database is state, and that is fine: it is the resources. Nor does it forbid sessions for logging in. A session cookie sent with every request is part of each request, and §10 covers the authentication schemes DRF supports. What it forbids is a request whose meaning depends on what the same client asked before.</p>
 <h2 id="section-0-13-resources-and-urls">1.3 Resources and URLs</h2>
-<p>Designing an API starts with deciding what its resources are, and then naming them. The rules that follow are conventions rather than law. HTTP does not care what a URL looks like. But they are the conventions clients, tools and reviewers expect, and DRF's router produces them by default.</p>
+<p>Designing an API starts with deciding what its resources are, and then naming them. In the picture, it is deciding what is on the shelves, and how shelf marks are written. The rules that follow are conventions rather than law. HTTP does not care what a URL looks like. But they are the conventions clients, tools and reviewers expect, and DRF's router produces them by default.</p>
 <h3 id="section-0-four-kinds-of-resource">Four kinds of resource</h3>
 <p>Most resources fall into one of four kinds:</p>
 <ul>
@@ -1154,30 +1319,40 @@ tab 2 {'title': 'Blindness'}
 &lt;drf_format_suffix:format&gt; api-root
 </code></pre></div>
 
-<p>Each viewset got a collection URL, <code>books/</code>, and a single-resource URL, <code>books/&lt;isbn&gt;/</code>, named <code>book-list</code> and <code>book-detail</code>. Each also got a second form of both with a <strong>format suffix</strong>, such as <code>/books.json</code>, which picks the representation the way <code>?format=json</code> did (§3 covers suffixes). The last two lines are the <strong>API root</strong>, <code>/</code>, a page that lists the collections. §1.13 uses it.</p>
+<p>Each line is one URL pattern, written as a regular expression (a pattern that text must match), followed by its name. Read them in pairs:</p>
+<ul>
+<li>Each viewset got a collection URL, <code>books/</code>, and a single-resource URL, <code>books/&lt;isbn&gt;/</code>, named <code>book-list</code> and <code>book-detail</code>. The <code>&lt;isbn&gt;</code> part shows up as <code>(?P&lt;isbn&gt;[^/.]+)</code>: "any characters except a slash or a dot, saved under the name <code>isbn</code>".</li>
+<li>Each also got a second form of both with a <strong>format suffix</strong>, such as <code>/books.json</code>, which picks the representation the way <code>?format=json</code> did (§3 covers suffixes).</li>
+<li>The last two lines are the <strong>API root</strong>, <code>/</code>, a page that lists the collections. §1.13 uses it.</li>
+</ul>
 <h3 id="section-0-naming">Naming</h3>
-<p>Resource naming is where most API style guides spend their pages, because a URL, once published, is stored by clients and hard to change. The resource naming conventions that matter, and why each one exists:</p>
+<p>Resource naming is where most API style guides spend their pages. The reason is that a URL, once published, is stored by clients and hard to change, like a shelf mark printed in a thousand readers' notebooks. The resource naming conventions that matter, and why each one exists:</p>
 <ul>
 <li><strong>Nouns, not verbs.</strong> A URL names a thing; the method says what to do with it. <code>POST /books/</code> creates a book, so <code>/createBook</code> adds nothing but a second way of saying "create". An API with verbs in its URLs ends up with <code>/getBook</code>, <code>/fetchBook</code> and <code>/loadBook</code> written by three different people.</li>
 <li><strong>Plural nouns for collections.</strong> <code>/books/</code> for the list and <code>/books/&lt;isbn&gt;/</code> for one of them, so the item's URL is the collection's URL plus an identifier. Mixing <code>/book/</code> and <code>/books/</code> makes every client guess.</li>
 <li><strong>Lowercase words, separated by hyphens</strong>, such as <code>/reading-lists/</code>. URLs are case-sensitive after the host, and a hyphen is what most style guides, and most search engines, read as a word break.</li>
-<li><strong>Stable identifiers.</strong> The identifier in a URL should never change, because clients store URLs. An ISBN is a <strong>natural key</strong>, an identifier the thing already has in the outside world; the database id is a <strong>surrogate key</strong>, one the database invented. A natural key makes readable URLs and lets a client find a book without first searching for it. But it must be unique and must never change: a book whose ISBN could be corrected would break every stored link. Many APIs use a surrogate key, often a random UUID rather than a counting number, so that ids do not reveal how many records exist. <code>lookup_field</code> chooses which one DRF uses (§7.5).</li>
+<li><strong>Stable identifiers.</strong> The identifier in a URL should never change, because clients store URLs. There are two kinds:<ul>
+<li>An ISBN is a <strong>natural key</strong>, an identifier the thing already has in the outside world. A natural key makes readable URLs and lets a client find a book without first searching for it. But it must be unique and must never change: a book whose ISBN could be corrected would break every stored link.</li>
+<li>The database id is a <strong>surrogate key</strong>, one the database invented. Many APIs use a surrogate key, often a random UUID (a long random identifier) rather than a counting number, so that ids do not reveal how many records exist. <code>lookup_field</code> chooses which one DRF uses (§7.5).</li>
+</ul>
+</li>
 <li><strong>No file extensions, implementation details or versions mixed in by accident.</strong> <code>/books.php</code> and <code>/api/v1/getBooks.json</code> tie the URL to things that will change. Versioning is a deliberate decision, and §16.10 covers where a version belongs.</li>
 </ul>
 <h3 id="section-0-operations-that-are-not-reads-or-writes">Operations that are not reads or writes</h3>
 <p>Some operations do not look like creating, reading, changing or deleting anything: borrowing a book, approving an order, sending an email again. The tempting design is a verb in the URL: <code>POST /books/9780000000101/borrow/</code>. That is a <strong>remote procedure call</strong>, <strong>RPC</strong>, style: the URL names a function to run.</p>
-<p>The resource-oriented alternative is to ask what the operation <em>creates or changes</em>, and make that the resource. Borrowing a book creates a loan, so borrowing is <code>POST /loans/</code>, and returning it changes the loan. The loan then has a URL, can be read back, listed and audited, and every client already knows how to use it. §1.14 designs borrowing this way, end to end.</p>
+<p>The resource-oriented alternative is to ask what the operation <em>creates or changes</em>, and make that the resource. Borrowing a book creates a loan, so borrowing is <code>POST /loans/</code>, and returning it changes the loan. At a real library desk it is the same: borrowing produces a loan slip that the library files away. The loan then has a URL, can be read back, listed and audited, and every client already knows how to use it. §1.14 designs borrowing this way, end to end.</p>
 <p>The rule is not absolute. Some operations really are commands with nothing worth naming as a result, and an action such as <code>POST /orders/42/cancel/</code> is clear and common. DRF supports both: <code>@action</code> adds a command to a viewset (§8.7). Prefer a resource when the operation leaves something behind that a client may want to read later.</p>
 <h3 id="section-0-how-deep-to-nest">How deep to nest</h3>
-<p>A sub-resource puts one resource's identifier inside another's URL: <code>/authors/1/books/</code>. One level of nesting reads well, and it makes the relationship visible. Every extra level costs something:</p>
+<p>A sub-resource puts one resource's identifier inside another's URL: <code>/authors/1/books/</code>. This is called <em>nesting</em>. One level of nesting reads well, and it makes the relationship visible. Every extra level costs something:</p>
 <ul>
 <li><strong>Every level is another lookup and another check.</strong> <code>/authors/1/books/9780000000101/loans/7/</code> must confirm that loan 7 belongs to that book and that the book belongs to that author, or it shows a loan through the wrong parent (§8.9, §8.10, §11).</li>
 <li><strong>The URL changes when the parent changes.</strong> If a loan's URL contains its book, moving the loan to another copy changes its URL.</li>
 <li><strong>A client must know the parent to find the child.</strong> A client holding only a loan id cannot build the URL.</li>
 </ul>
-<p>The usual compromise is to nest one level for listing and creating, <code>/books/&lt;isbn&gt;/loans/</code>, and to give each item a short URL of its own, <code>/loans/7/</code>. A filter on the collection, <code>/loans/?book=9780000000101</code>, does the same job as a nested list without the nesting, and §13 covers filters.</p>
+<p>The usual compromise has two parts. Nest one level for listing and creating, <code>/books/&lt;isbn&gt;/loans/</code>. And give each item a short URL of its own, <code>/loans/7/</code>. A filter on the collection, <code>/loans/?book=9780000000101</code>, does the same job as a nested list without the nesting, and §13 covers filters.</p>
 <h2 id="section-0-14-trailing-slashes-and-the-redirect-that-drops-requests">1.4 Trailing Slashes and the Redirect That Drops Requests</h2>
-<p>The URLs above end with a slash, as Django's do by default. A client that leaves it off asks for <code>/books</code>, which matches no pattern. Django's <code>CommonMiddleware</code> notices this and, because the setting <code>APPEND_SLASH</code> is on by default, answers with a <strong>redirect</strong>: a <code>3xx</code> response whose <code>Location</code> header names the URL the client should ask for instead.</p>
+<p>This is the puzzle from the start of the section.</p>
+<p>The URLs above end with a slash, as Django's do by default. A client that leaves it off asks for <code>/books</code>, which matches no pattern. Django's <code>CommonMiddleware</code> notices this. Because the setting <code>APPEND_SLASH</code> is on by default, it answers with a <strong>redirect</strong>: a <code>3xx</code> response whose <code>Location</code> header names the URL the client should ask for instead. In the picture, it is the clerk handing the slip back with a note: "wrong window, go next door". First, two <code>GET</code> requests without the slash:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1191,8 +1366,14 @@ GET /books?year=1899 -&gt; 301
   Location: /books/?year=1899
 </code></pre></div>
 
-<p>The code is <code>301 Moved Permanently</code>, which tells the client, and any cache, to use the new URL from now on. The query string was carried over. For <code>GET</code>, that is helpful: the client follows the redirect and gets the list.</p>
-<p>For anything other than <code>GET</code>, it is a trap. RFC 9110, the standard that defines HTTP's methods and status codes, says that when a client follows a <code>301</code> or a <code>302</code>, it <strong>may change the method from <code>POST</code> to <code>GET</code></strong>, for historical reasons: browsers always did. Most HTTP client libraries do. So does Django's test client. Here a <code>POST</code> and a <code>DELETE</code> are sent to URLs without the slash, and the client follows the redirect, as a client library usually does by default:</p>
+<p>Both came back as <code>301</code>, and each <code>Location</code> adds the slash. The code is <code>301 Moved Permanently</code>: it tells the client, and any cache, to use the new URL from now on. The query string, <code>?year=1899</code>, was carried over. For <code>GET</code>, that is helpful: the client follows the redirect and gets the list.</p>
+<p>For anything other than <code>GET</code>, it is a trap. RFC 9110, the standard that defines HTTP's methods and status codes, says that when a client follows a <code>301</code> or a <code>302</code>, it <strong>may change the method from <code>POST</code> to <code>GET</code></strong>. The reason is historical: browsers always did. Most HTTP client libraries do too. So does Django's test client.</p>
+<p>The example below sends a <code>POST</code> and a <code>DELETE</code> to URLs without the slash:</p>
+<ul>
+<li>The first <code>POST</code> does not follow the redirect, so you can see the <code>301</code> itself.</li>
+<li>The second <code>POST</code> and the <code>DELETE</code> follow it, as a client library usually does by default.</li>
+</ul>
+<p>After each one, the code asks the database what really happened:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Book</span>
@@ -1224,7 +1405,12 @@ still there: True
 <figure id="fig-drf-slashtrap" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 760 300" role="img" aria-labelledby="t-drf-slashtrap d-drf-slashtrap" style="display:block;width:100%;min-width:540px;height:auto;max-width:760px;margin:0 auto"><title id="t-drf-slashtrap">A POST without its trailing slash</title><desc id="d-drf-slashtrap">Four steps. The client sends POST /books with a new book in the body. Django answers 301 Moved Permanently with Location /books/. The client follows the redirect and, as RFC 9110 allows after a 301, sends GET /books/ with no body. The API answers 200 with the list of books. Quincas Borba was never created, and nothing reported an error.</desc><defs><marker id="ah-drf-slashtrap" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="20" y="40" width="150" height="83.25" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="95" y="68.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">POST /books</text><text x="95" y="88.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">with the</text><text x="95" y="104.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">new book</text><path d="M176,81.625 L204,81.625" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-drf-slashtrap)"/><rect x="210" y="40" width="150" height="83.25" rx="10" style="fill:#d9a441;fill-opacity:0.13;stroke:#d9a441;stroke-width:1.6"/><text x="285" y="68.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">301</text><text x="285" y="88.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">Location:</text><text x="285" y="104.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">/books/</text><path d="M366,81.625 L394,81.625" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-drf-slashtrap)"/><rect x="400" y="40" width="150" height="83.25" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="475" y="68.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">GET /books/</text><text x="475" y="88.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">method changed,</text><text x="475" y="104.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">body dropped</text><path d="M556,81.625 L584,81.625" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-drf-slashtrap)"/><rect x="590" y="40" width="150" height="83.25" rx="10" style="fill:#8a94a6;fill-opacity:0.13;stroke:#8a94a6;stroke-width:1.6"/><text x="665" y="68.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:650;fill:var(--text);opacity:1">200</text><text x="665" y="88.5" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">the list</text><text x="665" y="104.75" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">of books</text><rect x="20" y="176" width="720" height="92" rx="8" style="fill:#cf4b6c;fill-opacity:0.1"/><text x="380" y="206" text-anchor="middle" style="font-family:'WeraCode',Menlo,ui-monospace,monospace;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">Quincas Borba exists: False</text><text x="380" y="236" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">no error anywhere: the client saw 200 and a body</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The sequence measured in §1.4, with DEBUG = False.</figcaption></figure>
 <!-- /fig:drf-slashtrap -->
 
-<p>Read the second and third calls closely. The <code>POST</code> to create Quincas Borba came back as <code>200</code> with the full list of books, which looks like success. Nothing was created: the client was redirected and fetched the list with <code>GET</code>. The <code>DELETE</code> came back as <code>200</code> with the book in the body, and the book was not deleted. Neither the client nor the server reported an error.</p>
+<p>Read the second and third calls closely:</p>
+<ul>
+<li>The <code>POST</code> to create Quincas Borba came back as <code>200</code> with the full list of books, which looks like success. Nothing was created: <code>Quincas Borba exists: False</code>. The client was redirected and fetched the list with <code>GET</code>.</li>
+<li>The <code>DELETE</code> came back as <code>200</code> with the book in the body, and the book was not deleted: <code>still there: True</code>.</li>
+</ul>
+<p>Neither the client nor the server reported an error. That is the answer to the puzzle. The slip went to the next window, and on the way the "add this" box turned into a "just looking" box, and the parcel was left behind.</p>
 <p>Three details about this behaviour:</p>
 <ul>
 <li><strong>It happens only with <code>DEBUG = False</code>.</strong> With <code>DEBUG = True</code>, Django raises a <code>RuntimeError</code> for a <code>DELETE</code>, <code>POST</code>, <code>PUT</code> or <code>PATCH</code> that would be redirected, with a message explaining that it "can't redirect to the slash URL while maintaining" the request's data. So the trap is loud in development and silent in production.</li>
@@ -1233,18 +1419,18 @@ still there: True
 </ul>
 <p>There are three fixes, in order of preference:</p>
 <ol>
-<li><strong>Make the slash optional in the API's URLs.</strong> A router's patterns are regular expressions, and its <code>trailing_slash</code> attribute is the piece of each pattern after the path. The constructor accepts only <code>True</code> (a slash) or <code>False</code> (none), but setting the attribute to <code>"/?"</code> after creating the router makes the slash optional, so <code>/books</code> and <code>/books/</code> both match and there is nothing to redirect. Exercise 3 does this and measures it.</li>
+<li><strong>Make the slash optional in the API's URLs.</strong> A router's patterns are regular expressions, and its <code>trailing_slash</code> attribute is the piece of each pattern after the path. The constructor accepts only <code>True</code> (a slash) or <code>False</code> (none). But setting the attribute to <code>"/?"</code> after creating the router makes the slash optional, so <code>/books</code> and <code>/books/</code> both match and there is nothing to redirect. Exercise 3 does this and measures it.</li>
 <li><strong>Choose one form, and document it.</strong> A client that always uses the documented URL never meets the redirect. The links an API returns (§1.13) are always in the right form, which is one more reason to return them.</li>
 <li><strong>Turn <code>APPEND_SLASH</code> off for the API.</strong> A missing slash is then a <code>404</code>: an honest error, rather than a success that did nothing.</li>
 </ol>
-<p>The redirect is useful for people typing URLs into a browser and harmful for programs sending writes, which is why API routers usually settle the question themselves.</p>
+<p>The redirect is useful for people typing URLs into a browser and harmful for programs sending writes. That is why API routers usually settle the question themselves.</p>
 <h2 id="section-0-15-methods-safe-and-idempotent">1.5 Methods: Safe and Idempotent</h2>
-<p>The <strong>method</strong> is the verb of a request: what the client wants done to the resource the URL names. HTTP defines a handful, and an API uses seven of them. RFC 9110 gives each method two properties that clients, caches and proxies rely on, so they are worth learning exactly:</p>
+<p>The <strong>method</strong> is the verb of a request: what the client wants done to the resource the URL names. It is the box ticked on the slip. HTTP defines a handful, and an API uses seven of them. RFC 9110 gives each method two properties. Clients, caches and proxies rely on both, so they are worth learning exactly:</p>
 <ul>
-<li>A method is <strong>safe</strong> if the client does not ask for anything to change. Reading is safe. A safe request may still have effects the client did not ask for, such as a line in a log or a view counter, but the client is not responsible for them, and it must be fine to send the request at any time, for any reason. Crawlers, link prefetchers and caches send safe requests on their own.</li>
-<li>A method is <strong>idempotent</strong> if sending the same request twice has the same effect on the server as sending it once. That is what makes a request safe to <em>retry</em>. If a client sends one, the connection drops, and it cannot tell whether the request arrived, it can send it again without doing the work twice.</li>
+<li>A method is <strong>safe</strong> if the client does not ask for anything to change. Reading is safe. A safe request may still have effects the client did not ask for, such as a line in a log or a view counter, but the client is not responsible for them. It must be fine to send the request at any time, for any reason. Crawlers, link prefetchers and caches send safe requests on their own. (A <em>crawler</em> is a program, such as a search engine's, that visits pages by itself; a <em>prefetcher</em> loads a link early in case you click it.) In the picture, a safe request is a "just looking" slip.</li>
+<li>A method is <strong>idempotent</strong> if sending the same request twice has the same effect on the server as sending it once. That is what makes a request safe to <em>retry</em>. Suppose a client sends one, the connection drops, and it cannot tell whether the request arrived. It can send it again without doing the work twice. In the picture, it is a slip that does no harm if the reader hands it in twice.</li>
 </ul>
-<p>Every safe method is idempotent: doing nothing twice is doing nothing. The reverse is not true.</p>
+<p>Every safe method is idempotent: doing nothing twice is doing nothing. The reverse is not true. Here are the seven methods and their two properties:</p>
 <table>
 <thead>
 <tr>
@@ -1311,9 +1497,9 @@ still there: True
 <figure id="fig-drf-methods" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 760 470" role="img" aria-labelledby="t-drf-methods d-drf-methods" style="display:block;width:100%;min-width:540px;height:auto;max-width:760px;margin:0 auto"><title id="t-drf-methods">Seven methods, two properties</title><desc id="d-drf-methods">A table of the seven methods an API uses. GET, HEAD and OPTIONS are safe and idempotent. POST is neither: sent twice, it created authors 4 and 5. PUT is idempotent but not safe: sent twice, it left the same Blindness. PATCH is not safe and is idempotent only when it sets values, as DRF&#x27;s does. DELETE is idempotent but not safe: sent twice, it answered 204 and then 404, leaving the same state.</desc><defs><marker id="ah-drf-methods" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="70" y="34" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">method</text><text x="200" y="34" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">safe</text><text x="330" y="34" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">idempotent</text><text x="420" y="34" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">measured in §1.5</text><rect x="14" y="44" width="732" height="46" rx="8" style="fill:#4a9eda;fill-opacity:0.05"/><rect x="20" y="52" width="100" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="70" y="69.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">GET</text><rect x="150" y="52" width="100" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="200" y="69.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">safe</text><rect x="270" y="52" width="130" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="335" y="69.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">yes</text><text x="420" y="69" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">200, and nothing changed</text><rect x="14" y="102" width="732" height="46" rx="8" style="fill:#8a94a6;fill-opacity:0.05"/><rect x="20" y="110" width="100" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="70" y="127.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">HEAD</text><rect x="150" y="110" width="100" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="200" y="127.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">safe</text><rect x="270" y="110" width="130" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="335" y="127.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">yes</text><text x="420" y="127" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">same headers, no body</text><rect x="14" y="160" width="732" height="46" rx="8" style="fill:#4a9eda;fill-opacity:0.05"/><rect x="20" y="168" width="100" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="70" y="185.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">OPTIONS</text><rect x="150" y="168" width="100" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="200" y="185.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">safe</text><rect x="270" y="168" width="130" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="335" y="185.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">yes</text><text x="420" y="185" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">Allow lists the methods</text><rect x="14" y="218" width="732" height="46" rx="8" style="fill:#8a94a6;fill-opacity:0.05"/><rect x="20" y="226" width="100" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="70" y="243.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">POST</text><rect x="150" y="226" width="100" height="26" rx="13" style="fill:#8a94a6;fill-opacity:.16;stroke:#8a94a6;stroke-width:1.2"/><text x="200" y="243.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">not safe</text><rect x="270" y="226" width="130" height="26" rx="13" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="335" y="243.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">no</text><text x="420" y="243" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">sent twice: authors 4 and 5</text><rect x="14" y="276" width="732" height="46" rx="8" style="fill:#4a9eda;fill-opacity:0.05"/><rect x="20" y="284" width="100" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="70" y="301.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">PUT</text><rect x="150" y="284" width="100" height="26" rx="13" style="fill:#8a94a6;fill-opacity:.16;stroke:#8a94a6;stroke-width:1.2"/><text x="200" y="301.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">not safe</text><rect x="270" y="284" width="130" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="335" y="301.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">yes</text><text x="420" y="301" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">sent twice: the same book</text><rect x="14" y="334" width="732" height="46" rx="8" style="fill:#8a94a6;fill-opacity:0.05"/><rect x="20" y="342" width="100" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="70" y="359.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">PATCH</text><rect x="150" y="342" width="100" height="26" rx="13" style="fill:#8a94a6;fill-opacity:.16;stroke:#8a94a6;stroke-width:1.2"/><text x="200" y="359.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">not safe</text><rect x="270" y="342" width="130" height="26" rx="13" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="335" y="359.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">if it only sets</text><text x="420" y="359" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">DRF sets; JSON Patch can append</text><rect x="14" y="392" width="732" height="46" rx="8" style="fill:#4a9eda;fill-opacity:0.05"/><rect x="20" y="400" width="100" height="26" rx="13" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="70" y="417.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">DELETE</text><rect x="150" y="400" width="100" height="26" rx="13" style="fill:#8a94a6;fill-opacity:.16;stroke:#8a94a6;stroke-width:1.2"/><text x="200" y="417.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">not safe</text><rect x="270" y="400" width="130" height="26" rx="13" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="335" y="417.25" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">yes</text><text x="420" y="417" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">sent twice: 204, then 404</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Each row&#x27;s right-hand column is what §1.5 measured.</figcaption></figure>
 <!-- /fig:drf-methods -->
 
-<p>The rest of this subsection measures each property on the project's books.</p>
+<p>Read the figure's right-hand column as a promise: the rest of this subsection measures each property on the project's books.</p>
 <h3 id="section-0-get-and-head"><code>GET</code> and <code>HEAD</code></h3>
-<p>A <strong><code>GET</code> request</strong> reads. A <strong><code>HEAD</code> request</strong> asks for exactly the response a <code>GET</code> request would get, but without the body. It exists so a client can check whether something exists, how big it is, or whether it has changed, without downloading it:</p>
+<p>A <strong><code>GET</code> request</strong> reads. A <strong><code>HEAD</code> request</strong> asks for exactly the response a <code>GET</code> request would get, but without the body. It exists so a client can check whether something exists, how big it is, or whether it has changed, without downloading it. The example sends one of each for the same book:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1332,9 +1518,16 @@ HEAD /books/9780000000101/ -&gt; 200
 HEAD body bytes: 0
 </code></pre></div>
 
-<p>The headers are the same, including a <code>Content-Length</code> of 104 bytes, the size of the body the <code>GET</code> request received. The <code>HEAD</code> request received no body. Neither view had to do anything for this. DRF answers <code>HEAD</code> by running the <code>GET</code> handler, and the body is removed on the way out, as HTTP requires: here by Django's test client, and in production by the HTTP server.</p>
+<p>Compare the two answers line by line. The headers are the same, including a <code>Content-Length</code> of 104 bytes, the size of the body the <code>GET</code> request received. The <code>HEAD</code> request received no body: <code>HEAD body bytes: 0</code>.</p>
+<p>Neither view had to do anything for this. DRF answers <code>HEAD</code> by running the <code>GET</code> handler, and the body is removed on the way out, as HTTP requires. Here Django's test client removes it; in production, the HTTP server does.</p>
 <h3 id="section-0-options"><code>OPTIONS</code></h3>
-<p>An <strong><code>OPTIONS</code> request</strong> asks what the client may do with a resource. The answer's <code>Allow</code> header lists the methods the resource accepts. DRF adds a body with <strong>metadata</strong>: a name, the formats the view can read and write, and, for a client allowed to write, a description of the fields it may send:</p>
+<p>An <strong><code>OPTIONS</code> request</strong> asks what the client may do with a resource. In the picture, it is asking the clerk "what can I do with this shelf?" before filling in a slip. The answer's <code>Allow</code> header lists the methods the resource accepts. DRF adds a body with <strong>metadata</strong>:</p>
+<ul>
+<li>a name;</li>
+<li>the formats the view can read and write;</li>
+<li>and, for a client allowed to write, a description of the fields it may send.</li>
+</ul>
+<p>The example asks about the collection twice, once anonymously and once as Ana, and then about one book:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1355,10 +1548,16 @@ OPTIONS /books/9780000000101/ -&gt; 200
   {"name":"Book Instance","description":"","renders":["application/json","text/html"],"parses":["application/json","application/x-www-form-urlencoded","multipart/form-data"]}
 </code></pre></div>
 
-<p>The collection allows <code>GET</code>, <code>POST</code>, <code>HEAD</code> and <code>OPTIONS</code>; a single book allows <code>GET</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>, <code>HEAD</code> and <code>OPTIONS</code>. Only Ana, who is logged in and so allowed to create books, was shown <code>actions</code>: the fields a <code>POST</code> takes, which are required, and their limits, such as the ISBN's <code>max_length</code> of 13. A form generator can build a form from that. §17.2 and §17.3 cover metadata and how to change it.</p>
-<p>Browsers also send <code>OPTIONS</code> on their own, as the <strong>preflight</strong> of a cross-origin request: before a page on one site sends, say, a <code>PUT</code> to an API on another, the browser asks with <code>OPTIONS</code> whether the API allows it. §21 covers that, under CORS.</p>
+<p>Read the three answers:</p>
+<ul>
+<li>The collection allows <code>GET</code>, <code>POST</code>, <code>HEAD</code> and <code>OPTIONS</code>.</li>
+<li>A single book allows <code>GET</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code>, <code>HEAD</code> and <code>OPTIONS</code>.</li>
+<li>Only Ana, who is logged in and so allowed to create books, was shown <code>actions</code>: the fields a <code>POST</code> takes, which are required, and their limits, such as the ISBN's <code>max_length</code> of 13. A form generator can build a form from that.</li>
+</ul>
+<p>§17.2 and §17.3 cover metadata and how to change it.</p>
+<p>Browsers also send <code>OPTIONS</code> on their own, as the <strong>preflight</strong> of a cross-origin request. Suppose a page on one site wants to send, say, a <code>PUT</code> to an API on another site. Before sending it, the browser asks the API with <code>OPTIONS</code> whether it allows that. §21 covers this, under CORS.</p>
 <h3 id="section-0-post-is-not-idempotent"><code>POST</code> is not idempotent</h3>
-<p>A <strong><code>POST</code> request</strong> asks the server to process the body it carries. For a collection, that almost always means "add this as a new member". Sending it twice adds two:</p>
+<p>A <strong><code>POST</code> request</strong> asks the server to process the body it carries. For a collection, that almost always means "add this as a new member". So sending it twice adds two. The example sends the same new author twice, then lists the ids of every author with that name:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Author</span>
@@ -1376,10 +1575,11 @@ POST /authors/ -&gt; 201
 [4, 5]
 </code></pre></div>
 
-<p>The same <code>POST</code> request, sent twice, created two authors, 4 and 5. If the first response had been lost and the client had retried, the second author would be a duplicate nobody asked for. That is what "not idempotent" means in practice, and it is the reason a payment form warns you not to press the button twice.</p>
-<p>Books did not behave this way: a second <code>POST</code> of the same book would be refused, because the ISBN is unique. A unique natural key is one defence against duplicate creates; an <strong>idempotency key</strong>, which §1.14 adds to loans, is the general one.</p>
+<p>The same <code>POST</code> request, sent twice, created two authors, 4 and 5. Imagine the first response had been lost on the network, and the client had retried. The second author would be a duplicate nobody asked for. That is what "not idempotent" means in practice, and it is the reason a payment form warns you not to press the button twice.</p>
+<p>Books did not behave this way: a second <code>POST</code> of the same book would be refused, because the ISBN is unique. A unique natural key is one defence against duplicate creates. An <strong>idempotency key</strong>, which §1.14 adds to loans, is the general one. In the picture, it is an order number written on the slip, which the clerk checks against a ledger before doing anything.</p>
 <h3 id="section-0-put-and-delete-are-idempotent"><code>PUT</code> and <code>DELETE</code> are idempotent</h3>
 <p>A <strong><code>PUT</code> request</strong> sends a complete new representation, and the server makes the resource match it. A <strong><code>DELETE</code> request</strong> removes the resource. Both are idempotent: after one request or after five, the resource is in the same state.</p>
+<p>The example sends the same <code>PUT</code> twice, setting Blindness's price to 18.00, and the same <code>DELETE</code> of author 5 twice:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1400,10 +1600,15 @@ DELETE /authors/5/ -&gt; 404
   {"detail":"No Author matches the given query."}
 </code></pre></div>
 
-<p>The two <code>PUT</code>s gave the same answer and left the same book. The two <code>DELETE</code>s left the same state, author 5 gone, but returned different status codes: <code>204 No Content</code> the first time and <code>404 Not Found</code> the second.</p>
+<p>Look at the pairs:</p>
+<ul>
+<li>The two <code>PUT</code>s gave the same answer and left the same book.</li>
+<li>The two <code>DELETE</code>s left the same state, author 5 gone, but returned different status codes: <code>204 No Content</code> the first time and <code>404 Not Found</code> the second.</li>
+</ul>
 <p>That is correct HTTP. Idempotency is about the <em>effect on the server</em>, not about the response. It does matter for clients, though. A client that retries a <code>DELETE</code> after a timeout, and treats <code>404 Not Found</code> as a failure, reports an error for a deletion that worked. So an API should say, in its documentation, what a repeated <code>DELETE</code> returns. The usual answer is "<code>404</code>, which a client that is retrying should treat as success". Some APIs prefer to answer <code>204 No Content</code> every time, by overriding <code>destroy()</code> to catch the <code>404</code> (§7.7).</p>
 <h3 id="section-0-a-get-that-changes-something">A <code>GET</code> that changes something</h3>
-<p>The table's first column is the one that is broken most often, and the consequences are not obvious. Here is a borrowing endpoint written as a <code>GET</code>, because "it is just a link the front end calls":</p>
+<p>The table's first column, "safe", is the one that is broken most often, and the consequences are not obvious. In the picture, this is a "just looking" slip that secretly lends the reader a book.</p>
+<p>Here is a borrowing endpoint written as a <code>GET</code>, because "it is just a link the front end calls". It takes one copy away and returns how many are left:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/rpc.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.decorators</span><span class="w"> </span><span class="kn">import</span> <span class="n">action</span>
@@ -1424,6 +1629,7 @@ DELETE /authors/5/ -&gt; 404
 <span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">"rpc/books/&lt;str:isbn&gt;/borrow/"</span><span class="p">,</span> <span class="n">BorrowByGet</span><span class="o">.</span><span class="n">as_view</span><span class="p">({</span><span class="s2">"get"</span><span class="p">:</span> <span class="s2">"borrow"</span><span class="p">}))]</span>
 </code></pre></div>
 
+<p>The project's URL file includes it, next to the earlier ones:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -1434,7 +1640,7 @@ DELETE /authors/5/ -&gt; 404
 <span class="p">]</span>
 </code></pre></div>
 
-<p>Nobody logs in for this request:</p>
+<p>Nobody logs in for this request. It is sent twice, and then the database is asked how many copies are left:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Book</span>
@@ -1451,11 +1657,10 @@ GET /rpc/books/9780000000301/borrow/ -&gt; 200
 copies left: 1
 </code></pre></div>
 
-<p>An anonymous client took two copies of Blindness. The view's permission, <code>IsAuthenticatedOrReadOnly</code>, did exactly what it says: it lets anyone <em>read</em>, and DRF decides what a read is by the method. <code>GET</code>, <code>HEAD</code> and <code>OPTIONS</code> are DRF's <code>SAFE_METHODS</code> (§11.3). Every permission written as "reads are allowed" trusts the method to be honest.</p>
-<p>It is not only permissions. Everything that handles HTTP trusts a <code>GET</code> to be safe:</p>
-<ul>
-<li><strong>CSRF protection does not check it.</strong> A logged-in browser user can be made to send a <code>GET</code> by any web page they visit, with an <code>&lt;img&gt;</code> tag pointing at the URL, and the browser attaches their session cookie. DRF's session authentication checks the CSRF token only for unsafe methods (§10). The client below logs in with a session and enforces CSRF the way a browser would:</li>
-</ul>
+<p>An anonymous client took two copies of Blindness: 3 became 2, then 1.</p>
+<p>How did nobody stop it? The view's permission, <code>IsAuthenticatedOrReadOnly</code>, did exactly what it says: it lets anyone <em>read</em>. And DRF decides what a read is by the method alone. <code>GET</code>, <code>HEAD</code> and <code>OPTIONS</code> are DRF's <code>SAFE_METHODS</code> (§11.3). Every permission written as "reads are allowed" trusts the method to be honest. The doorman lets anyone through with a "just looking" slip, without reading the rest of it.</p>
+<p>It is not only permissions. Everything that handles HTTP trusts a <code>GET</code> to be safe. First, <strong>CSRF protection does not check it.</strong> CSRF (cross-site request forgery) is an attack in which another web site makes your browser send a request to this one, with your cookies attached. A logged-in browser user can be made to send a <code>GET</code> by any web page they visit, with an <code>&lt;img&gt;</code> tag pointing at the URL, and the browser attaches their session cookie. DRF's session authentication checks the CSRF token only for unsafe methods (§10).</p>
+<p>The client below logs in with a session, and enforces CSRF the way a browser would. It sends one <code>GET</code> to the borrowing URL and one ordinary <code>POST</code> to create a book:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIClient</span>
 
@@ -1471,6 +1676,7 @@ POST: 403 {'detail': 'CSRF Failed: CSRF cookie not set.'}
 </code></pre></div>
 
 <p>The <code>GET</code> went through without any CSRF token and borrowed a copy of Dom Casmurro. The <code>POST</code> was refused for lacking one.</p>
+<p>Three more things trust <code>GET</code>:</p>
 <ul>
 <li><strong>Crawlers and prefetchers follow links.</strong> A search engine, a link preview in a chat app, or a browser preloading a page sends <code>GET</code> to every URL it finds.</li>
 <li><strong>Caches may answer instead of the server</strong>, so a cached <code>GET</code> borrows nothing, and the client believes it borrowed.</li>
@@ -1480,10 +1686,10 @@ POST: 403 {'detail': 'CSRF Failed: CSRF cookie not set.'}
 <h2 id="section-0-16-put-and-patch">1.6 <code>PUT</code> and <code>PATCH</code></h2>
 <p>Both methods change an existing resource. They differ in what the body means:</p>
 <ul>
-<li>A <strong><code>PUT</code> request</strong> says "here is the whole resource; make it this". Its body is a complete representation. RFC 9110 calls it <strong>replacing</strong> the resource's state. A field the body leaves out is, strictly, a field the client wants gone or reset.</li>
-<li>A <strong><code>PATCH</code> request</strong> says "change these parts". It is defined in its own standard, RFC 5789. Its body describes changes, and anything the body does not mention stays as it is.</li>
+<li>A <strong><code>PUT</code> request</strong> says "here is the whole resource; make it this". Its body is a complete representation. RFC 9110 calls it <strong>replacing</strong> the resource's state. A field the body leaves out is, strictly, a field the client wants gone or reset. In the picture, it is handing in a whole new catalogue card.</li>
+<li>A <strong><code>PATCH</code> request</strong> says "change these parts". It is defined in its own standard, RFC 5789. Its body describes changes, and anything the body does not mention stays as it is. In the picture, it is a note saying "correct the number of copies to 4".</li>
 </ul>
-<p>DRF maps them to <code>update()</code> and <code>partial_update()</code>, which differ in one argument: <code>partial_update()</code> builds the serializer with <code>partial=True</code>, so missing fields are not required (§4.7). The difference shows as soon as a field is missing:</p>
+<p>DRF maps them to <code>update()</code> and <code>partial_update()</code>, which differ in one argument. <code>partial_update()</code> builds the serializer with <code>partial=True</code>, so missing fields are not required (§4.7). The difference shows as soon as a field is missing. The example sends a <code>PATCH</code> with only the copies, a <code>PUT</code> with only a price, and a <code>PUT</code> with every field except the copies:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1501,17 +1707,23 @@ PUT /books/9780000000301/ -&gt; 200
   {"id":4,"isbn":"9780000000301","title":"Blindness","author":3,"year":1995,"price":"16.90","copies":4}
 </code></pre></div>
 
-<p>The <code>PATCH</code> changed only the copies. The <code>PUT</code> with only a price was refused: every required field is missing. That much matches the standard.</p>
-<p>The third request is the subtle one. It is a <code>PUT</code> without <code>copies</code>, and the response still says <code>"copies":4</code>, the value the <code>PATCH</code> set. Strictly, a <code>PUT</code> that leaves a field out asks for that field's default, 1. DRF's <code>PUT</code> does not do that. A field that is not required, because the model gives it a default, is simply left out of the validated data, and the update only sets the fields it was given. So in DRF, <strong><code>PUT</code> replaces every field it is sent and keeps the others</strong>.</p>
+<p>Read the three answers:</p>
+<ol>
+<li>The <code>PATCH</code> changed only the copies, to 4.</li>
+<li>The <code>PUT</code> with only a price was refused with <code>400</code>: every required field is missing. That much matches the standard.</li>
+<li>The third request is the subtle one. It is a <code>PUT</code> without <code>copies</code>, and the response still says <code>"copies":4</code>, the value the <code>PATCH</code> set.</li>
+</ol>
+<p>Strictly, a <code>PUT</code> that leaves a field out asks for that field's default, 1. DRF's <code>PUT</code> does not do that. A field that is not required, because the model gives it a default, is simply left out of the validated data, and the update only sets the fields it was given. So in DRF, <strong><code>PUT</code> replaces every field it is sent and keeps the others</strong>.</p>
 <p>That is usually harmless, and it is what most clients expect. It matters in two cases:</p>
 <ul>
 <li><strong>A client that removes a field to reset it</strong> gets the old value back, silently. An API that wants a true replacement must make every writable field required on <code>PUT</code>, or set the defaults itself.</li>
 <li><strong>A client built against an older version of the API</strong> sends a <code>PUT</code> without a field that was added later, and the field keeps its value. That is why adding an optional field does not break old clients, and it is one reason DRF works this way.</li>
 </ul>
 <h3 id="section-0-patch-is-not-necessarily-idempotent"><code>PATCH</code> is not necessarily idempotent</h3>
-<p>The table above says <code>PATCH</code> is not idempotent "in general". A <code>PATCH</code> that sets values, like <code>{"copies": 4}</code>, is idempotent in effect: sending it twice leaves 4 copies. But a <code>PATCH</code> format may also describe operations that are not, such as "add 1 to copies", or "append to this list". <strong>JSON Patch</strong>, RFC 6902, is such a format: <code>[{"op": "add", "path": "/tags/-", "value": "classic"}]</code> appends a tag every time it is sent. DRF's <code>PATCH</code> takes the plain JSON object form, sometimes called a <strong>merge patch</strong> (RFC 7396 defines the standard version), which only sets values. Clients cannot assume that, though, because the standard does not promise it.</p>
+<p>The table above says <code>PATCH</code> is not idempotent "in general". A <code>PATCH</code> that sets values, like <code>{"copies": 4}</code>, is idempotent in effect: sending it twice leaves 4 copies. But a <code>PATCH</code> format may also describe operations that are not idempotent, such as "add 1 to copies", or "append to this list".</p>
+<p><strong>JSON Patch</strong>, RFC 6902, is such a format: <code>[{"op": "add", "path": "/tags/-", "value": "classic"}]</code> appends a tag every time it is sent. DRF's <code>PATCH</code> takes the plain JSON object form, sometimes called a <strong>merge patch</strong> (RFC 7396 defines the standard version), which only sets values. Clients cannot assume that, though, because the standard does not promise it.</p>
 <h3 id="section-0-put-to-a-url-that-does-not-exist-yet"><code>PUT</code> to a URL that does not exist yet</h3>
-<p>RFC 9110 allows <code>PUT</code> to <em>create</em> a resource at the URL the client chose, answering <code>201 Created</code>. That is useful when the client owns the identifier, as it does an ISBN: <code>PUT /books/9780000000999/</code> could mean "make this book exist, with this content", and repeating it would be harmless, unlike <code>POST</code>. DRF does not do this:</p>
+<p>RFC 9110 allows <code>PUT</code> to <em>create</em> a resource at the URL the client chose, answering <code>201 Created</code>. That is useful when the client owns the identifier, as it does an ISBN. <code>PUT /books/9780000000999/</code> could mean "make this book exist, with this content", and repeating it would be harmless, unlike <code>POST</code>. DRF does not do this. Here is a <code>PUT</code> for a book that does not exist yet:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1524,9 +1736,15 @@ PUT /books/9780000000301/ -&gt; 200
   {"detail":"No Book matches the given query."}
 </code></pre></div>
 
-<p><code>UpdateModelMixin.update()</code> calls <code>get_object()</code> first, which raises <code>404</code> for a book that does not exist. Before version 3.0, DRF's mixins did create on <code>PUT</code>. Its documentation explains why the default changed: creating on <code>PUT</code> reveals to any client whether an object exists, and it quietly re-creates objects that were deleted on purpose. Both behaviours are valid HTTP, and the choice is the API's. Exercise 1 writes the creating version and measures that its <code>PUT</code> is idempotent where <code>POST</code> is not.</p>
+<p>The answer is <code>404</code>. <code>UpdateModelMixin.update()</code> calls <code>get_object()</code> first, which raises <code>404</code> for a book that does not exist.</p>
+<p>Before version 3.0, DRF's mixins did create on <code>PUT</code>. Its documentation explains why the default changed:</p>
+<ul>
+<li>creating on <code>PUT</code> reveals to any client whether an object exists;</li>
+<li>and it quietly re-creates objects that were deleted on purpose.</li>
+</ul>
+<p>Both behaviours are valid HTTP, and the choice is the API's. Exercise 1 writes the creating version and measures that its <code>PUT</code> is idempotent where <code>POST</code> is not.</p>
 <h2 id="section-0-17-status-codes">1.7 Status Codes</h2>
-<p>The <strong>status code</strong> is the first thing a client reads in a response: a three-digit number saying what happened. The first digit gives the <strong>class</strong>, and a client that does not recognise a particular code must treat it as the first code of its class, <code>x00</code>. So the class is what matters most:</p>
+<p>The <strong>status code</strong> is the first thing a client reads in a response: a three-digit number saying what happened. It is the stamp on the returned slip. The first digit gives the <strong>class</strong>. A client that does not recognise a particular code must treat it as the first code of its class, <code>x00</code>. So the class is what matters most:</p>
 <ul>
 <li><strong><code>1xx</code> informational</strong>: an interim answer; the real one follows. APIs do not send these themselves.</li>
 <li><strong><code>2xx</code> success</strong>: the request worked.</li>
@@ -1534,7 +1752,12 @@ PUT /books/9780000000301/ -&gt; 200
 <li><strong><code>4xx</code> client error</strong>: the request was wrong, and sending it again unchanged will fail again.</li>
 <li><strong><code>5xx</code> server error</strong>: the request may have been fine; the server failed. Sending it again later may work.</li>
 </ul>
-<p>The line between <code>4xx</code> and <code>5xx</code> is the one to get right. A <code>4xx</code> tells the client to fix its request. A <code>5xx</code> tells it the fault is the server's, and is what monitoring counts as an outage. Answering a client's mistake with a <code>500</code> pages someone at night for nothing; answering a server failure with a <code>400</code> hides an outage.</p>
+<p>The line between <code>4xx</code> and <code>5xx</code> is the one to get right. In the picture, it is the difference between the stamps "your mistake" and "our mistake":</p>
+<ul>
+<li>A <code>4xx</code> tells the client to fix its request.</li>
+<li>A <code>5xx</code> tells it the fault is the server's, and is what monitoring counts as an outage.</li>
+</ul>
+<p>Answering a client's mistake with a <code>500</code> pages someone at night for nothing. Answering a server failure with a <code>400</code> hides an outage.</p>
 <h3 id="section-0-the-codes-an-api-uses">The codes an API uses</h3>
 <p>An API needs about twenty codes. These are the ones to know, with what each promises and when DRF sends it on its own:</p>
 <table>
@@ -1663,7 +1886,11 @@ PUT /books/9780000000301/ -&gt; 200
 </tr>
 </tbody>
 </table>
-<p>The names of <code>401</code> and <code>403</code> are historical accidents. <code>401 Unauthorized</code> really means <em>unauthenticated</em>: the request did not prove who sent it, and the response must carry a <code>WWW-Authenticate</code> header saying how to. <code>403 Forbidden</code> means the server knows who you are, or does not need to, and refuses anyway.</p>
+<p>The names of <code>401</code> and <code>403</code> are historical accidents:</p>
+<ul>
+<li><code>401 Unauthorized</code> really means <em>unauthenticated</em>: the request did not prove who sent it. The response must carry a <code>WWW-Authenticate</code> header saying how to.</li>
+<li><code>403 Forbidden</code> means the server knows who you are, or does not need to, and refuses anyway.</li>
+</ul>
 <h3 id="section-0-what-this-project-returns">What this project returns</h3>
 <p>Each request below gets one of those codes from DRF without any code in the project asking for it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
@@ -1703,7 +1930,7 @@ GET /books/0000000000000/ -&gt; 404
 <li><strong><code>404 Not Found</code></strong> for an ISBN that matches no book.</li>
 </ul>
 <h3 id="section-0-a-500-that-should-be-a-409">A <code>500</code> that should be a <code>409</code></h3>
-<p>One request in the project produces the code an API should never send on purpose. Machado de Assis has books, and a book's author is <code>PROTECT</code>ed:</p>
+<p>One request in the project produces the code an API should never send on purpose. Machado de Assis has books, and a book's author is <code>PROTECT</code>ed. Ana tries to delete the author anyway:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1715,8 +1942,15 @@ GET /books/0000000000000/ -&gt; 404
   (an HTML page)
 </code></pre></div>
 
-<p><code>500 Internal Server Error</code>, with Django's HTML error page: the model refused the deletion by raising <code>ProtectedError</code>, DRF does not know that exception, and nothing caught it. Every part of that answer is wrong. The server did not fail: it correctly refused. The client cannot fix anything, because nothing says why. And a monitoring system now counts an outage.</p>
-<p>The right code is <strong><code>409 Conflict</code></strong>: the request is valid, but it conflicts with the current state of the resource, and the client can resolve the conflict, here by moving or deleting the author's books first. DRF has no exception class for <code>409</code>, but any subclass of <code>APIException</code> with a <code>status_code</code> becomes a response of that code (§15.3):</p>
+<p>The answer is <code>500 Internal Server Error</code>, with Django's HTML error page. Here is what happened: the model refused the deletion by raising <code>ProtectedError</code>, DRF does not know that exception, and nothing caught it.</p>
+<p>Every part of that answer is wrong:</p>
+<ul>
+<li>The server did not fail: it correctly refused.</li>
+<li>The client cannot fix anything, because nothing says why.</li>
+<li>And a monitoring system now counts an outage.</li>
+</ul>
+<p>In the picture, the clerk refused correctly, then stamped the slip "our mistake" and gave no reason.</p>
+<p>The right code is <strong><code>409 Conflict</code></strong>: the request is valid, but it conflicts with the current state of the resource, and the client can resolve the conflict. Here, it could move or delete the author's books first. DRF has no exception class for <code>409</code>. But any subclass of <code>APIException</code> with a <code>status_code</code> becomes a response of that code (§15.3). So the fix is a small exception class, raised when the deletion is refused:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/conflicts.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.db.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProtectedError</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
@@ -1744,6 +1978,7 @@ GET /books/0000000000000/ -&gt; 404
 <span class="p">]</span>
 </code></pre></div>
 
+<p>The project's URL file includes the new module:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -1755,6 +1990,7 @@ GET /books/0000000000000/ -&gt; 404
 <span class="p">]</span>
 </code></pre></div>
 
+<p>Now the same deletion, sent to the new URL, followed by a read of the author:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1769,7 +2005,7 @@ GET /safe/authors/1/ -&gt; 200
   {"id":1,"name":"Machado de Assis"}
 </code></pre></div>
 
-<p>The refusal is now a <code>409</code> that says why, and the author is still there. §15.9 does the same for database constraint errors, project-wide, in an exception handler.</p>
+<p>The refusal is now a <code>409</code> that says why: Machado de Assis still has 2 books. And the <code>GET</code> shows the author is still there. §15.9 does the same for database constraint errors, project-wide, in an exception handler.</p>
 <h3 id="section-0-choosing-a-code">Choosing a code</h3>
 <p>When none of the table's rows obviously fits, three questions settle most cases:</p>
 <ol>
@@ -1777,11 +2013,16 @@ GET /safe/authors/1/ -&gt; 200
 <li><strong>Whose fault is it?</strong> If the client can fix it, <code>4xx</code>. If not, <code>5xx</code>.</li>
 <li><strong>Is there a specific code a client could act on?</strong> <code>401</code> makes a client log in; <code>409</code> makes it re-read and try again; <code>412</code> makes it fetch the latest version; <code>429</code> and <code>503</code> make it wait. Use the specific code when the client should do something specific, and the general one, <code>400</code> or <code>500</code>, otherwise.</li>
 </ol>
-<p>Codes that are rarely right in an API: <code>200 OK</code> with <code>{"error": ...}</code> in the body, which hides failures from every tool that reads status codes; <code>302 Found</code> for anything but a browser; and <code>418 I'm a teapot</code>, which is a joke from an April Fools' RFC.</p>
-<p>DRF names every code in <code>rest_framework.status</code>, so code reads <code>status.HTTP_409_CONFLICT</code> rather than a bare <code>409</code>, along with helpers such as <code>status.is_client_error(code)</code>. §2.9 lists them.</p>
+<p>Some codes are rarely right in an API:</p>
+<ul>
+<li><code>200 OK</code> with <code>{"error": ...}</code> in the body, which hides failures from every tool that reads status codes;</li>
+<li><code>302 Found</code> for anything but a browser;</li>
+<li>and <code>418 I'm a teapot</code>, which is a joke from an April Fools' RFC.</li>
+</ul>
+<p>DRF names every code in <code>rest_framework.status</code>, so code reads <code>status.HTTP_409_CONFLICT</code> rather than a bare <code>409</code>. The module also has helpers such as <code>status.is_client_error(code)</code>. §2.9 lists them.</p>
 <h2 id="section-0-18-201-created-and-the-location-header">1.8 <code>201 Created</code> and the <code>Location</code> Header</h2>
-<p>When a <code>POST</code> creates something, the new resource has a URL the client did not choose. RFC 9110 says a <code>201 Created</code> response should name it in a <strong><code>Location</code> header</strong>, so the client can read the new resource, store a link to it, or hand the link to someone else, without having to work out the URL itself.</p>
-<p>DRF's <code>ModelViewSet</code> answers a successful create with <code>201</code>. Whether it sends <code>Location</code> depends on the serializer:</p>
+<p>When a <code>POST</code> creates something, the new resource has a URL the client did not choose. RFC 9110 says a <code>201 Created</code> response should name it in a <strong><code>Location</code> header</strong>. The client can then read the new resource, store a link to it, or hand the link to someone else, without having to work out the URL itself. In the picture, it is the receipt that comes back with the new item's shelf mark written on it.</p>
+<p>DRF's <code>ModelViewSet</code> answers a successful create with <code>201</code>. Whether it sends <code>Location</code> depends on the serializer. The example creates Quincas Borba, properly this time, with the slash, and asks to see the <code>Location</code> header:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1795,8 +2036,14 @@ GET /safe/authors/1/ -&gt; 200
   {"id":5,"isbn":"9780000000103","title":"Quincas Borba","author":1,"year":1891,"price":"13.50","copies":1}
 </code></pre></div>
 
-<p>No <code>Location</code>. The method that builds the create response's headers, <code>CreateModelMixin.get_success_headers()</code>, looks for a field named <code>url</code> in the response data, the name set by the <code>URL_FIELD_NAME</code> setting, and uses its value as the <code>Location</code>. A serializer with a <code>url</code> field, such as the hyperlinked serializers of §1.13, gets the header for free. Rename the field through <code>URL_FIELD_NAME</code>, to <code>self</code> or <code>href</code> for instance, and both the hyperlinked serializers and <code>get_success_headers()</code> follow the new name, so the header keeps working. The book serializer has <code>id</code> and <code>isbn</code> but no <code>url</code>, so it gets nothing, and the client must build the URL from the ISBN, which ties the client to the server's URL layout.</p>
-<p>The fix is to override <code>get_success_headers()</code> and build the URL with <code>reverse()</code>. DRF's <code>reverse()</code>, given the request, returns an <strong>absolute URL</strong>, with scheme and host, because a client has no base URL to resolve a relative one against (§8.8):</p>
+<p>The answer says <code>Location: None</code>: there is no <code>Location</code> header. Here is why.</p>
+<p>The method that builds the create response's headers is <code>CreateModelMixin.get_success_headers()</code>. It looks for a field named <code>url</code> in the response data, the name set by the <code>URL_FIELD_NAME</code> setting, and uses its value as the <code>Location</code>. So:</p>
+<ul>
+<li>A serializer with a <code>url</code> field, such as the hyperlinked serializers of §1.13, gets the header for free.</li>
+<li>Rename the field through <code>URL_FIELD_NAME</code>, to <code>self</code> or <code>href</code> for instance, and both the hyperlinked serializers and <code>get_success_headers()</code> follow the new name, so the header keeps working.</li>
+<li>The book serializer has <code>id</code> and <code>isbn</code> but no <code>url</code>, so it gets nothing. The client must build the URL from the ISBN, which ties the client to the server's URL layout.</li>
+</ul>
+<p>The fix is to override <code>get_success_headers()</code> and build the URL with <code>reverse()</code>, which turns a URL pattern's name back into a URL. DRF's <code>reverse()</code>, given the request, returns an <strong>absolute URL</strong>, with scheme and host, such as <code>http://testserver/...</code>. A client needs that, because it has no base URL to resolve a relative one against (§8.8):</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/located.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.reverse</span><span class="w"> </span><span class="kn">import</span> <span class="n">reverse</span>
@@ -1815,6 +2062,7 @@ GET /safe/authors/1/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
+<p>The project's URL file includes the new module:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -1827,6 +2075,7 @@ GET /safe/authors/1/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
+<p>Now a create through the new URL. The example then follows the <code>Location</code> it was given, without building any URL itself:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1843,18 +2092,22 @@ GET http://testserver/located/books/9780000000402/ -&gt; 200
   {"id":6,"isbn":"9780000000402","title":"Senhora","author":4,"year":1875,"price":"10.00","copies":1}
 </code></pre></div>
 
-<p>The client followed the <code>Location</code> it was given, without knowing how book URLs are built. The same header also belongs on two other responses: on <code>202 Accepted</code>, pointing at where to check on the queued work (§1.11), and on <code>3xx</code> redirects, where it names the URL to go to (§1.4).</p>
+<p>The client followed the <code>Location</code> it was given, without knowing how book URLs are built. The same header also belongs on two other responses:</p>
+<ul>
+<li>on <code>202 Accepted</code>, pointing at where to check on the queued work (§1.11);</li>
+<li>on <code>3xx</code> redirects, where it names the URL to go to (§1.4).</li>
+</ul>
 <h2 id="section-0-19-error-bodies">1.9 Error Bodies</h2>
-<p>A status code says what kind of failure happened. The body says the details: which field was wrong, which rule was broken, what the client should do. Clients need those details in a form they can read in code, not just show to a person, and they need it to be the same form for every error, so that one piece of client code can handle them all.</p>
+<p>A status code says what kind of failure happened. The body says the details: which field was wrong, which rule was broken, what the client should do. Clients need those details in a form they can read in code, not just show to a person. And they need the same form for every error, so that one piece of client code can handle them all. In the picture, the desk needs one standard refusal form, not a different handwritten note from every clerk.</p>
 <p>DRF's default bodies have three shapes. All three appeared in §1.7:</p>
 <ul>
 <li><strong><code>{"detail": "..."}</code></strong> for errors that are about the request as a whole: <code>403</code>, <code>404</code>, <code>405</code>, <code>406</code>, <code>415</code>, <code>429</code> and the <code>409</code> above.</li>
 <li><strong><code>{"field": ["...", ...], ...}</code></strong> for validation errors: a dictionary keyed by field name, each holding a list of messages. Errors that belong to no single field go under <code>non_field_errors</code>.</li>
 <li><strong>A list</strong>, <code>["..."]</code>, when a view raises a validation error with a list.</li>
 </ul>
-<p>So a client handling DRF's defaults must look for <code>detail</code>, then for field names, then for a list. And none of the three carries a machine-readable code: a client that wants to tell "this ISBN is taken" from "this ISBN is too long" must compare the English message. DRF does attach codes to every error internally (<code>unique</code>, <code>max_length</code>, <code>required</code>); its default exception handler just does not put them in the body (§15.4).</p>
+<p>So a client handling DRF's defaults must look for <code>detail</code>, then for field names, then for a list. And none of the three carries a machine-readable code. A client that wants to tell "this ISBN is taken" from "this ISBN is too long" must compare the English message. DRF does attach codes to every error internally (<code>unique</code>, <code>max_length</code>, <code>required</code>); its default exception handler just does not put them in the body (§15.4).</p>
 <h3 id="section-0-problem-details">Problem details</h3>
-<p><strong>Problem details</strong>, defined in <strong>RFC 9457</strong> (2023, which replaced RFC 7807), is the standard body for HTTP API errors. It is a JSON object with five standard members, all optional, and an API may add its own:</p>
+<p><strong>Problem details</strong>, defined in <strong>RFC 9457</strong> (2023, which replaced RFC 7807), is the standard body for HTTP API errors. It is the standard refusal form. It is a JSON object with five standard members, all optional, and an API may add its own:</p>
 <ul>
 <li><strong><code>type</code></strong>: a URL identifying the kind of problem, which a client can compare against, such as <code>https://api.example.com/problems/no-copies-left</code>.</li>
 <li><strong><code>title</code></strong>: a short, human-readable summary of that kind of problem, the same every time.</li>
@@ -1862,7 +2115,7 @@ GET http://testserver/located/books/9780000000402/ -&gt; 200
 <li><strong><code>detail</code></strong>: an explanation of this particular occurrence.</li>
 <li><strong><code>instance</code></strong>: a URL identifying this particular occurrence, useful for support and logs.</li>
 </ul>
-<p>A problem details body has its own media type, <strong><code>application/problem+json</code></strong>, so a client can tell an error body from a resource body before parsing it. The <code>409</code> from §1.7, as problem details, would look like this:</p>
+<p>A problem details body has its own media type, <strong><code>application/problem+json</code></strong>, so a client can tell an error body from a resource body before parsing it. (A <em>media type</em> is the format name that goes in <code>Content-Type</code>.) The <code>409</code> from §1.7, as problem details, would look like this:</p>
 <div class="highlight" data-lang="json"><pre><span></span><code><span class="p">{</span>
 <span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/problems/author-has-books"</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"The author still has books."</span><span class="p">,</span>
@@ -1873,18 +2126,29 @@ GET http://testserver/located/books/9780000000402/ -&gt; 200
 <span class="p">}</span>
 </code></pre></div>
 
-<p><code>books</code> is an <strong>extension member</strong>, a field this API added for this problem type, so a client can act on the number without parsing the sentence. DRF does not produce problem details by default. §15.7 writes an exception handler that turns every error, including validation errors and the codes DRF attaches to them, into this format, and §15.17 covers a package that does it.</p>
+<p><code>books</code> is an <strong>extension member</strong>, a field this API added for this problem type, so a client can act on the number without parsing the sentence. DRF does not produce problem details by default. §15.7 writes an exception handler that turns every error, including validation errors and the codes DRF attaches to them, into this format. §15.17 covers a package that does it.</p>
 <h3 id="section-0-400-or-422"><code>400</code> or <code>422</code>?</h3>
-<p>Two codes compete for validation errors. <strong><code>400 Bad Request</code></strong> is the general "your request is wrong". <strong><code>422 Unprocessable Content</code></strong> is narrower: the server understood the body, it is well-formed JSON of the right media type, but its content is invalid, such as a negative price or an ISBN that is taken. Some APIs send <code>400</code> for JSON that does not parse and <code>422</code> for JSON that parses but fails validation, which lets a client tell a bug in its encoder from a bad value its user typed.</p>
-<p>DRF sends <code>400</code> for both. Either choice is defensible. What matters is that the API makes one choice, documents it, and sends it everywhere, and §15.7 shows how to switch to <code>422</code> if that is the choice.</p>
-<h2 id="section-0-110-conditional-requests-etag-304-and-412">1.10 Conditional Requests: <code>ETag</code>, <code>304</code> and <code>412</code></h2>
-<p>A client often has a copy of a resource already and only needs to know whether it has changed. And two clients editing the same resource can overwrite each other's work without knowing it. HTTP solves both with one mechanism: <strong>conditional requests</strong>, requests that the server carries out only if a condition about the resource's current state holds.</p>
-<p>The condition is written against a <strong>validator</strong>, a value that changes whenever the resource changes. The usual one is an <strong>entity tag</strong>, sent in the <strong><code>ETag</code></strong> header: an opaque string, often a hash of the representation or a version number. A client stores it with its copy, and sends it back in one of two headers:</p>
+<p>Two codes compete for validation errors:</p>
 <ul>
-<li><strong><code>If-None-Match: "&lt;tag&gt;"</code></strong> on a <code>GET</code> or <code>HEAD</code>: "send the resource only if it no longer matches this tag". If it still matches, the server answers <strong><code>304 Not Modified</code></strong>, with no body, and the client uses its copy.</li>
-<li><strong><code>If-Match: "&lt;tag&gt;"</code></strong> on a <code>PUT</code>, <code>PATCH</code> or <code>DELETE</code>: "do this only if the resource still matches this tag". If it does not, someone changed it since the client read it, and the server answers <strong><code>412 Precondition Failed</code></strong> without doing anything.</li>
+<li><strong><code>400 Bad Request</code></strong> is the general "your request is wrong".</li>
+<li><strong><code>422 Unprocessable Content</code></strong> is narrower. The server understood the body: it is well-formed JSON of the right media type. But its content is invalid, such as a negative price or an ISBN that is taken.</li>
 </ul>
-<p>DRF has no conditional requests of its own. Django does, in the <code>condition()</code> decorator, which takes a function that computes the current tag. Here it is applied to a viewset's <code>dispatch()</code>, so it runs before DRF does anything, for every method. The tag is the first sixteen hex digits of a hash of the book's editable fields:</p>
+<p>Some APIs send <code>400</code> for JSON that does not parse and <code>422</code> for JSON that parses but fails validation. That lets a client tell a bug in its encoder from a bad value its user typed.</p>
+<p>DRF sends <code>400</code> for both. Either choice is defensible. What matters is that the API makes one choice, documents it, and sends it everywhere. §15.7 shows how to switch to <code>422</code> if that is the choice.</p>
+<h2 id="section-0-110-conditional-requests-etag-304-and-412">1.10 Conditional Requests: <code>ETag</code>, <code>304</code> and <code>412</code></h2>
+<p>Two everyday problems share one solution here:</p>
+<ul>
+<li>A client often has a copy of a resource already, and only needs to know whether it has changed.</li>
+<li>Two clients editing the same resource can overwrite each other's work without knowing it.</li>
+</ul>
+<p>HTTP solves both with <strong>conditional requests</strong>: requests that the server carries out only if a condition about the resource's current state holds.</p>
+<p>The condition is written against a <strong>validator</strong>, a value that changes whenever the resource changes. The usual one is an <strong>entity tag</strong>, sent in the <strong><code>ETag</code></strong> header: an opaque string, often a hash of the representation or a version number. (A <em>hash</em> is a short fingerprint computed from data, which changes whenever the data does.) In the picture, the entity tag is the edition number printed on every copy the desk hands out.</p>
+<p>A client stores the tag with its copy, and sends it back in one of two headers:</p>
+<ul>
+<li><strong><code>If-None-Match: "&lt;tag&gt;"</code></strong> on a <code>GET</code> or <code>HEAD</code>: "send the resource only if it no longer matches this tag". If it still matches, the server answers <strong><code>304 Not Modified</code></strong>, with no body, and the client uses its copy. At the desk: "I have edition 7; only give me a new copy if there is a newer one."</li>
+<li><strong><code>If-Match: "&lt;tag&gt;"</code></strong> on a <code>PUT</code>, <code>PATCH</code> or <code>DELETE</code>: "do this only if the resource still matches this tag". If it does not, someone changed it since the client read it, and the server answers <strong><code>412 Precondition Failed</code></strong> without doing anything. At the desk: "make this correction only if the card is still edition 7."</li>
+</ul>
+<p>DRF has no conditional requests of its own. Django does, in the <code>condition()</code> decorator, which takes a function that computes the current tag. Here it is applied to a viewset's <code>dispatch()</code>, the method every request goes through first, so it runs before DRF does anything, for every method. The tag is the first sixteen hex digits of a hash of the book's editable fields:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/conditional.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 
@@ -1913,6 +2177,7 @@ GET http://testserver/located/books/9780000000402/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
+<p>The project's URL file includes it:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -1927,6 +2192,7 @@ GET http://testserver/located/books/9780000000402/ -&gt; 200
 </code></pre></div>
 
 <h3 id="section-0-304-the-copy-is-still-good"><code>304</code>: the copy is still good</h3>
+<p>The client below reads the book once and keeps its tag. Then it asks again, twice, sending the tag back in <code>If-None-Match</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1946,9 +2212,16 @@ HEAD /conditional/books/9780000000101/ -&gt; 304
   ETag: "b3e2da09462f6aa6"
 </code></pre></div>
 
-<p>The second <code>GET</code> sent the tag back and received a <code>304 Not Modified</code> with no body. On a real network that saves the body's bytes and the time to send them. It does not save the server's work: the tag function still read the book from the database. A <code>304 Not Modified</code> is also what caches rely on: they use the same mechanism to <strong>revalidate</strong> a stored response, asking the server whether it is still current instead of downloading it again; §18.10–§18.12 cover conditional requests in depth, including cheaper validators.</p>
+<p>Read the three answers:</p>
+<ol>
+<li>The first <code>GET</code> returned the book, with its tag, <code>"b3e2da09462f6aa6"</code>.</li>
+<li>The second <code>GET</code> sent the tag back and received a <code>304 Not Modified</code> with no body: <code>Content-Length: 0</code>.</li>
+<li>The <code>HEAD</code> with the same tag got the same <code>304</code>.</li>
+</ol>
+<p>On a real network that saves the body's bytes and the time to send them. It does not save the server's work: the tag function still read the book from the database.</p>
+<p>A <code>304 Not Modified</code> is also what caches rely on. They use the same mechanism to <strong>revalidate</strong> a stored response: they ask the server whether it is still current, instead of downloading it again. §18.10–§18.12 cover conditional requests in depth, including cheaper validators.</p>
 <h3 id="section-0-412-the-lost-update"><code>412</code>: the lost update</h3>
-<p>Ana and Ben both read Dom Casmurro and receive the same tag. Ana changes the number of copies, sending the tag in <code>If-Match</code>. Then Ben, still holding the old tag, changes the price:</p>
+<p>Now the second problem. Ana and Ben both read Dom Casmurro and receive the same tag. Ana changes the number of copies, sending the tag in <code>If-Match</code>. Then Ben, still holding the old tag, changes the price. A last <code>GET</code> sends the old tag in <code>If-None-Match</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1974,12 +2247,22 @@ GET /conditional/books/9780000000101/ -&gt; 200
   {"id":1,"isbn":"9780000000101","title":"Dom Casmurro","author":1,"year":1899,"price":"12.50","copies":3}
 </code></pre></div>
 
-<p>Ana's change went through. Ben's was refused with <code>412</code>, because the book no longer matched the version Ben had read. Ben's client should fetch the book again, show the new state, and let Ben decide. The last <code>GET</code>, sending the old tag, received the book in full with a new tag, because it had changed.</p>
+<p>Read it step by step:</p>
+<ol>
+<li>Ana's change went through: the copies are now 3.</li>
+<li>Ben's was refused with <code>412</code>, because the book no longer matched the version Ben had read. Ben's client should fetch the book again, show the new state, and let Ben decide.</li>
+<li>The last <code>GET</code>, sending the old tag, received the book in full with a new tag, <code>"37731ad8494db30e"</code>, because it had changed.</li>
+</ol>
 <!-- fig:drf-lostupdate -->
 <figure id="fig-drf-lostupdate" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 760 520" role="img" aria-labelledby="t-drf-lostupdate d-drf-lostupdate" style="display:block;width:100%;min-width:540px;height:auto;max-width:760px;margin:0 auto"><title id="t-drf-lostupdate">If-Match turns a lost update into a 412</title><desc id="d-drf-lostupdate">Ana and Ben both read Dom Casmurro and hold the same entity tag. Ana sends a PATCH with that tag in If-Match; it matches, the change is saved, and the book now has a new tag. Ben sends a PATCH with the old tag; it no longer matches, and the server answers 412 Precondition Failed without changing anything. Ben must read the book again. Without If-Match, Ben&#x27;s PATCH would have been saved over a change Ben never saw.</desc><defs><marker id="ah-drf-lostupdate" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><rect x="20" y="20" width="340" height="480" rx="14" style="fill:none;stroke:#8a94a6;stroke-width:1.4" stroke-dasharray="6 5"/><text x="34" y="40" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#8a94a6;opacity:1">ANA</text><rect x="400" y="20" width="340" height="480" rx="14" style="fill:none;stroke:#8a94a6;stroke-width:1.4" stroke-dasharray="6 5"/><text x="414" y="40" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:#8a94a6;opacity:1">BEN</text><rect x="40" y="64" width="300" height="70" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="190" y="93.5875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">GET the book</text><text x="190" y="113.838" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">ETag: tag A</text><rect x="420" y="64" width="300" height="70" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="570" y="93.5875" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">GET the book</text><text x="570" y="113.838" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">ETag: tag A</text><path d="M190,138 L190,172" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-drf-lostupdate)"/><rect x="40" y="176" width="300" height="70" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="190" y="205.588" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">PATCH copies: 3</text><text x="190" y="225.838" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">If-Match: tag A</text><path d="M190,250 L190,284" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-drf-lostupdate)"/><rect x="40" y="288" width="300" height="70" rx="10" style="fill:#35b37e;fill-opacity:0.13;stroke:#35b37e;stroke-width:1.6"/><text x="190" y="317.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">200: saved</text><text x="190" y="337.837" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">the book now has tag B</text><path d="M570,138 L570,284" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" stroke-dasharray="6 5" marker-end="url(#ah-drf-lostupdate)"/><text x="580" y="214" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">after Ana</text><rect x="420" y="288" width="300" height="70" rx="10" style="fill:#4a9eda;fill-opacity:0.13;stroke:#4a9eda;stroke-width:1.6"/><text x="570" y="317.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">PATCH price: 13.00</text><text x="570" y="337.837" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">If-Match: tag A</text><path d="M570,362 L570,396" style="fill:none;stroke:var(--text-dim);stroke-width:1.6" marker-end="url(#ah-drf-lostupdate)"/><rect x="420" y="400" width="300" height="74" rx="10" style="fill:#cf4b6c;fill-opacity:0.13;stroke:#cf4b6c;stroke-width:1.6"/><text x="570" y="431.587" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;font-weight:650;fill:var(--text);opacity:1">412 Precondition Failed</text><text x="570" y="451.837" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">nothing changed: read it again</text><text x="190" y="430" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">without If-Match, Ben&#x27;s</text><text x="190" y="450" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">change would overwrite Ana&#x27;s</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">The requests measured in §1.10.</figcaption></figure>
 <!-- /fig:drf-lostupdate -->
 
-<p>Without <code>If-Match</code>, nothing protects Ben's change from overwriting a change Ben never saw. This is the <strong>lost update</strong>: two clients read, both write, and the second write silently discards the first. With <code>PATCH</code>, only the fields Ben sends are written, so Ana's change to the copies survives and the loss is limited to fields both of them edited. With <code>PUT</code>, which sends every field, Ben's request would set the copies back to the number Ben read, undoing Ana's change completely. The same request without the header goes through:</p>
+<p>Without <code>If-Match</code>, nothing protects Ben's change from overwriting a change Ben never saw. This is the <strong>lost update</strong>: two clients read, both write, and the second write silently discards the first. How much is lost depends on the method:</p>
+<ul>
+<li>With <code>PATCH</code>, only the fields Ben sends are written. So Ana's change to the copies survives, and the loss is limited to fields both of them edited.</li>
+<li>With <code>PUT</code>, which sends every field, Ben's request would set the copies back to the number Ben read, undoing Ana's change completely.</li>
+</ul>
+<p>The same request without the header goes through:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -1991,6 +2274,7 @@ GET /conditional/books/9780000000101/ -&gt; 200
   {"id":1,"isbn":"9780000000101","title":"Dom Casmurro","author":1,"year":1899,"price":"13.00","copies":3}
 </code></pre></div>
 
+<p>Ben's price is saved, on top of a version of the book Ben never saw. Here it did no harm, because Ben changed only the price. With a <code>PUT</code>, Ana's copies would now be gone.</p>
 <p>Four details from the output above matter in practice:</p>
 <ul>
 <li><strong>Django's <code>412</code> has no body</strong>, and its <code>Content-Type</code> is HTML. The decorator answered before DRF ran, so DRF's error format, and any problem details handler, never saw it.</li>
@@ -1998,10 +2282,10 @@ GET /conditional/books/9780000000101/ -&gt; 200
 <li><strong>The check runs before authentication.</strong> The decorator runs before DRF's <code>initial()</code>, so an anonymous client sending a wrong tag gets <code>412</code>, not <code>401</code> or <code>403</code>. The tag function must therefore reveal nothing an anonymous client may not know.</li>
 <li><strong>Nothing requires the header.</strong> A client that does not send <code>If-Match</code> is not protected. An API that wants every write protected answers such a request with <strong><code>428 Precondition Required</code></strong>, defined in RFC 6585.</li>
 </ul>
-<p>Exercise 2 fixes the last three: it returns the new tag after a write and requires <code>If-Match</code>. A version column checked inside the update, which closes the gap between the tag check and the write, is optimistic locking, covered in Django Mastery §7.13 and used again in §18.14. Django Mastery §7.9 measures the lost update itself, inside one server.</p>
+<p>Exercise 2 fixes the last three: it returns the new tag after a write and requires <code>If-Match</code>. There is still a tiny gap between checking the tag and writing the row. A version column checked inside the update itself closes it; that is optimistic locking, covered in Django Mastery §7.13 and used again in §18.14. Django Mastery §7.9 measures the lost update itself, inside one server.</p>
 <h2 id="section-0-111-work-that-takes-time-202-accepted">1.11 Work That Takes Time: <code>202 Accepted</code></h2>
-<p>Some requests ask for work that takes longer than a client should wait: producing a report, sending a thousand emails, converting a video. Holding the connection open for minutes ties up a server process and fails as soon as anything in between, such as a load balancer, gives up waiting, often after 30 or 60 seconds.</p>
-<p>The HTTP answer is <strong><code>202 Accepted</code></strong>: "the request has been accepted for processing, but the processing has not been completed". The work becomes a resource of its own, a <strong>job</strong>, and the response's <code>Location</code> header tells the client where to check on it. The client then asks that URL until the job is done, which is called <strong>polling</strong>.</p>
+<p>Some requests ask for work that takes longer than a client should wait: producing a report, sending a thousand emails, converting a video. Holding the connection open for minutes ties up a server process. It also fails as soon as anything in between, such as a load balancer, gives up waiting, often after 30 or 60 seconds.</p>
+<p>The HTTP answer is <strong><code>202 Accepted</code></strong>: "the request has been accepted for processing, but the processing has not been completed". In the picture, it is a claim ticket: "your copy of the catalogue will be ready later; ask at counter 5". The work becomes a resource of its own, a <strong>job</strong>, and the response's <code>Location</code> header tells the client where to check on it. The client then asks that URL until the job is done, which is called <strong>polling</strong>.</p>
 <p>The project's exports work this way. Creating one queues it; a worker runs it later:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/exports.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
@@ -2053,6 +2337,7 @@ GET /conditional/books/9780000000101/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
+<p>The project's URL file includes the exports:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -2067,7 +2352,7 @@ GET /conditional/books/9780000000101/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
-<p><code>run_exports()</code> stands in for a background worker: a separate process that picks up queued jobs. Here it is called by hand between two requests, so the output shows each state:</p>
+<p><code>run_exports()</code> stands in for a background worker: a separate process that picks up queued jobs. Here it is called by hand between two requests, so the output shows each state. Ana asks for an export, checks on it, Ben tries to look at it, the worker runs, and Ana checks again:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.exports</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_exports</span>
@@ -2098,13 +2383,13 @@ GET /exports/1/ -&gt; 200
 <p>The sequence a client sees:</p>
 <ol>
 <li><strong><code>POST /exports/</code> returns <code>202</code></strong> at once, with the job's URL in <code>Location</code> and its state, <code>queued</code>, in the body.</li>
-<li><strong><code>GET</code> on the job returns <code>200</code> with <code>"state":"queued"</code></strong>, and a <strong><code>Retry-After</code></strong> header suggesting how many seconds to wait before asking again. A well-behaved client waits that long, so a thousand clients polling do not become a thousand requests a second.</li>
+<li><strong><code>GET</code> on the job returns <code>200</code> with <code>"state":"queued"</code></strong>, and a <strong><code>Retry-After</code></strong> header suggesting how many seconds to wait before asking again: "come back in 5 seconds". A well-behaved client waits that long, so a thousand clients polling do not become a thousand requests a second.</li>
 <li><strong>Ben cannot see Ana's export</strong>: the queryset is filtered by the requesting user, so the job is a <code>404</code> for anyone else. A job's URL is a resource like any other, and it needs the same permission thinking (§11).</li>
-<li><strong>When the worker has finished</strong>, the job says <code>done</code>, carries its result, and stops asking the client to wait.</li>
+<li><strong>When the worker has finished</strong>, the job says <code>done</code>, carries its result, and stops asking the client to wait. Its result is 6 rows: the six books in the catalogue by now.</li>
 </ol>
-<p>A job resource can also be cancelled with <code>DELETE</code>, and its result can be a link to another resource, such as a download, rather than the data itself. Polling is the simplest way to report completion. The alternatives, a <strong>webhook</strong> (the server calls a URL the client registered) or a streaming connection, are covered with real background workers in §19.7, §19.11 and §19.12.</p>
+<p>A job resource can also be cancelled with <code>DELETE</code>, and its result can be a link to another resource, such as a download, rather than the data itself. Polling is the simplest way to report completion. There are two alternatives: a <strong>webhook</strong> (the server calls a URL the client registered) or a streaming connection. They are covered with real background workers in §19.7, §19.11 and §19.12.</p>
 <h2 id="section-0-112-representations-what-the-json-looks-like">1.12 Representations: What the JSON Looks Like</h2>
-<p>A representation is a promise. Once a client parses <code>"price":"12.50"</code>, the API cannot change it to <code>12.5</code> without breaking that client. So the format of every value deserves a decision before the first release, not after. DRF's defaults are reasonable, and most of them are the result of exactly these decisions:</p>
+<p>A representation is a promise. Once a client parses <code>"price":"12.50"</code>, the API cannot change it to <code>12.5</code> without breaking that client. So the format of every value deserves a decision before the first release, not after. DRF's defaults are reasonable, and most of them are the result of exactly these decisions. The example below prints one value of each common kind:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">UTC</span><span class="p">,</span> <span class="n">date</span><span class="p">,</span> <span class="n">datetime</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span>
@@ -2140,12 +2425,12 @@ GET /exports/1/ -&gt; 200
 
 <p>Each value shows one convention:</p>
 <ul>
-<li><strong>Decimals are strings</strong>, padded to their <code>decimal_places</code>: <code>"12.50"</code>. A JSON number is read by most clients, JavaScript included, as a binary floating-point number, which cannot hold 0.1 exactly, and money must not drift. The <code>COERCE_DECIMAL_TO_STRING</code> setting, on by default, controls it for the whole API, and a field's <code>coerce_to_string</code> argument overrides it: <code>price_as_number</code> came out as the number <code>12.5</code>, with the padding gone too. Turning <code>COERCE_DECIMAL_TO_STRING</code> off is a breaking change for every client that reads a price (§3, §4).</li>
-<li><strong>Dates and times are ISO 8601 strings</strong>: <code>"2026-10-26"</code> for a date, <code>"2026-10-12T09:30:00Z"</code> for a moment, with <code>Z</code> meaning UTC. A date-time without an offset is ambiguous, because the client cannot know which time zone it is in, so send times in UTC with the offset and let the client convert for display.</li>
+<li><strong>Decimals are strings</strong>, padded to their <code>decimal_places</code>: <code>"12.50"</code>. Most clients, JavaScript included, read a JSON number as a binary floating-point number. That kind of number cannot hold 0.1 exactly, and money must not drift. The <code>COERCE_DECIMAL_TO_STRING</code> setting, on by default, controls it for the whole API, and a field's <code>coerce_to_string</code> argument overrides it: <code>price_as_number</code> came out as the number <code>12.5</code>, with the padding gone too. Turning <code>COERCE_DECIMAL_TO_STRING</code> off is a breaking change for every client that reads a price (§3, §4).</li>
+<li><strong>Dates and times are ISO 8601 strings</strong>: <code>"2026-10-26"</code> for a date, <code>"2026-10-12T09:30:00Z"</code> for a moment, with <code>Z</code> meaning UTC. (ISO 8601 is the international standard way of writing dates, year first.) A date-time without an offset is ambiguous, because the client cannot know which time zone it is in. So send times in UTC with the offset, and let the client convert for display.</li>
 <li><strong>Missing values are <code>null</code></strong>, and the key is still present. A client can then rely on every key being there. Whether a key may be absent is a separate decision; DRF includes every declared field.</li>
-<li><strong>Very large integers lose precision.</strong> <code>2**53 + 1</code> is 9007199254740993, which is what the JSON says, but a JavaScript client parses every number as a 64-bit float, which holds integers exactly only up to 2<sup>53</sup>, and reads it as 9007199254740992. IDs from some databases and services exceed that. DRF's <code>BigIntegerField</code> can send them as strings instead, as <code>big_as_text</code> shows. It does so for every field of that type when the <code>COERCE_BIGINT_TO_STRING</code> setting is on; the setting is off by default. Since Django 6.0, new models get <code>BigAutoField</code> primary keys, which <code>ModelSerializer</code> maps to <code>BigIntegerField</code>, so turning the setting on turns every id into a string (§3).</li>
+<li><strong>Very large integers lose precision.</strong> <code>2**53 + 1</code> is 9007199254740993, which is what the JSON says. But a JavaScript client parses every number as a 64-bit float, which holds integers exactly only up to 2<sup>53</sup>, and reads it as 9007199254740992: one less. IDs from some databases and services exceed that. DRF's <code>BigIntegerField</code> can send them as strings instead, as <code>big_as_text</code> shows. It does so for every field of that type when the <code>COERCE_BIGINT_TO_STRING</code> setting is on; the setting is off by default. Since Django 6.0, new models get <code>BigAutoField</code> primary keys, which <code>ModelSerializer</code> maps to <code>BigIntegerField</code>, so turning the setting on turns every id into a string (§3).</li>
 </ul>
-<p>The decisions DRF leaves to the API:</p>
+<p>Some decisions DRF leaves to the API:</p>
 <ul>
 <li><strong>Field names.</strong> DRF uses the serializer's field names, which come from Python and are <code>snake_case</code>. JavaScript clients often expect <code>camelCase</code>. Either works; mixing them does not. A third-party package can translate at the parser and renderer, but most DRF APIs keep <code>snake_case</code>.</li>
 <li><strong>Enumerations as strings.</strong> <code>"state":"queued"</code> reads well and survives reordering. A number such as <code>"state":1</code> means nothing in a log.</li>
@@ -2154,18 +2439,23 @@ GET /exports/1/ -&gt; 200
 <li><strong>One representation per resource.</strong> A book should look the same in a list, in a detail response, and nested inside a loan, or clients will need three parsers. Where a list must be smaller, make it a documented subset.</li>
 </ul>
 <h2 id="section-0-113-hypermedia-hateoas-and-the-richardson-maturity-model">1.13 Hypermedia, HATEOAS and the Richardson Maturity Model</h2>
-<p><strong>Hypermedia</strong> means representations that contain links: the client finds the next thing it can do in the response, rather than knowing the URL in advance. That is how people use the web. Nobody types the URL of a product page; they follow a link from a search result. The fourth part of Fielding's uniform interface, <strong>HATEOAS</strong>, asks the same of API clients, and it is the part most APIs that call themselves RESTful leave out.</p>
+<p><strong>Hypermedia</strong> means representations that contain links. The client finds the next thing it can do in the response, rather than knowing the URL in advance. That is how people use the web. Nobody types the URL of a product page; they follow a link from a search result. In the picture, it is a catalogue card with "see also" references printed on it, each giving another shelf mark. The fourth part of Fielding's uniform interface, <strong>HATEOAS</strong>, asks the same of API clients, and it is the part most APIs that call themselves RESTful leave out.</p>
 <h3 id="section-0-the-richardson-maturity-model">The Richardson Maturity Model</h3>
 <p>Leonard Richardson described, in a 2008 talk, four levels that HTTP APIs reach on the way to REST. Martin Fowler's 2010 article "Richardson Maturity Model" made them the standard way to describe how RESTful an API is. Each level adds one of REST's ideas. Here is borrowing a book at each level:</p>
 <ul>
-<li><strong>Level 0: one URL, one method.</strong> Every request is a <code>POST</code> to one endpoint, with the operation named in the body: <code>POST /api/</code> with <code>{"action": "borrow", "isbn": "9780000000101"}</code>. HTTP is only a transport, and every answer is <code>200</code>, with success or failure in the body. Fowler called this "the swamp of POX", plain old XML. SOAP and JSON-RPC APIs work this way.</li>
-<li><strong>Level 1: resources.</strong> Each thing has its own URL, <code>/books/9780000000101/</code>, but requests are still all <code>POST</code>, with the operation in the body.</li>
+<li><strong>Level 0: one URL, one method.</strong> Every request is a <code>POST</code> to one endpoint, with the operation named in the body: <code>POST /api/</code> with <code>{"action": "borrow", "isbn": "9780000000101"}</code>. HTTP is only a transport, and every answer is <code>200</code>, with success or failure in the body. Fowler called this "the swamp of POX", plain old XML. SOAP and JSON-RPC APIs work this way. In the picture: one slot in the wall, and every slip is a free-form letter.</li>
+<li><strong>Level 1: resources.</strong> Each thing has its own URL, <code>/books/9780000000101/</code>, but requests are still all <code>POST</code>, with the operation in the body. Now every slip names a shelf mark, but there are no boxes to tick.</li>
 <li><strong>Level 2: methods and status codes.</strong> <code>GET</code> reads, <code>POST</code> creates, <code>PUT</code>, <code>PATCH</code> and <code>DELETE</code> change and remove, and the status code says what happened. Caches, retries and permissions can now rely on the method (§1.5). This is the level DRF's generic views and routers build by default, and the level most "REST" APIs actually are.</li>
 <li><strong>Level 3: hypermedia controls.</strong> Responses link to related resources and to what can be done next, and the client follows links instead of building URLs.</li>
 </ul>
 <p>Fielding's own position, in a 2008 article titled "REST APIs must be hypertext-driven", is that only level 3 is REST. The model is useful less as a grade than as a vocabulary: "it is a level 2 API" says precisely what a client can and cannot assume.</p>
 <h3 id="section-0-a-hyperlinked-api-in-drf">A hyperlinked API in DRF</h3>
-<p>DRF supports hypermedia through <strong>hyperlinked serializers</strong>, which represent the object itself and its relations as URLs (§5.7), and through <code>DefaultRouter</code>'s <strong>API root</strong>, a resource at <code>/</code> that links to every collection. This module serves the same books and authors with links, under <code>/linked/</code>:</p>
+<p>DRF supports hypermedia in two ways:</p>
+<ul>
+<li><strong>hyperlinked serializers</strong>, which represent the object itself and its relations as URLs (§5.7);</li>
+<li><code>DefaultRouter</code>'s <strong>API root</strong>, a resource at <code>/</code> that links to every collection.</li>
+</ul>
+<p>This module serves the same books and authors with links, under <code>/linked/</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># api/linked.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">permissions</span><span class="p">,</span> <span class="n">serializers</span><span class="p">,</span> <span class="n">viewsets</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.routers</span><span class="w"> </span><span class="kn">import</span> <span class="n">DefaultRouter</span>
@@ -2212,6 +2502,7 @@ GET /exports/1/ -&gt; 200
 <span class="n">urlpatterns</span> <span class="o">=</span> <span class="n">router</span><span class="o">.</span><span class="n">urls</span>
 </code></pre></div>
 
+<p>The project's URL file mounts it under <code>linked/</code>:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -2227,6 +2518,7 @@ GET /exports/1/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
+<p>Now four requests: the root, one book, one author, and a create that sends the author as a link:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -2249,9 +2541,15 @@ POST /linked/books/ -&gt; 201
   {"url":"http://testserver/linked/books/9780000000401/","isbn":"9780000000401","title":"Iracema","author":"http://testserver/linked/authors/4/","year":1865,"price":"9.90","copies":1}
 </code></pre></div>
 
-<p>Every relation is now a URL. The root links to the two collections; the book links to itself and to its author; the author links to the author's books. A client writing a book sends the author as a URL too. And because the book now has a <code>url</code> field, the <code>201</code> carries a <code>Location</code> header without any extra code (§1.8).</p>
+<p>Every relation is now a URL. Read the four answers:</p>
+<ul>
+<li>The root links to the two collections.</li>
+<li>The book links to itself, in <code>url</code>, and to its author.</li>
+<li>The author links to the author's books.</li>
+<li>A client writing a book sends the author as a URL too. And because the book now has a <code>url</code> field, the <code>201</code> carries a <code>Location</code> header without any extra code (§1.8).</li>
+</ul>
 <h3 id="section-0-a-client-that-follows-links">A client that follows links</h3>
-<p>The payoff is a client that needs to know only one URL, the root. This one finds the author of Blindness without building a single URL from parts:</p>
+<p>The payoff is a client that needs to know only one URL, the root. This one finds the author of Blindness without building a single URL from parts. It reads the root, follows the link to the books, picks Blindness, and follows its author link:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIClient</span>
 
@@ -2268,7 +2566,7 @@ POST /linked/books/ -&gt; 201
 
 <p>If the server moved books to <code>/catalogue/items/</code>, this client would keep working, because it reads every URL from a response. A client that builds <code>f"/books/{isbn}/"</code> would break.</p>
 <h3 id="section-0-what-the-links-cost-and-where-they-come-from">What the links cost, and where they come from</h3>
-<p>Links are not free. Two measurements, the list as ids and the same list as links, and the same book requested through a different host name:</p>
+<p>Links are not free. The example takes two measurements. First, the size of the list as ids and the same list as links. Second, the same book requested through a different host name:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.test</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIClient</span>
@@ -2285,10 +2583,11 @@ GET /linked/books/9780000000301/ -&gt; 200
   {"url":"http://api.example.com/linked/books/9780000000301/","isbn":"9780000000301","title":"Blindness","author":"http://api.example.com/linked/authors/3/","year":1995,"price":"16.90","copies":4}
 </code></pre></div>
 
+<p>The list with links is 1337 bytes against 756 for the same books with ids. Three costs follow from that output:</p>
 <ul>
 <li><strong>Size.</strong> The linked list is far larger than the plain one, for the same books. Compression on the wire shrinks repeated URLs well, but every client still parses them.</li>
 <li><strong>Work.</strong> Each link is a <code>reverse()</code> call on the server, one per object per relation. A list of a hundred books with an author link each is two hundred reversals.</li>
-<li><strong>The host comes from the request.</strong> The links say <code>api.example.com</code> because the request said so in its <code>Host</code> header, and the scheme, <code>http</code> or <code>https</code>, comes from the request too. Behind a proxy that terminates TLS, links say <code>http://</code> unless Django is told to trust the proxy's header, so this needs the deployment settings of §14.3 and §21. And <code>ALLOWED_HOSTS</code> matters: Django refuses a <code>Host</code> it does not list, which stops an attacker from making the API hand out links to their own server.</li>
+<li><strong>The host comes from the request.</strong> The links say <code>api.example.com</code> because the request said so in its <code>Host</code> header, and the scheme, <code>http</code> or <code>https</code>, comes from the request too. Behind a proxy that terminates TLS (the encryption behind <code>https</code>), links say <code>http://</code> unless Django is told to trust the proxy's header, so this needs the deployment settings of §14.3 and §21. And <code>ALLOWED_HOSTS</code> matters: Django refuses a <code>Host</code> it does not list, which stops an attacker from making the API hand out links to their own server.</li>
 </ul>
 <h3 id="section-0-is-it-worth-it">Is it worth it?</h3>
 <p>Full HATEOAS, where a client discovers every operation from links and forms, is rare in practice. Clients are written by people reading documentation, against a known set of operations; a link does not tell them what the operation means. But several uses of links pay for themselves in almost every API:</p>
@@ -2298,9 +2597,14 @@ GET /linked/books/9780000000301/ -&gt; 200
 <li><strong>A <code>url</code> for each object</strong>, so a client can store and share a reference that keeps working.</li>
 <li><strong>Links to related collections</strong> that would otherwise need URL building, such as an author's books.</li>
 </ul>
-<p>A reasonable default for a DRF API is therefore level 2 with these links: ids for references inside the body, where they are compact and easy to compare, and URLs where the client's next request is going to be. This course's examples mostly use primary keys for exactly that reason.</p>
+<p>A reasonable default for a DRF API is therefore level 2 with these links:</p>
+<ul>
+<li>ids for references inside the body, where they are compact and easy to compare;</li>
+<li>and URLs where the client's next request is going to be.</li>
+</ul>
+<p>This course's examples mostly use primary keys for exactly that reason.</p>
 <h2 id="section-0-114-designing-an-operation-that-is-not-crud-borrowing-a-book">1.14 Designing an Operation That Is Not CRUD: Borrowing a Book</h2>
-<p>The pieces of this section come together when an operation is not obviously "create, read, update or delete". Borrowing a book is such an operation. §1.5 showed the wrong way, a <code>GET</code> that changes things. This subsection designs it properly, one decision at a time:</p>
+<p><em>CRUD</em> stands for create, read, update and delete, the four plain things you can do to data. The pieces of this section come together when an operation is not obviously one of those. Borrowing a book is such an operation. §1.5 showed the wrong way, a <code>GET</code> that changes things. This subsection designs it properly, one decision at a time:</p>
 <ol>
 <li><strong>What is the resource?</strong> Borrowing creates something a reader and the library both care about afterwards: a loan, with a due date. So the operation is "create a loan", <code>POST /loans/</code>, and the loan gets its own URL.</li>
 <li><strong>What does success return?</strong> <code>201 Created</code>, a <code>Location</code> header pointing at the loan, and the loan itself.</li>
@@ -2366,6 +2670,7 @@ GET /linked/books/9780000000301/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
+<p>The project's URL file includes the loans:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># config/urls.py</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 
@@ -2382,8 +2687,13 @@ GET /linked/books/9780000000301/ -&gt; 200
 <span class="p">]</span>
 </code></pre></div>
 
-<p>The view has no <code>destroy()</code>, so <code>DELETE</code> is not offered at all. The count of open loans and the new loan are in one transaction, with the book's row locked by <code>select_for_update()</code>, so two readers asking for the last copy at the same moment cannot both get it: the second waits for the first, then sees no free copy. Django Mastery §7.11 measures that race.</p>
-<p>The Hour of the Star has one copy. Ana borrows it, Ben tries, and then Ana returns it:</p>
+<p>Three details in the view carry the design:</p>
+<ul>
+<li>The view has no <code>destroy()</code>, so <code>DELETE</code> is not offered at all.</li>
+<li>The count of open loans and the new loan are in one transaction, a group of database changes that succeed or fail together.</li>
+<li>The book's row is locked by <code>select_for_update()</code>, so two readers asking for the last copy at the same moment cannot both get it: the second waits for the first, then sees no free copy. Django Mastery §7.11 measures that race.</li>
+</ul>
+<p>The Hour of the Star has one copy. Ana borrows it, Ben tries, Ben asks for a book that does not exist, and then Ana returns it, twice. Ben tries to touch Ana's loan, Ana tries to delete it, and finally Ben borrows the returned copy:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 
@@ -2419,9 +2729,18 @@ POST /loans/ -&gt; 201
   {"url":"http://testserver/loans/2/","id":2,"book":"9780000000201","due":"2026-10-26","returned":false}
 </code></pre></div>
 
-<p>Each line is one of the decisions above: <code>201</code> with a <code>Location</code>; <code>409</code> with the reason; <code>400</code> on the <code>book</code> field for an ISBN that matches nothing; returning twice, both <code>200</code> with the same state; <code>404</code> for Ben, who cannot see Ana's loan; <code>405</code> for <code>DELETE</code>, with an <code>Allow</code> header listing what a loan does accept; and, once the copy is back, Ben's loan.</p>
+<p>Each line is one of the decisions above:</p>
+<ol>
+<li><code>201</code> with a <code>Location</code> for Ana's loan.</li>
+<li><code>409</code> with the reason, for Ben: no copy is free.</li>
+<li><code>400</code> on the <code>book</code> field for an ISBN that matches nothing.</li>
+<li>Returning twice: both <code>200</code> with the same state.</li>
+<li><code>404</code> for Ben, who cannot see Ana's loan.</li>
+<li><code>405</code> for <code>DELETE</code>, with an <code>Allow</code> header listing what a loan does accept.</li>
+<li>And, once the copy is back, Ben's loan.</li>
+</ol>
 <h3 id="section-0-retries-and-the-idempotency-key">Retries and the idempotency key</h3>
-<p><code>POST</code> is not idempotent, so a client that retries a borrow after a timeout borrows twice. Ben's first two requests below are the same borrow, sent twice:</p>
+<p><code>POST</code> is not idempotent, so a client that retries a borrow after a timeout borrows twice. The example shows both cases. Ben's first two requests are the same borrow, sent twice with nothing to tell them apart. The next two are another borrow, sent twice with the same <code>Idempotency-Key</code> header. Then the database lists Ben's loans:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># python manage.py shell</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.try_it</span><span class="w"> </span><span class="kn">import</span> <span class="n">call</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">api.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Loan</span>
@@ -2447,8 +2766,12 @@ POST /loans/ -&gt; 201
 [(2, 'The Hour of the Star'), (3, 'Blindness'), (4, 'Blindness'), (5, 'Dom Casmurro')]
 </code></pre></div>
 
-<p>Without a key, two loans of Blindness. With one, the second request found the loan the first had created and answered with it: the same <code>201</code>, the same <code>Location</code>, the same body, and still one loan of Dom Casmurro.</p>
-<p>An <strong>idempotency key</strong> is a unique value the client generates once per operation, usually a random UUID, and sends with every attempt at that operation in an <strong><code>Idempotency-Key</code></strong> header. The server remembers which keys it has seen and what it answered, and answers a repeated key with the earlier result instead of doing the work again. Payment APIs popularised the pattern, and an IETF draft standardises the header's name and behaviour.</p>
+<p>Compare the two pairs:</p>
+<ul>
+<li>Without a key, two loans of Blindness, 3 and 4.</li>
+<li>With one, the second request found the loan the first had created and answered with it: the same <code>201</code>, the same <code>Location</code>, the same body, and still one loan of Dom Casmurro.</li>
+</ul>
+<p>An <strong>idempotency key</strong> is a unique value the client generates once per operation, usually a random UUID, and sends with every attempt at that operation in an <strong><code>Idempotency-Key</code></strong> header. The server remembers which keys it has seen and what it answered. It answers a repeated key with the earlier result instead of doing the work again. In the picture, it is the order number on the slip: the clerk looks it up in the ledger, and if it is there, hands back the same receipt. Payment APIs popularised the pattern, and an IETF draft standardises the header's name and behaviour.</p>
 <p>The version above is deliberately small, and it has three gaps a production version must close:</p>
 <ul>
 <li><strong>Two attempts arriving at the same moment</strong> both miss the earlier loan, and the second insert then fails on the <code>one_loan_per_key</code> constraint, a <code>500</code>. The constraint keeps the data correct; the response is wrong.</li>
@@ -2457,7 +2780,7 @@ POST /loans/ -&gt; 201
 </ul>
 <p>§18.15–§18.17 build a complete idempotency-key implementation for any view, with stored responses and all three gaps closed.</p>
 <h2 id="section-0-115-a-design-review-checklist">1.15 A Design Review Checklist</h2>
-<p>Every section of this course returns to decisions made here. When reviewing an API design, or answering an interview question about one, these are the questions to ask:</p>
+<p>Every section of this course returns to decisions made here. When reviewing an API design, or answering an interview question about one, these are the questions to ask. Each one is a question you would ask about the library desk too:</p>
 <ol>
 <li><strong>Resources.</strong> Is every URL a noun? Are collections plural? Are identifiers stable? Is nesting at most one level?</li>
 <li><strong>Methods.</strong> Is every <code>GET</code> free of side effects? Are <code>PUT</code> and <code>DELETE</code> safe to retry? Is there a plan for retrying <code>POST</code>?</li>
@@ -2471,6 +2794,7 @@ POST /loans/ -&gt; 201
 <li><strong>Evolution.</strong> How will a field be added, renamed or removed without breaking clients (§16.2, §16.3)? Is the contract written down as a schema (§17.18)?</li>
 <li><strong>Security.</strong> Is every object scoped to who may see it, with <code>404</code> rather than <code>403</code> where existence is private (§11, §21)? Are writes rate-limited (§12)?</li>
 </ol>
+<p>That also answers the puzzle from the start of the section one last time. A <code>POST</code> to <code>/books</code> that returned <code>200</code> and created nothing fails questions 1 and 3 at once: the client used an address the API never published, and a failure came back stamped as a success.</p>
 <h2 id="section-0-116-interview-questions">1.16 Interview Questions</h2>
 <p>These questions come up in senior DRF interviews about API design. Each answer is short enough to say aloud, and cites the example that proves it.</p>
 <p><strong>Q1. What does REST actually mean, and is your DRF API RESTful?</strong></p>
@@ -2499,6 +2823,7 @@ POST /loans/ -&gt; 201
 <p>With an idempotency key: the client sends one unique value per operation in <code>Idempotency-Key</code>, the server stores it with the result and answers repeats with the stored result. It must also handle two concurrent attempts, reject a reused key with a different body, and expire keys. A unique natural key, such as an ISBN, protects some creates on its own (§1.5, §1.14, §18.16).</p>
 <h2 id="section-0-what-this-section-established">What This Section Established</h2>
 <ul>
+<li><strong>The picture: a library desk that works by slips.</strong> The shelf mark is the URL, the box ticked is the method, the stamp is the status code, the photocopied card is the representation, and the clerk remembers nobody.</li>
 <li><strong>REST is a set of constraints</strong>, not a format; most DRF APIs are level 2 of the Richardson Maturity Model, plus a few useful links.</li>
 <li><strong>A URL names a resource, and a representation is one format of it</strong>; <code>Accept</code>, <code>Content-Type</code> and <code>Vary</code> connect the two.</li>
 <li><strong>A request must mean the same thing every time it is sent</strong>: no conversation state on the server.</li>
