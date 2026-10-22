@@ -739,12 +739,100 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
 <p>By the end you should be able to design a schema that protects itself, write a query and then read the plan that proves it is fast, predict what two concurrent transactions will do to each other, and change a production schema without taking the site down — without looking anything up.</p>
 <div class="section-footer"><button class="btn-next" data-next="section-0">Start: The Relational Model, the Server and psql →</button></div>
 </section>
-<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">The Relational Model, the Server and psql</h1><p>SQL is the only programming language in wide use that is <em>declarative</em> about data: you describe the result you want, and something else decides how to get it. That single property explains almost everything else about the language — why it is strange to read at first, why the same query can be fast on Monday and slow on Tuesday, and why §13 on the planner is as important as any section about syntax.</p>
-<p>This course is written against <strong>PostgreSQL 18</strong>, and it teaches PostgreSQL rather than a lowest common denominator. Where behaviour is standard SQL you will be told; where it is PostgreSQL-specific you will also be told, because knowing which is which is what makes knowledge portable. Averaging across five database engines produces a course that teaches none of them well enough to work with.</p>
+<section class="course-section" id="section-0" data-section-id="section-0"><div class="section-header-meta">  <span class="section-tag">SECTION 1</span>  <button class="btn-complete" data-complete="section-0"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">The Relational Model, the Server and psql</h1><p>Start with a puzzle. A table holds two rows. Each row has a column called <code>note</code>. You ask the database for every row where <code>note</code> equals <code>'set'</code>, <strong>or</strong> where <code>note</code> does not equal <code>'set'</code>. How many rows come back?</p>
+<p>Every value is either equal to <code>'set'</code> or not, so the answer must be two. Guess before reading on.</p>
+<p>The answer is one. Exercise 5 at the end of this section builds exactly that table, runs exactly that query, and the server prints <code>1</code>. The missing row has no value in <code>note</code> at all, and SQL treats "no value" in a way that surprises almost everyone the first time. §1.12 explains it, and by then the answer will look obvious.</p>
+<p>That puzzle is a good first taste of SQL. SQL (usually said "sequel" or "S-Q-L") is the language you use to store data in a database and ask questions about it. It looks like simple English, and most of the time it does what the English says. The places where it does not are what this course is for.</p>
+<p>SQL is the only programming language in wide use that is <em>declarative</em> about data: you describe the result you want, and something else decides how to get it. You do not say "go through the rows one by one"; you say "the rows where the country is Brazil". That single property explains almost everything else about the language:</p>
+<ul>
+<li>why it is strange to read at first;</li>
+<li>why the same query can be fast on Monday and slow on Tuesday;</li>
+<li>and why §13 on the planner is as important as any section about syntax.</li>
+</ul>
+<p>Here is a picture to keep in mind for the whole section: <strong>an archive of index cards, run by an archivist</strong>.</p>
+<ul>
+<li>Each box holds cards of one kind, all with the same printed fields: a box of customer cards, a box of order cards.</li>
+<li>You never walk among the boxes yourself. You hand the archivist a written request saying what you want, and the archivist decides how to find it.</li>
+<li>The archive keeps a register of its own boxes, written on the same kind of cards.</li>
+</ul>
+<p>Every idea in this section has a place in that archive:</p>
+<table>
+<thead>
+<tr>
+<th>In the archive</th>
+<th>In PostgreSQL</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A box of cards, all with the same fields</td>
+<td>a table, which the theory calls a relation</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>One card</td>
+<td>a row</td>
+<td>§1.1</td>
+</tr>
+<tr>
+<td>"Find the cards for Brazil", with no instructions on how</td>
+<td>a declarative query</td>
+<td>§1.2</td>
+</tr>
+<tr>
+<td>The archivist who decides how to search</td>
+<td>the query planner</td>
+<td>§1.2</td>
+</tr>
+<tr>
+<td>The archive building, holding several separate archives</td>
+<td>a database cluster holding databases</td>
+<td>§1.3</td>
+</tr>
+<tr>
+<td>The receptionist who assigns each visitor a personal archivist</td>
+<td>the postmaster and its backend processes</td>
+<td>§1.3</td>
+</tr>
+<tr>
+<td>The guest list at the gate</td>
+<td><code>pg_hba.conf</code></td>
+<td>§1.4</td>
+</tr>
+<tr>
+<td>Your own assistant at the desk, who carries requests and writes down answers</td>
+<td>psql</td>
+<td>§1.5</td>
+</tr>
+<tr>
+<td>An instruction to your assistant, not to the archivist</td>
+<td>a backslash meta-command</td>
+<td>§1.5</td>
+</tr>
+<tr>
+<td>The archive's register of its own boxes</td>
+<td>the system catalogs</td>
+<td>§1.9</td>
+</tr>
+<tr>
+<td>A blank field on a card</td>
+<td><code>NULL</code></td>
+<td>§1.12</td>
+</tr>
+<tr>
+<td>A request slip handed back with an arrow under the word the archivist could not read</td>
+<td>an error with a caret and a hint</td>
+<td>§1.13</td>
+</tr>
+</tbody>
+</table>
+<p>This course is written against <strong>PostgreSQL 18</strong>, a free database server and one of the most widely used. It teaches PostgreSQL rather than a lowest common denominator of every database. Where behaviour is standard SQL you will be told; where it is PostgreSQL-specific you will also be told, because knowing which is which is what makes knowledge portable. Averaging across five database engines produces a course that teaches none of them well enough to work with.</p>
 <p>Every code block in this course was executed against a real PostgreSQL 18.6 server, and every printed result is what that server actually returned.</p>
 <h2 id="section-0-11-what-relational-means">1.1 What "Relational" Means</h2>
-<p>The <strong>relational model</strong>, formulated by E. F. Codd in 1970, rests on one idea: all data is held in <em>relations</em> — unordered sets of rows, each row a tuple of named, typed values — and all access is through operations that take relations and return relations.</p>
-<p>Four consequences follow, and each is something people get wrong when they arrive from other data models.</p>
+<p>PostgreSQL is a <em>relational</em> database, and the word names an idea from 1970. The <strong>relational model</strong>, formulated by E. F. Codd in 1970, rests on one idea: all data is held in <em>relations</em>, and all access is through operations that take relations and return relations.</p>
+<p>A <em>relation</em> is what you will usually call a table: a set of rows, where each row holds the same named, typed values. A customers table is a relation. Each customer is a row, and each row has an email, a name and a country. In the archive, a relation is one box of cards, all printed with the same fields.</p>
+<p>Four consequences follow, and each is something people get wrong when they arrive from other ways of storing data, such as spreadsheets or lists in a program.</p>
 <div style="display:grid;grid-template-columns:13rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem;font-weight:600">A table has no order</div>
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem">Rows are a <em>set</em>. Without <code>ORDER BY</code> you have no guarantee about sequence, however consistent the answer looks in testing (§8.7). This is the most commonly violated rule in the whole language.</div>
@@ -756,17 +844,36 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
   <div style="border-left:4px solid #f59e0b;padding-left:.6rem">An order does not <em>contain</em> a customer; it carries a customer's key, and the join reconstitutes the relationship at query time. Nothing is nested and nothing is pre-joined.</div>
 </div>
 
-<p>SQL is not a faithful implementation of that model — most obviously, a SQL table is a <em>bag</em> rather than a set, because it permits duplicate rows unless a key forbids them, and <code>NULL</code> (§5.7) has no place in Codd's algebra at all. Both departures are practical rather than accidental, and both cause real surprises, which is why they get their own treatment later.</p>
-<p>The operations underneath the syntax are <strong>relational algebra</strong>: selection (<code>WHERE</code>), projection (the select list), join, union, intersection, difference, and rename. Every query you write is a composition of those, and the planner is free to re-associate them however it likes, because the algebra says the answer is the same.</p>
-<p>Collected, because the rest of the course leans on them: <strong>relational model</strong> and <strong>relational algebra</strong>.</p>
+<p>In the archive: cards in a box have no reliable order, because they get pulled out and put back. There is no "third card", only the card whose number is 42. And an order card does not have the customer's card stapled to it; it has the customer's number written on it.</p>
+<p>SQL is not a perfect copy of Codd's model, and it differs in two ways:</p>
+<ul>
+<li>a SQL table is a <em>bag</em> rather than a set, because it permits duplicate rows unless a key forbids them;</li>
+<li><code>NULL</code> (§5.7), SQL's marker for a missing value, has no place in Codd's algebra at all.</li>
+</ul>
+<p>Both departures are practical rather than accidental, and both cause real surprises, which is why they get their own treatment later. The opening puzzle is one of those surprises.</p>
+<p>The operations underneath the syntax are <strong>relational algebra</strong>: selection (<code>WHERE</code>, which keeps some rows), projection (the select list, which keeps some columns), join, union, intersection, difference, and rename. Every query you write is a composition of those. And because the algebra says the answer is the same either way, the planner is free to re-arrange them however it likes.</p>
+<p>Two terms to keep, because the rest of the course leans on them: <strong>relational model</strong> and <strong>relational algebra</strong>.</p>
 <h2 id="section-0-12-declarative-and-what-it-buys">1.2 Declarative, and What It Buys</h2>
-<p>A <strong>declarative query</strong> says what, not how. Consider what you do <em>not</em> write in SQL: no loop over rows, no choice of index, no decision about whether to sort now or later, no join algorithm. You write the <em>what</em>, and the query planner (§13) constructs the <em>how</em> fresh on every execution, from statistics about the data as it is today.</p>
-<p>The benefit is that a query written in 2015 gets faster when you add an index in 2026, without being touched. The cost is that performance is not evident from the text: two queries that return identical results can differ by four orders of magnitude, and nothing in the SQL says which is which. That is the trade the language makes, and learning to read <code>EXPLAIN</code> is how you stop being at its mercy.</p>
-<p>The corollary is a habit worth adopting now: <strong>think in sets, not in rows.</strong> "For each customer, look up their orders" is procedural thinking and produces a query per customer. "Join customers to orders" is one statement the planner can execute a dozen different ways. Almost every performance disaster in an application's data layer is a loop that should have been a join.</p>
-<p>The pieces this subsection introduced, in one line: <strong>query planner</strong>.</p>
-<p>To have in hand before moving on: <strong>declarative query</strong>.</p>
+<p>A <strong>declarative query</strong> says what, not how. Look at what you do <em>not</em> write in SQL:</p>
+<ul>
+<li>no loop over rows;</li>
+<li>no choice of index, the lookup structure that finds rows fast (§12);</li>
+<li>no decision about whether to sort now or later;</li>
+<li>no join algorithm.</li>
+</ul>
+<p>You write the <em>what</em>, and the query planner (§13) constructs the <em>how</em> fresh on every execution, from statistics about the data as it is today. In the archive, you write "all customer cards from Brazil" on the slip. The archivist decides whether to flip through every card or to use the tabbed divider for countries, and may decide differently next week, when the box is fuller.</p>
+<p>The benefit is that a query written in 2015 gets faster when you add an index in 2026, without being touched. The cost is that performance is not evident from the text. Two queries that return identical results can differ by four orders of magnitude, ten thousand times, and nothing in the SQL says which is which. That is the trade the language makes, and learning to read <code>EXPLAIN</code> is how you stop being at its mercy.</p>
+<p>The corollary is a habit worth adopting now: <strong>think in sets, not in rows.</strong></p>
+<ul>
+<li>"For each customer, look up their orders" is procedural thinking, step-by-step instructions. It produces a query per customer.</li>
+<li>"Join customers to orders" is one statement the planner can execute a dozen different ways.</li>
+</ul>
+<p>Almost every performance disaster in an application's data layer is a loop that should have been a join.</p>
+<p>The term to keep from this subsection: <strong>query planner</strong>.</p>
+<p>And the one before it: <strong>declarative query</strong>.</p>
 <h2 id="section-0-13-the-server">1.3 The Server</h2>
-<p>PostgreSQL is a client/server system with a process-per-connection architecture.</p>
+<p>PostgreSQL is a client/server system. The <em>server</em> is a program that owns the data and runs queries. A <em>client</em> is any program that connects to it and sends queries: the <code>psql</code> terminal program, a Python application, a reporting tool. Several clients can connect at once.</p>
+<p>PostgreSQL runs one process per connection: each connected client gets its own copy of the server program, working only for it. The parts have names, and the names appear in documentation and error messages:</p>
 <div style="display:grid;grid-template-columns:11rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem;font-weight:600">database cluster</div>
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem">One data directory, one server, and several <em>databases</em> inside it. "Cluster" here means a collection of databases sharing one server — nothing to do with a cluster of machines. Created by <strong><code>initdb</code></strong>.</div>
@@ -778,30 +885,56 @@ body { font-size: 15px; line-height: 1.75; font-variant-ligatures: none; }
   <div style="border-left:4px solid #f59e0b;padding-left:.6rem">The shared memory cache of table and index pages that every backend reads and writes through. <code>BUFFERS</code> in <code>EXPLAIN</code> (§13.4) counts hits in it.</div>
 </div>
 
-<p>A <strong>database</strong> inside a cluster is a hard boundary: one connection can address exactly one database, and a query cannot join across two of them without an extension. Schemas (§4.14), not databases, are the tool for organising one application's tables.</p>
-<p><code>createdb</code> and <code>dropdb</code> are thin wrappers over <code>CREATE DATABASE</code> and <code>DROP DATABASE</code>. New databases are copies of the <code>template1</code> template, so anything you install there appears in every database you create afterwards — occasionally useful, occasionally a surprise.</p>
-<p>Named once more, since each is referred to later: <strong>database cluster</strong>, <strong>initdb</strong>, <strong>createdb</strong>, <strong>dropdb</strong>, <strong>postmaster</strong> and <strong>backend process</strong>.</p>
+<p>In the archive picture: the cluster is the archive building. The postmaster is the receptionist, who never fetches a card but assigns each visitor a personal archivist. That archivist is the backend process. Shared buffers are the big reading-room table where pulled drawers sit, so that the next archivist who needs the same drawer finds it already out.</p>
+<p>A <strong>database</strong> inside a cluster is a hard boundary. One connection can address exactly one database, and a query cannot join across two of them without an extension, an add-on package for the server. To organise one application's tables, use schemas (§4.14), which are named folders inside one database, not separate databases.</p>
+<p><code>createdb</code> and <code>dropdb</code> are small command-line programs that create and remove a database. They are thin wrappers over the SQL statements <code>CREATE DATABASE</code> and <code>DROP DATABASE</code>. New databases are copies of the <code>template1</code> template. So anything you install there appears in every database you create afterwards: occasionally useful, occasionally a surprise.</p>
+<p>Each of these is referred to later, so here they are once more: <strong>database cluster</strong>, <strong>initdb</strong>, <strong>createdb</strong>, <strong>dropdb</strong>, <strong>postmaster</strong> and <strong>backend process</strong>.</p>
 <h2 id="section-0-14-connecting">1.4 Connecting</h2>
-<p>A client connects over TCP or a Unix socket using the <strong>libpq</strong> protocol, and every PostgreSQL driver in every language is either libpq or a reimplementation of that protocol. What a client needs is a <strong>connection string</strong>, in either of two forms:</p>
+<p>A client connects over the network (TCP) or over a Unix socket, a connection between two programs on the same machine. It speaks the <strong>libpq</strong> protocol, PostgreSQL's set of rules for the conversation. Every PostgreSQL driver in every language is either libpq itself or a reimplementation of that protocol.</p>
+<p>What a client needs is a <strong>connection string</strong>, the address of the database plus who you are. It comes in either of two forms, a URL or a list of <code>key=value</code> pairs. Both lines below say the same kind of thing: user, host, port <code>5432</code> (PostgreSQL's standard port), database name, and whether to require encryption:</p>
 <div class="highlight" data-lang="text"><pre><span></span><code>postgresql://user:password@host:5432/dbname?sslmode=require
 host=localhost port=5432 dbname=shop user=app sslmode=require
 </code></pre></div>
 
-<p>Whether the server accepts you is decided by <strong><code>pg_hba.conf</code></strong> — <em>host-based authentication</em> — a file of rules matched top to bottom on connection type, database, user and client address, each specifying an authentication method: <code>scram-sha-256</code> for passwords, <code>peer</code> for matching the OS user on a local socket, <code>cert</code>, <code>ldap</code>, and in PostgreSQL 18 <code>oauth</code>. A connection refused with "no pg_hba.conf entry for host" means no rule matched, not that your password was wrong.</p>
+<p>Whether the server accepts you is decided by <strong><code>pg_hba.conf</code></strong>, <em>host-based authentication</em>. It is the archive's guest list at the gate: a file of rules, read from top to bottom, and the first rule that matches decides.</p>
+<ul>
+<li>Each rule matches on connection type, database, user and client address.</li>
+<li>Each rule names an authentication method: <code>scram-sha-256</code> for passwords, <code>peer</code> for matching the operating-system user on a local socket, <code>cert</code>, <code>ldap</code>, and in PostgreSQL 18 <code>oauth</code>.</li>
+</ul>
+<p>A connection refused with "no pg_hba.conf entry for host" means no rule matched, not that your password was wrong.</p>
 <h2 id="section-0-15-psql">1.5 psql</h2>
-<p><code>psql</code> is PostgreSQL's terminal client, and this course uses it throughout for a reason that is not habit: <strong>it is a real part of the system</strong>. Its meta-commands introspect the catalogs, run scripts, format output and drive migrations, and every result printed in this course is psql's own output. A driver would show you a language's repr instead, and none of §1.6 would exist.</p>
-<p>Meta-commands begin with a backslash, are interpreted by psql rather than sent to the server, and need no semicolon.</p>
+<p><code>psql</code> is PostgreSQL's terminal client: a program you type SQL into, which sends it to the server and prints the answer. This course uses it throughout, and for a reason that is not habit: <strong>it is a real part of the system</strong>.</p>
+<ul>
+<li>Its meta-commands look inside the database's own records, run scripts, format output and drive migrations.</li>
+<li>Every result printed in this course is psql's own output. A driver in another language would show you that language's way of printing values instead, and none of §1.6 would exist.</li>
+</ul>
+<p>In the archive, psql is your own assistant at the desk. Most of what you say, the assistant passes to the archivist. But some instructions are for the assistant alone: "show me the list of boxes", "write the answers in a wider format". Those are meta-commands.</p>
+<p>Meta-commands begin with a backslash, are interpreted by psql rather than sent to the server, and need no semicolon. The first one to learn asks "where am I connected?":</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="n">conninfo</span>
 </code></pre></div>
 
-<p>The output names the database, user, host and port of the current session — the values below are from this course's own server, and yours will differ:</p>
+<p>The output names the database, user, host and port of the current session. The values below are from this course's own server, and yours will differ:</p>
 <div class="highlight" data-lang="text"><pre><span></span><code>You are connected to database "course_main" as user "course" on host "127.0.0.1" at port "55432".
 </code></pre></div>
 
-<p><code>\conninfo</code> prints the connection you are actually on. <code>\conninfo</code> is worth running on any unfamiliar prompt, because being connected to the wrong database is a mistake that only announces itself later. <code>\q</code> quits. <code>\?</code> lists every meta-command; <code>\h SELECT</code> prints the syntax summary for a SQL command, which is faster than opening a browser.</p>
-<p>In summary, the vocabulary here is <strong>\q</strong>.</p>
+<p>Read it as one sentence: database <code>course_main</code>, user <code>course</code>, on the local machine at port <code>55432</code>.</p>
+<p><code>\conninfo</code> prints the connection you are actually on. <code>\conninfo</code> is worth running on any unfamiliar prompt, because being connected to the wrong database is a mistake that only announces itself later. A few more to know from day one:</p>
+<ul>
+<li><code>\q</code> quits.</li>
+<li><code>\?</code> lists every meta-command.</li>
+<li><code>\h SELECT</code> prints the syntax summary for a SQL command, which is faster than opening a browser.</li>
+</ul>
+<p>The meta-command to keep from this subsection: <strong>\q</strong>.</p>
 <h2 id="section-0-16-inspecting-a-database">1.6 Inspecting a Database</h2>
-<p>This family is the reason to keep psql open beside your editor. First, the demonstration schema this course uses from §5 onward:</p>
+<p>This family of meta-commands is the reason to keep psql open beside your editor. They answer "what is in this database?" without you writing a single query.</p>
+<p>First, something to inspect: the demonstration schema this course uses from §5 onward. A <em>schema</em> in this sense is the design of the tables: their names, columns and rules. Four tables describe a small shop:</p>
+<ul>
+<li><code>customers</code>, one row per customer;</li>
+<li><code>products</code>, one row per thing for sale;</li>
+<li><code>orders</code>, one row per order, carrying the number of the customer who placed it;</li>
+<li><code>order_items</code>, one row per product in an order.</li>
+</ul>
+<p>You do not need to understand every word of the statements yet; §4 teaches them. Read them as four box labels with the fields printed on each card. The first line sets the time zone to UTC, so that every date and time in the course prints the same on every machine. psql answers each statement with its name: <code>SET</code>, then <code>CREATE TABLE</code> four times, which is the server reporting that each one succeeded:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SET</span><span class="w"> </span><span class="n">timezone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'UTC'</span><span class="p">;</span>
 
 <span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">customers</span><span class="w"> </span><span class="p">(</span>
@@ -843,7 +976,7 @@ CREATE TABLE
 CREATE TABLE
 </code></pre></div>
 
-<p><code>\dt</code> lists tables:</p>
+<p><code>\dt</code>, "describe tables", lists the tables:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="n">dt</span>
 </code></pre></div>
 
@@ -857,7 +990,8 @@ CREATE TABLE
 (4 rows)
 </code></pre></div>
 
-<p><code>\d</code> on a name describes the object — and describing a table is the single most useful thing psql does:</p>
+<p>Four tables, all in the <code>public</code> schema, all owned by the user <code>course</code>. That is the list of boxes.</p>
+<p><code>\d</code> on a name describes the object, and describing a table is the single most useful thing psql does:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="n">d</span><span class="w"> </span><span class="n">customers</span>
 </code></pre></div>
 
@@ -876,7 +1010,15 @@ Referenced by:
     TABLE "orders" CONSTRAINT "orders_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
 </code></pre></div>
 
-<p>Columns, types, nullability, defaults, indexes, and <strong>what references this table</strong> — the last of which is how you discover, before writing a <code>DELETE</code>, what else depends on these rows.</p>
+<p>Read it from the top.</p>
+<ul>
+<li><strong>Columns</strong>: the five fields on every customer card, with each one's type (<code>bigint</code>, a whole number; <code>text</code>; <code>date</code>).</li>
+<li><strong>Nullable</strong>: <code>not null</code> on every column means no card may leave that field blank.</li>
+<li><strong>Default</strong>: <code>customer_id</code> is numbered automatically, <code>generated always as identity</code>.</li>
+<li><strong>Indexes</strong>: two lookup structures, one for the key and one that keeps every email unique.</li>
+<li><strong>Referenced by</strong>: the <code>orders</code> table points at this one.</li>
+</ul>
+<p>That gives columns, types, nullability, defaults, indexes, and <strong>what references this table</strong>. The last is how you discover, before writing a <code>DELETE</code>, what else depends on these rows.</p>
 <p>The rest of the family follows one pattern: <code>\d</code> plus a letter for the object kind, and a trailing <code>+</code> for more detail.</p>
 <div style="display:grid;grid-template-columns:7rem 1fr;gap:.4rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #64748b;padding-left:.6rem;font-weight:600"><code>\dt</code></div>
@@ -903,7 +1045,8 @@ Referenced by:
   <div style="border-left:4px solid #64748b;padding-left:.6rem">the source of a function</div>
 </div>
 
-<p><code>\connect</code> (or <code>\c</code>) switches database or user without leaving psql — which is the only way to move between databases in a session, since a connection is bound to one.</p>
+<p><code>\connect</code> (or <code>\c</code>) switches database or user without leaving psql. That is the only way to move between databases in a session, since a connection is bound to one.</p>
+<p><code>\dn</code> lists schemas, the named folders inside a database. A fresh database has one, <code>public</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="n">dn</span>
 </code></pre></div>
 
@@ -916,7 +1059,7 @@ Referenced by:
 
 <p>What to carry forward from this subsection: <strong>\l</strong>, <strong>\connect</strong>, <strong>\d+</strong>, <strong>\di</strong>, <strong>\dn</strong>, <strong>\df</strong>, <strong>\dv</strong>, <strong>\du</strong>, <strong>\dp</strong>, <strong>\dx</strong> and <strong>\sf</strong>.</p>
 <h2 id="section-0-17-controlling-output">1.7 Controlling Output</h2>
-<p>A row wider than the terminal is unreadable. <code>\x</code> switches to <strong><code>\x</code> expanded output</strong>, transposing it:</p>
+<p>psql prints results as a table, one row per line. A row wider than the terminal wraps around and becomes unreadable. <code>\x</code> switches to <strong><code>\x</code> expanded output</strong>, which turns each row on its side. The block below switches it on, runs a query, and switches it off again:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="n">x</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="k">current_user</span><span class="p">,</span><span class="w"> </span><span class="n">current_database</span><span class="p">();</span>
 <span class="err">\</span><span class="n">x</span>
@@ -930,8 +1073,14 @@ current_database | course_main
 Expanded display is off.
 </code></pre></div>
 
-<p>Each record becomes a block of <code>column | value</code> lines. <code>\x auto</code> picks per result, which is the setting to put in <code>~/.psqlrc</code>.</p>
-<p><code>\pset</code> controls formatting in detail — <code>\pset format csv</code>, <code>\pset null '(null)'</code> (worth setting permanently, so that an empty string and a <code>NULL</code> stop looking identical), <code>\pset pager off</code>. <code>\timing on</code> reports how long each statement took:</p>
+<p>Each record becomes a block of <code>column | value</code> lines, one line per column. <code>-[ RECORD 1 ]</code> marks where each row starts. <code>\x auto</code> picks per result, expanded only when the row is too wide, and it is the setting to put in <code>~/.psqlrc</code>, the file psql reads every time it starts.</p>
+<p><code>\pset</code> controls formatting in detail:</p>
+<ul>
+<li><code>\pset format csv</code> prints comma-separated values, ready for a spreadsheet;</li>
+<li><code>\pset null '(null)'</code> prints a visible word for a missing value. It is worth setting permanently, so that an empty string and a <code>NULL</code> stop looking identical;</li>
+<li><code>\pset pager off</code> stops psql from opening long results in a page-by-page viewer.</li>
+</ul>
+<p><code>\timing on</code> reports how long each statement took:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="n">timing</span><span class="w"> </span><span class="k">on</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">customers</span><span class="p">;</span>
 <span class="err">\</span><span class="n">timing</span><span class="w"> </span><span class="k">off</span>
@@ -948,11 +1097,12 @@ Time: 0.412 ms
 Timing is off.
 </code></pre></div>
 
-<p><strong>That is client-side round-trip time, not server execution time.</strong> It includes network latency and result formatting. <code>EXPLAIN ANALYZE</code> (§13.4) is what measures the server.</p>
+<p>The count is <code>0</code> because no customers have been added yet. The line that matters is <code>Time:</code>.</p>
+<p><strong>That is client-side round-trip time, not server execution time.</strong> It is the time from psql sending the request to psql finishing the printing of the answer. It includes network latency and result formatting. <code>EXPLAIN ANALYZE</code> (§13.4) is what measures the server.</p>
 <p>The terms above, gathered: <strong>\x expanded output</strong>, <strong>\timing</strong>, <strong>EXPLAIN ANALYZE</strong> and <strong>execution time</strong>.</p>
 <h2 id="section-0-18-scripting-with-psql">1.8 Scripting with psql</h2>
-<p>Four meta-commands turn psql from a prompt into a scripting tool.</p>
-<p><strong><code>\set</code> defines a variable</strong>, substituted with a leading colon:</p>
+<p>Four meta-commands turn psql from a prompt you type into into a scripting tool, a program that runs a file of steps.</p>
+<p><strong><code>\set</code> defines a variable</strong>, substituted with a leading colon. Here <code>threshold</code> is set to <code>10000</code>, and <code>:threshold</code> in the query is replaced by it:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">threshold</span><span class="w"> </span><span class="mi">10000</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">above_threshold</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">products</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">price_cents</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="p">:</span><span class="n">threshold</span><span class="p">;</span>
 </code></pre></div>
@@ -963,8 +1113,13 @@ Timing is off.
 (1 row)
 </code></pre></div>
 
-<p>Substitution is textual, done by psql before the server sees anything — so <code>:var</code> inside a quoted string is not substituted, and <code>:'var'</code> and <code>:"var"</code> exist to quote a value as a literal or an identifier. It is <strong>not</strong> a bind parameter, and it is not protection against injection (§20.5).</p>
-<p><strong><code>\gexec</code> runs the result of a query as SQL.</strong> The query produces statement text; psql executes each row:</p>
+<p>The count is <code>0</code> because the products table is still empty; what matters is that <code>:threshold</code> was accepted.</p>
+<p>Substitution is textual, done by psql before the server sees anything. psql pastes the text <code>10000</code> where <code>:threshold</code> was, like find-and-replace. Two consequences:</p>
+<ul>
+<li><code>:var</code> inside a quoted string is not substituted, and <code>:'var'</code> and <code>:"var"</code> exist to quote a value as a literal or an identifier;</li>
+<li>it is <strong>not</strong> a bind parameter, the safe way a program hands values to the server separately from the SQL, and it is not protection against injection (§20.5).</li>
+</ul>
+<p><strong><code>\gexec</code> runs the result of a query as SQL.</strong> The query produces statement text; psql executes each row. Below, a query builds one <code>SELECT count(*)</code> statement for each of two tables, and <code>\gexec</code> runs both:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="s1">'SELECT count(*) AS '</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">tablename</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">' FROM '</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">tablename</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">';'</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">stmt</span>
 <span class="k">FROM</span><span class="w"> </span><span class="n">pg_tables</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">schemaname</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'public'</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="n">tablename</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="p">(</span><span class="s1">'customers'</span><span class="p">,</span><span class="s1">'products'</span><span class="p">)</span>
 <span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">tablename</span>
@@ -982,8 +1137,15 @@ Timing is off.
 (1 row)
 </code></pre></div>
 
-<p>That is generated SQL, run in one round trip. It is the standard way to say "do this to every table matching a pattern" — dropping a set of indexes, granting on a schema, vacuuming a list — without writing a shell loop.</p>
-<p><strong><code>\gset</code></strong> captures a single-row result into psql variables. <strong><code>\include</code></strong> — usually written <code>\i</code> — reads a file of SQL and runs it, which is how a schema is loaded from a script. <strong><code>\watch 5</code></strong> re-runs the last query every five seconds, which is how you observe <code>pg_stat_activity</code> during an incident. <strong><code>\i file.sql</code></strong> includes a script, and <strong><code>\copy</code></strong> streams a file in or out through the <em>client</em> — the difference from server-side <code>COPY</code> (§11.9) being that <code>\copy</code> reads a file on your machine and needs no server file permissions.</p>
+<p>Two little results, one per generated statement, each labelled with its table name.</p>
+<p>That is generated SQL, run in one round trip. It is the standard way to say "do this to every table matching a pattern" (dropping a set of indexes, granting on a schema, vacuuming a list) without writing a shell loop.</p>
+<p>A few more scripting meta-commands:</p>
+<ul>
+<li><strong><code>\gset</code></strong> captures a single-row result into psql variables.</li>
+<li><strong><code>\include</code></strong>, usually written <code>\i</code>, reads a file of SQL and runs it, which is how a schema is loaded from a script. <strong><code>\i file.sql</code></strong> includes a script.</li>
+<li><strong><code>\watch 5</code></strong> re-runs the last query every five seconds, which is how you observe <code>pg_stat_activity</code> during an incident.</li>
+<li><strong><code>\copy</code></strong> streams a file in or out through the <em>client</em>. The difference from server-side <code>COPY</code> (§11.9) is that <code>\copy</code> reads a file on your machine and needs no server file permissions.</li>
+</ul>
 <p><strong><code>ON_ERROR_STOP</code></strong> is the one setting that belongs in every script:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">on</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">this_script_will_stop_at_the_first_error</span><span class="p">;</span>
@@ -995,11 +1157,13 @@ Timing is off.
 (1 row)
 </code></pre></div>
 
-<p>Without it, psql reports an error and <strong>carries on to the next statement</strong>, which for a migration script means the failure scrolls past and half your changes are applied. Every example in this course runs with it on, and §14.4 is the one deliberate exception.</p>
+<p>The query ran normally and printed <code>1</code>. The setting shows its value only when something fails.</p>
+<p>Without it, psql reports an error and <strong>carries on to the next statement</strong>. For a migration script, a script that changes a database's structure, that means the failure scrolls past and half your changes are applied. Every example in this course runs with it on, and §14.4 is the one deliberate exception.</p>
 <p><code>\if</code>, <code>\elif</code>, <code>\else</code> and <code>\endif</code> give conditional execution, usually driven by a variable set with <code>\gset</code>.</p>
 <p>One line each, for reference: <strong>psql variable</strong>, <strong>\watch</strong>, <strong>\include</strong>, <strong>\if</strong> and <strong>bind parameter</strong>.</p>
 <h2 id="section-0-19-the-system-catalogs">1.9 The System Catalogs</h2>
-<p>PostgreSQL stores its own metadata in ordinary tables, in the <strong><code>pg_catalog</code></strong> schema, and you can query them like anything else. That is not a curiosity — every <code>\d</code> command is a query against these tables, and <code>psql -E</code> will show you exactly which.</p>
+<p>PostgreSQL stores its own metadata, the data about your data (which tables exist, their columns, their indexes), in ordinary tables, in the <strong><code>pg_catalog</code></strong> schema. You can query them like anything else. This is the archive's register of its own boxes, written on the same kind of cards as everything else.</p>
+<p>That is not a curiosity. Every <code>\d</code> command is a query against these tables, and <code>psql -E</code> will show you exactly which. The query below asks <code>pg_class</code> about three objects:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="n">relname</span><span class="p">,</span><span class="w"> </span><span class="n">relkind</span><span class="p">,</span><span class="w"> </span><span class="n">relnatts</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">columns</span>
 <span class="k">FROM</span><span class="w"> </span><span class="n">pg_class</span>
 <span class="k">WHERE</span><span class="w"> </span><span class="n">relname</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="p">(</span><span class="s1">'customers'</span><span class="p">,</span><span class="s1">'orders'</span><span class="p">,</span><span class="s1">'customers_pkey'</span><span class="p">)</span>
@@ -1014,9 +1178,21 @@ Timing is off.
 (3 rows)
 </code></pre></div>
 
-<p><strong><code>pg_class</code></strong> holds every relation — and "relation" here includes tables (<code>relkind = 'r'</code>), indexes (<code>'i'</code>), views (<code>'v'</code>), materialized views (<code>'m'</code>), sequences (<code>'S'</code>) and partitioned tables (<code>'p'</code>). They share one catalog because they share one namespace: you cannot have a table and a view with the same name.</p>
-<p><strong><code>pg_index</code></strong> holds what makes an index an index — its columns, whether it is unique, whether it is valid (§12.11). <strong><code>pg_attribute</code></strong> holds columns. <strong><code>pg_stat_activity</code></strong> is not a catalog but a view of live sessions, and it is the first place to look when something is wrong (§15.7).</p>
-<p>Every catalog row has an <strong>object identifier type</strong> — an <code>oid</code>, a 4-byte unsigned integer that is the real name of everything inside PostgreSQL. The <code>regclass</code> type is an <code>oid</code> that displays and parses as a relation name, which makes it far more pleasant to use:</p>
+<p>Read the three rows:</p>
+<ul>
+<li><code>customers</code> has <code>relkind</code> <code>r</code>, a table, with <code>5</code> columns;</li>
+<li><code>customers_pkey</code> has <code>relkind</code> <code>i</code>, an index, built on <code>1</code> column;</li>
+<li><code>orders</code> is a table with <code>4</code> columns.</li>
+</ul>
+<p><strong><code>pg_class</code></strong> holds every relation, and "relation" here includes tables (<code>relkind = 'r'</code>), indexes (<code>'i'</code>), views (<code>'v'</code>), materialized views (<code>'m'</code>), sequences (<code>'S'</code>) and partitioned tables (<code>'p'</code>). They share one catalog because they share one namespace: you cannot have a table and a view with the same name.</p>
+<p>Three more to know by name:</p>
+<ul>
+<li><strong><code>pg_index</code></strong> holds what makes an index an index: its columns, whether it is unique, whether it is valid (§12.11).</li>
+<li><strong><code>pg_attribute</code></strong> holds columns.</li>
+<li><strong><code>pg_stat_activity</code></strong> is not a catalog but a view of live sessions, and it is the first place to look when something is wrong (§15.7).</li>
+</ul>
+<p>Every catalog row has an <strong>object identifier type</strong>: an <code>oid</code>, a 4-byte unsigned integer that is the real name of everything inside PostgreSQL. Inside the archive, every box has a number, and the label is only for people.</p>
+<p>The <code>regclass</code> type is an <code>oid</code> that displays and parses as a relation name, which makes it far more pleasant to use. The query below turns the name <code>customers</code> into its <code>oid</code>, and checks that it is the same <code>oid</code> the catalog holds:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="s1">'customers'</span><span class="p">::</span><span class="n">regclass</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">name_to_oid</span><span class="p">,</span>
 <span class="w">       </span><span class="s1">'customers'</span><span class="p">::</span><span class="n">regclass</span><span class="p">::</span><span class="n">oid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">SELECT</span><span class="w"> </span><span class="n">oid</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">pg_class</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">relname</span><span class="o">=</span><span class="s1">'customers'</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">same</span><span class="p">;</span>
 </code></pre></div>
@@ -1027,10 +1203,11 @@ Timing is off.
 (1 row)
 </code></pre></div>
 
-<p><code>'customers'::regclass</code> resolves the name through the current <code>search_path</code> (§4.14) and errors if it does not exist — which makes it a safer way to write a table name into a query than a bare string. <code>regtype</code>, <code>regproc</code> and <code>regnamespace</code> do the same for types, functions and schemas.</p>
-<p>Collected, because the rest of the course leans on them: <strong>object identifier type</strong>.</p>
+<p><code>same</code> is <code>t</code>, true: the name and the catalog agree.</p>
+<p><code>'customers'::regclass</code> resolves the name through the current <code>search_path</code> (§4.14), the list of schemas PostgreSQL searches for a name, and errors if it does not exist. That makes it a safer way to write a table name into a query than a bare string. <code>regtype</code>, <code>regproc</code> and <code>regnamespace</code> do the same for types, functions and schemas.</p>
+<p>The term to keep: <strong>object identifier type</strong>.</p>
 <h2 id="section-0-110-information-schema">1.10 information_schema</h2>
-<p><strong><code>information_schema</code></strong> is the SQL-standard alternative: a set of views over the same metadata, defined by the standard and therefore portable across engines.</p>
+<p><strong><code>information_schema</code></strong> is the SQL-standard alternative: a set of views over the same metadata, defined by the standard and therefore portable across engines. A <em>view</em> is a saved query you can read like a table (§18). The query below lists the columns of <code>products</code>, in the order they were defined:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="k">column_name</span><span class="p">,</span><span class="w"> </span><span class="n">data_type</span><span class="p">,</span><span class="w"> </span><span class="n">is_nullable</span>
 <span class="k">FROM</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">columns</span>
 <span class="k">WHERE</span><span class="w"> </span><span class="k">table_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'products'</span>
@@ -1047,8 +1224,14 @@ Timing is off.
 (5 rows)
 </code></pre></div>
 
-<p>Use <code>information_schema</code> when the query must run on more than one engine, and <code>pg_catalog</code> when you need something the standard does not describe — which is most PostgreSQL-specific detail, including index methods, table sizes, planner statistics and extensions. <code>information_schema</code> is also slower, because its views do more work to present a standard shape.</p>
-<p>The pieces this subsection introduced, in one line: <strong>planner statistics</strong>.</p>
+<p>Five columns, their types, and <code>NO</code> for "nullable?" on every one.</p>
+<p>Which one should you use?</p>
+<ul>
+<li>Use <code>information_schema</code> when the query must run on more than one engine.</li>
+<li>Use <code>pg_catalog</code> when you need something the standard does not describe, which is most PostgreSQL-specific detail, including index methods, table sizes, planner statistics and extensions.</li>
+</ul>
+<p><code>information_schema</code> is also slower, because its views do more work to present a standard shape.</p>
+<p>The term to keep: <strong>planner statistics</strong>.</p>
 <h2 id="section-0-111-the-shape-of-the-language">1.11 The Shape of the Language</h2>
 <p>SQL statements fall into groups, and the names are worth knowing because error messages and documentation use them.</p>
 <div style="display:grid;grid-template-columns:16rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
@@ -1062,11 +1245,17 @@ Timing is off.
   <div style="border-left:4px solid #8b5cf6;padding-left:.6rem"><code>GRANT</code>, <code>REVOKE</code>. §20.</div>
 </div>
 
-<p>The <strong>SQL standard</strong> — currently ISO/IEC 9075:2023 — defines a core plus a large set of optional features, and no implementation supports all of it. PostgreSQL supports the core plus a substantial share of the optional features, and adds a great deal that is not in the standard at all. Two facts about the standard matter in practice: it is not freely available, so "the standard says" is rarely checkable; and conformance is a spectrum rather than a badge, so portability is always a question about specific features rather than about engines.</p>
+<p>The <strong>SQL standard</strong>, currently ISO/IEC 9075:2023, defines a core plus a large set of optional features, and no implementation supports all of it. PostgreSQL supports the core plus a substantial share of the optional features, and adds a great deal that is not in the standard at all.</p>
+<p>Two facts about the standard matter in practice:</p>
+<ul>
+<li>it is not freely available, so "the standard says" is rarely checkable;</li>
+<li>conformance is a spectrum rather than a badge, so portability is always a question about specific features rather than about engines.</li>
+</ul>
 <p>To have in hand before moving on: <strong>data definition language</strong> and <strong>data manipulation language</strong>.</p>
 <h2 id="section-0-112-three-valued-logic-in-advance">1.12 Three-Valued Logic, in Advance</h2>
-<p>One thing must be said before you write a single <code>WHERE</code> clause, because it causes wrong answers rather than errors.</p>
-<p><strong>SQL's logic has three values: true, false, and unknown.</strong> <code>NULL</code> means "no value here", and any comparison with it yields unknown rather than true or false.</p>
+<p>This is where the opening puzzle is answered. One thing must be said before you write a single <code>WHERE</code> clause, because it causes wrong answers rather than errors.</p>
+<p><strong>SQL's logic has three values: true, false, and unknown.</strong> <code>NULL</code> means "no value here": a blank field on the card. Any comparison with it yields unknown rather than true or false. Is a blank equal to <code>'set'</code>? Nobody knows. Is it different from <code>'set'</code>? Nobody knows either.</p>
+<p>The query below compares <code>NULL</code> with itself, in four ways:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">NULL</span><span class="w">           </span><span class="k">AS</span><span class="w"> </span><span class="n">null_equals_null</span><span class="p">,</span>
 <span class="w">       </span><span class="k">NULL</span><span class="w"> </span><span class="o">&lt;&gt;</span><span class="w"> </span><span class="k">NULL</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="n">null_differs</span><span class="p">,</span>
 <span class="w">       </span><span class="p">(</span><span class="k">NULL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">NULL</span><span class="p">)</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">the_result_is_unknown</span><span class="p">,</span>
@@ -1079,11 +1268,18 @@ Timing is off.
 (1 row)
 </code></pre></div>
 
-<p>The first two columns are blank — that is psql printing <code>NULL</code>, which is to say <em>unknown</em>. <code>NULL = NULL</code> is not true, and it is not false either.</p>
-<p>Since <code>WHERE</code> keeps only rows where the condition is <strong>true</strong>, a row whose condition evaluates to unknown is discarded exactly as if it were false — but <code>NOT unknown</code> is still unknown, so the row is discarded by the negation too. <strong>A row can fail both <code>WHERE x = 1</code> and <code>WHERE x &lt;&gt; 1</code>.</strong> That is not a bug, and it is the single most common source of quietly missing rows in a report.</p>
-<p><code>IS NULL</code> and <code>IS NOT NULL</code> are the operators that return a real boolean. §5.7 develops this properly; the point of raising it here is that you will meet it in your first hour.</p>
+<p>Read the four columns:</p>
+<ul>
+<li><strong><code>null_equals_null</code> is blank.</strong> That is psql printing <code>NULL</code>, which is to say <em>unknown</em>. <code>NULL = NULL</code> is not true, and it is not false either.</li>
+<li><strong><code>null_differs</code> is blank too</strong>, for the same reason.</li>
+<li><strong><code>the_result_is_unknown</code> is <code>t</code></strong>: the result of <code>NULL = NULL</code> really is <code>NULL</code>.</li>
+<li><strong><code>the_right_way</code> is <code>t</code></strong>: <code>IS NULL</code> asks "is this blank?", and that question has a real answer.</li>
+</ul>
+<p>Now the puzzle. <code>WHERE</code> keeps only rows where the condition is <strong>true</strong>. So a row whose condition evaluates to unknown is discarded exactly as if it were false. But <code>NOT unknown</code> is still unknown, so the row is discarded by the negation too.</p>
+<p><strong>A row can fail both <code>WHERE x = 1</code> and <code>WHERE x &lt;&gt; 1</code>.</strong> In the puzzle, the row with a blank <code>note</code> failed <code>note = 'set'</code>, failed <code>note &lt;&gt; 'set'</code>, and so failed their <code>OR</code> as well. Only one row came back. That is not a bug, and it is the single most common source of quietly missing rows in a report.</p>
+<p><code>IS NULL</code> and <code>IS NOT NULL</code> are the operators that return a real boolean, a true-or-false value. §5.7 develops this properly; the point of raising it here is that you will meet it in your first hour.</p>
 <h2 id="section-0-113-reading-an-error">1.13 Reading an Error</h2>
-<p>PostgreSQL's errors are unusually informative, and reading them properly saves a great deal of time.</p>
+<p>PostgreSQL's errors are unusually informative, and reading them properly saves a great deal of time. Here is one, provoked on purpose by misspelling <code>customers</code>. (<code>ON_ERROR_STOP off</code> lets the example carry on after the error.) The query:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">custmers</span><span class="p">;</span>
 </code></pre></div>
@@ -1093,7 +1289,13 @@ LINE 1: SELECT * FROM custmers;
                       ^
 </code></pre></div>
 
-<p>Three parts: the <strong>message</strong>, the <strong>line and a caret</strong> pointing at the offending token, and — often — a <code>DETAIL</code> and a <code>HINT</code>. The hint is frequently the whole answer:</p>
+<p>The archivist handed the slip back with an arrow under the word it could not read. An error has three parts:</p>
+<ul>
+<li>the <strong>message</strong>, here <code>relation "custmers" does not exist</code>;</li>
+<li>the <strong>line and a caret</strong> pointing at the offending token, the <code>^</code> under <code>custmers</code>;</li>
+<li>and, often, a <code>DETAIL</code> and a <code>HINT</code>.</li>
+</ul>
+<p>The hint is frequently the whole answer. Misspell a column instead:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="n">contry</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">customers</span><span class="p">;</span>
 </code></pre></div>
@@ -1104,8 +1306,17 @@ LINE 1: SELECT contry FROM customers;
 HINT:  Perhaps you meant to reference the column "customers.country".
 </code></pre></div>
 
-<p>Every error also carries a five-character <strong>SQLSTATE</strong> code, which is what programs should match on rather than the message text — messages are translated and they change between releases. <code>23505</code> is a unique violation, <code>23503</code> a foreign-key violation, <code>40001</code> a serialization failure (§14.15), <code>40P01</code> a deadlock (§15.6). <code>\errverbose</code> after an error prints the code and the server source location.</p>
+<p>The <code>HINT</code> names the column you meant, <code>customers.country</code>. PostgreSQL compared your misspelling with the real column names and suggested the nearest.</p>
+<p>Every error also carries a five-character <strong>SQLSTATE</strong> code, which is what programs should match on rather than the message text. Messages are translated into the server's language, and they change between releases; the codes do not. A few you will meet:</p>
+<ul>
+<li><code>23505</code> is a unique violation;</li>
+<li><code>23503</code> a foreign-key violation;</li>
+<li><code>40001</code> a serialization failure (§14.15);</li>
+<li><code>40P01</code> a deadlock (§15.6).</li>
+</ul>
+<p><code>\errverbose</code> after an error prints the code and the server source location.</p>
 <h2 id="section-0-what-this-section-established">What This Section Established</h2>
+<p>The picture: an archive of index cards, run by an archivist. Each box is a table of cards with the same fields; you hand the archivist a request saying what you want, and the archivist decides how to find it. Your assistant at the desk is psql, the guest list at the gate is <code>pg_hba.conf</code>, the archive's register of its own boxes is the catalogs, and a blank field on a card is <code>NULL</code>.</p>
 <p>The relational model: unordered sets of typed rows, identified by value rather than position, with every operation returning another relation. A table has no order, so <code>ORDER BY</code> is the only guarantee you have.</p>
 <p>SQL is declarative. You write what, the planner decides how, on every execution, from current statistics. That is why an index added later speeds up a query written years earlier, and why performance is invisible in the text. Think in sets, not rows.</p>
 <p>A cluster is one server holding several databases; the postmaster forks one backend process per connection; shared buffers is the page cache they share. A connection addresses exactly one database, so schemas rather than databases organise an application.</p>
@@ -1113,7 +1324,7 @@ HINT:  Perhaps you meant to reference the column "customers.country".
 <p>psql is part of the system, not a convenience. <code>\d</code> and its family describe every object and reveal what references a table; <code>\x</code> transposes wide rows; <code>\pset null</code> stops <code>NULL</code> and the empty string looking alike; <code>\timing</code> measures the round trip, not the server; <code>\set</code>, <code>\gexec</code>, <code>\gset</code>, <code>\watch</code>, <code>\i</code> and <code>\copy</code> make it a scripting tool; <strong><code>\set ON_ERROR_STOP on</code> belongs in every script</strong>, because without it a failed migration keeps going.</p>
 <p>Metadata lives in ordinary tables. <code>pg_catalog</code> (<code>pg_class</code>, <code>pg_index</code>, <code>pg_attribute</code>) is complete and PostgreSQL-specific; <code>information_schema</code> is standard and portable. <code>oid</code> is the real identity of everything, and <code>regclass</code> is an <code>oid</code> that reads as a name.</p>
 <p>Three-valued logic: <code>NULL = NULL</code> is unknown, not true. A row can fail both <code>x = 1</code> and <code>x &lt;&gt; 1</code>. <code>IS NULL</code> is the operator that returns a boolean.</p>
-<p>Errors carry a message, a caret, often a <code>HINT</code> naming the column you meant, and always a SQLSTATE — match on the code, never the text.</p>
+<p>Errors carry a message, a caret, often a <code>HINT</code> naming the column you meant, and always a SQLSTATE: match on the code, never the text.</p>
 <h2 id="section-0-exercises">Exercises</h2>
 <p><strong>1. Find the catalog behind a meta-command.</strong> Start psql with <code>-E</code> and run <code>\dt</code>. Capture the query psql issued. Explain what each join in it is for, then write your own simpler version that lists table names and row-count estimates.</p>
 <p><strong>2. Prove a table has no order.</strong> Create a table, insert rows, and select them without <code>ORDER BY</code> — repeatedly, and after an <code>UPDATE</code> to one row. Report what you observe and explain it in terms of §14.7. Then state why observing a stable order is not evidence of a guarantee.</p>
