@@ -1302,7 +1302,7 @@ handbook tokens resent : 28,800,000,000
 <p><strong>Caching is the entire answer here, and the reason is structural.</strong> The handbook is the overwhelming majority of the tokens, it is byte-identical on every request, and it is resent three times per conversation. That is the textbook case from §9.3, and it is one parameter.</p>
 <p><strong>Sonnet on top is a further large cut</strong>, and unlike caching it is a quality decision. §13 is how you make it: run the eval on both, compare, and decide with the number in front of you. A support assistant answering from a supplied document is close to reading comprehension, which is where smaller models do well. But "close to" is a hypothesis and not a result.</p>
 <p><strong>Four things I would check before trusting any of this figure.</strong></p>
-<p><strong>Whether the handbook actually fits and should.</strong> 40,000 tokens is a fifth of a 200k window and it fits comfortably. Per §10.1, that means <strong>retrieval is probably unnecessary</strong>. That is a useful conclusion to reach before building a pipeline, and this arithmetic is what reaches it.</p>
+<p><strong>Whether the handbook actually fits and should.</strong> 40,000 tokens is 4% of Opus 5's 1,000,000-token window, and a fifth of even the 200,000-token window of the older Claude Haiku 4.5. It fits comfortably. Per §10.1, that means <strong>retrieval is probably unnecessary</strong>. That is a useful conclusion to reach before building a pipeline, and this arithmetic is what reaches it.</p>
 <p><strong>Whether it changes.</strong> A handbook edited daily invalidates the cache daily. If it is edited quarterly, the 1-hour TTL (how long a cached entry lives) is worth considering (§9.4). The cost model is identical and the operational answer is not.</p>
 <p><strong>Whether three turns is real.</strong> The whole calculation scales with it, and the <em>distribution</em> matters more than the mean. If one conversation in ten runs to fifteen turns, those are a large share of the bill, and nothing above is sized for them.</p>
 <p><strong>The token counts themselves.</strong> <code>count_tokens</code> is free (§2.8), and it turns "40,000 tokens" from an assumption into a measurement. Everything here scales linearly with it.</p>
@@ -1858,7 +1858,7 @@ the last reading   : 41
 <h2 id="section-1-28-counting-tokens">2.8 Counting Tokens</h2>
 <p>Before you send a long request, you often need to know whether it will fit. In the picture, it is the clerk at the counter who counts your form for free before you pay to send it.</p>
 <p><strong>Token counting</strong> has its own endpoint. <code>count_tokens</code> takes the same request shape and returns what it would cost in input tokens. It is free, and it is the only honest way to answer "will this fit".</p>
-<p>This counts a small request, then works out how much room is left in a 200,000-token window once 4,096 tokens are kept back for the reply:</p>
+<p>This counts a small request, asks the Models API (§2.2) how large the model's window is, then works out how much room is left once 4,096 tokens are kept back for the reply:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">anthropic</span>
 
 <span class="n">client</span> <span class="o">=</span> <span class="n">anthropic</span><span class="o">.</span><span class="n">Anthropic</span><span class="p">()</span>
@@ -1872,7 +1872,7 @@ the last reading   : 41
 <span class="n">count</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">messages</span><span class="o">.</span><span class="n">count_tokens</span><span class="p">(</span><span class="o">**</span><span class="n">REQUEST</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"input tokens:"</span><span class="p">,</span> <span class="n">count</span><span class="o">.</span><span class="n">input_tokens</span><span class="p">)</span>
 
-<span class="n">WINDOW</span> <span class="o">=</span> <span class="mi">200_000</span>
+<span class="n">WINDOW</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">models</span><span class="o">.</span><span class="n">retrieve</span><span class="p">(</span><span class="n">REQUEST</span><span class="p">[</span><span class="s2">"model"</span><span class="p">])</span><span class="o">.</span><span class="n">max_input_tokens</span>
 <span class="n">RESERVED_FOR_OUTPUT</span> <span class="o">=</span> <span class="mi">4_096</span>
 <span class="n">headroom</span> <span class="o">=</span> <span class="n">WINDOW</span> <span class="o">-</span> <span class="n">count</span><span class="o">.</span><span class="n">input_tokens</span> <span class="o">-</span> <span class="n">RESERVED_FOR_OUTPUT</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"headroom in a </span><span class="si">{</span><span class="n">WINDOW</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">-token window: </span><span class="si">{</span><span class="n">headroom</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> tokens"</span><span class="p">)</span>
@@ -1880,12 +1880,12 @@ the last reading   : 41
 </code></pre></div>
 
 <div class="highlight" data-lang="text"><pre><span></span><code>input tokens: 26
-headroom in a 200,000-token window: 195,878 tokens
+headroom in a 1,000,000-token window: 995,878 tokens
 fits: True
 </code></pre></div>
 
-<p>Read it line by line. The request is 26 input tokens. Take those, and the 4,096 kept for the reply, away from 200,000, and 195,878 tokens are left. It fits, with a great deal of room.</p>
-<p><strong>Budget for the output as well as the input.</strong> The context window holds both. A request that uses 199,000 of a 200,000-token window leaves a thousand tokens to answer in, and you will meet <code>max_tokens</code> or <code>model_context_window_exceeded</code> and not a helpful error.</p>
+<p>Read it line by line. The request is 26 input tokens. Claude Opus 5's window is 1,000,000 tokens. Take the 26, and the 4,096 kept for the reply, away from 1,000,000, and 995,878 tokens are left. It fits, with a great deal of room.</p>
+<p><strong>Budget for the output as well as the input.</strong> The context window holds both. A request that uses 999,000 of a 1,000,000-token window leaves a thousand tokens to answer in, and you will meet <code>max_tokens</code> or <code>model_context_window_exceeded</code> and not a helpful error.</p>
 <p>Token counting includes <code>tools</code> and <code>system</code>, which is how you discover that a tool surface (the descriptions of every tool you offer) is larger than you assumed (§6.9).</p>
 <h2 id="section-1-29-errors-retries-and-rate-limits">2.9 Errors, Retries and Rate Limits</h2>
 <p>Sometimes a request fails. In the picture, the form comes back with a rejection slip, and the slip says one of two things: "you filled this in wrongly", or "we are busy, try later". The first kind never goes away by itself. The second usually does.</p>
@@ -2130,31 +2130,31 @@ string append are two halves of the same bug, and both had to be fixed
 <p><strong>5. <code>response.content[0].text</code> twice over.</strong> Appending the extracted string and not the block list means the history loses everything that is not text. Index zero is also not reliably the text block once the model narrates or thinks. Combined with the missing <code>stop_reason</code> check, a truncated answer is appended to history as though complete, and the model then continues a conversation in which it appears to have said something it did not finish.</p>
 <p><strong>One judgement call.</strong> Raising on <code>max_tokens</code> is deliberate and not obviously right, because some applications would rather return the partial text with a flag. What is not defensible is returning it as though it were complete, which is what the original does.</p>
 </details>
-<p><strong>Exercise 2.2 — Budget a request.</strong> You have a 200,000-token window, a 3,200-token system prompt, 34 tool definitions totalling 3,230 tokens, and a conversation that grows by about 1,100 tokens per turn. You need 4,000 tokens of output. How many turns before you have a problem, and what do you do about it?</p>
+<p><strong>Exercise 2.2 — Budget a request.</strong> You have Claude Opus 5's 1,000,000-token window, a 3,200-token system prompt, 34 tool definitions totalling 3,230 tokens, and a conversation that grows by about 1,100 tokens per turn. You need 4,000 tokens of output. How many turns before you have a problem, and what do you do about it?</p>
 <details>
 <summary>Solution</summary>
-<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">WINDOW</span> <span class="o">=</span> <span class="mi">200_000</span>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">WINDOW</span> <span class="o">=</span> <span class="mi">1_000_000</span>
 <span class="n">SYSTEM</span><span class="p">,</span> <span class="n">TOOLS</span><span class="p">,</span> <span class="n">PER_TURN</span><span class="p">,</span> <span class="n">OUTPUT</span> <span class="o">=</span> <span class="mi">3_200</span><span class="p">,</span> <span class="mi">3_230</span><span class="p">,</span> <span class="mi">1_100</span><span class="p">,</span> <span class="mi">4_000</span>
 
 <span class="n">fixed</span> <span class="o">=</span> <span class="n">SYSTEM</span> <span class="o">+</span> <span class="n">TOOLS</span>
 <span class="n">budget</span> <span class="o">=</span> <span class="n">WINDOW</span> <span class="o">-</span> <span class="n">fixed</span> <span class="o">-</span> <span class="n">OUTPUT</span>
 <span class="n">turns_available</span> <span class="o">=</span> <span class="n">budget</span> <span class="o">//</span> <span class="n">PER_TURN</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"window                    : </span><span class="si">{</span><span class="n">WINDOW</span><span class="si">:</span><span class="s2">&gt;8,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"fixed (system + tools)    : </span><span class="si">{</span><span class="n">fixed</span><span class="si">:</span><span class="s2">&gt;8,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"reserved for output       : </span><span class="si">{</span><span class="n">OUTPUT</span><span class="si">:</span><span class="s2">&gt;8,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"left for conversation     : </span><span class="si">{</span><span class="n">budget</span><span class="si">:</span><span class="s2">&gt;8,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"turns before it overflows : </span><span class="si">{</span><span class="n">turns_available</span><span class="si">:</span><span class="s2">&gt;8,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"window                    : </span><span class="si">{</span><span class="n">WINDOW</span><span class="si">:</span><span class="s2">&gt;9,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"fixed (system + tools)    : </span><span class="si">{</span><span class="n">fixed</span><span class="si">:</span><span class="s2">&gt;9,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"reserved for output       : </span><span class="si">{</span><span class="n">OUTPUT</span><span class="si">:</span><span class="s2">&gt;9,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"left for conversation     : </span><span class="si">{</span><span class="n">budget</span><span class="si">:</span><span class="s2">&gt;9,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"turns before it overflows : </span><span class="si">{</span><span class="n">turns_available</span><span class="si">:</span><span class="s2">&gt;9,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">()</span>
 
 <span class="c1"># Where the pain actually starts: cost, long before capacity.</span>
 <span class="n">INPUT_PER_MTOK</span> <span class="o">=</span> <span class="mf">5.00</span>
 <span class="n">cumulative</span> <span class="o">=</span> <span class="mi">0</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'turn'</span><span class="si">:</span><span class="s2">&gt;6</span><span class="si">}{</span><span class="s1">'context'</span><span class="si">:</span><span class="s2">&gt;10</span><span class="si">}{</span><span class="s1">'cost so far'</span><span class="si">:</span><span class="s2">&gt;14</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
-<span class="k">for</span> <span class="n">turn</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">175</span><span class="p">):</span>
+<span class="k">for</span> <span class="n">turn</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">400</span><span class="p">,</span> <span class="mi">899</span><span class="p">):</span>
     <span class="n">context</span> <span class="o">=</span> <span class="n">fixed</span> <span class="o">+</span> <span class="n">turn</span> <span class="o">*</span> <span class="n">PER_TURN</span>
     <span class="n">cumulative</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">fixed</span> <span class="o">+</span> <span class="n">t</span> <span class="o">*</span> <span class="n">PER_TURN</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">turn</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">turn</span><span class="si">:</span><span class="s2">&gt;6</span><span class="si">}{</span><span class="n">context</span><span class="si">:</span><span class="s2">&gt;10,</span><span class="si">}{</span><span class="s1">'$</span><span class="si">%.2f</span><span class="s1">'</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="p">(</span><span class="n">cumulative</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e6</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">INPUT_PER_MTOK</span><span class="p">)</span><span class="si">:</span><span class="s2">&gt;14</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">turn</span><span class="si">:</span><span class="s2">&gt;6</span><span class="si">}{</span><span class="n">context</span><span class="si">:</span><span class="s2">&gt;10,</span><span class="si">}{</span><span class="sa">f</span><span class="s1">'$</span><span class="si">{</span><span class="n">cumulative</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e6</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">INPUT_PER_MTOK</span><span class="si">:</span><span class="s1">,.2f</span><span class="si">}</span><span class="s1">'</span><span class="si">:</span><span class="s2">&gt;14</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">()</span>
 <span class="c1"># Caching the fixed prefix bills it at 0.10x. What that saves depends entirely on</span>
@@ -2169,18 +2169,18 @@ string append are two halves of the same bug, and both had to be fixed
 <span class="nb">print</span><span class="p">(</span><span class="s2">"itself is the bill, which is what compaction (9.7) is for"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>window                    :  200,000
-fixed (system + tools)    :    6,430
-reserved for output       :    4,000
-left for conversation     :  189,570
-turns before it overflows :      172
+<div class="highlight" data-lang="text"><pre><span></span><code>window                    : 1,000,000
+fixed (system + tools)    :     6,430
+reserved for output       :     4,000
+left for conversation     :   989,570
+turns before it overflows :       899
 
   turn   context   cost so far
      1     7,530         $0.04
     20    28,430         $1.80
-    50    61,430         $8.62
    100   116,430        $30.99
-   175   198,930        $90.33
+   400   446,430       $453.96
+   899   995,330     $2,253.93
 
   turn   context  cached cost   saving
      1     7,530        1,743      77%
@@ -2190,8 +2190,8 @@ caching the fixed part matters most early; by turn 100 the conversation
 itself is the bill, which is what compaction (9.7) is for
 </code></pre></div>
 
-<p><strong>Capacity is not the binding constraint, and that is the answer.</strong> The window holds around 175 turns, which almost no conversation reaches. Long before that, two other things bite.</p>
-<p><strong>Cost.</strong> By turn 100 the conversation has cost <strong>$31 in input tokens alone</strong>, and by turn 175 it is $90, for a single conversation. It is still growing quadratically (§9.1), so the last 75 turns cost twice what the first 100 did. This is where the pain is felt, and it is felt as a bill and not as an error.</p>
+<p><strong>Capacity is not the binding constraint, and that is the answer.</strong> The window holds around 900 turns, which almost no conversation reaches. Long before that, two other things bite.</p>
+<p><strong>Cost.</strong> By turn 100 the conversation has cost <strong>$31 in input tokens alone</strong>, by turn 400 it is $454, and at the edge of the window it is $2,254, for a single conversation. It is growing quadratically (§9.1), so the last 499 turns cost about four times what the first 400 did. This is where the pain is felt, and it is felt as a bill and not as an error.</p>
 <p><strong>Quality.</strong> A context of 100,000 tokens of accumulated conversation is one in which the relevant part is a small fraction of the whole. Response quality degrades before capacity runs out, which is why §9.7 recommends compaction on a trigger well below the window and not at it.</p>
 <p><strong>What I would do, in order.</strong> Cache the fixed 6,430 tokens (§9.3). That is one parameter, and it removes most of the cost of the part that never changes. But read the second table before assuming that is the answer: it saves 77% of a turn-1 request and only 5% by turn 100, because by then the conversation dwarfs the prefix. So also enable compaction with a trigger around 150,000 (§9.7), which is what actually bounds the growth. And reserve output explicitly, so you do not discover the limit through a <code>model_context_window_exceeded</code>.</p>
 <p><strong>And measure rather than model.</strong> This whole calculation rests on "about 1,100 tokens per turn", which is an estimate. <code>count_tokens</code> is free and gives the real figure for a real conversation. The arithmetic above is for deciding <em>whether to bother</em>, not for setting the trigger.</p>
@@ -5624,20 +5624,20 @@ reason ok  : True
     <span class="n">per_request</span> <span class="o">=</span> <span class="n">approx_tokens</span><span class="p">(</span><span class="n">n_tools</span> <span class="o">*</span> <span class="n">size</span><span class="p">)</span>
     <span class="c1"># 500 requests a day, 30 days, at Opus input pricing of $5 per million tokens.</span>
     <span class="n">monthly</span> <span class="o">=</span> <span class="n">per_request</span> <span class="o">*</span> <span class="mi">500</span> <span class="o">*</span> <span class="mi">30</span> <span class="o">/</span> <span class="mi">1_000_000</span> <span class="o">*</span> <span class="mi">5</span>
-    <span class="n">share</span> <span class="o">=</span> <span class="n">per_request</span> <span class="o">/</span> <span class="mi">200_000</span> <span class="o">*</span> <span class="mi">100</span>
+    <span class="n">share</span> <span class="o">=</span> <span class="n">per_request</span> <span class="o">/</span> <span class="mi">1_000_000</span> <span class="o">*</span> <span class="mi">100</span>   <span class="c1"># Opus 5's window is 1M tokens</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s2">&lt;18</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">per_request</span><span class="si">:</span><span class="s2">&gt;7,</span><span class="si">}</span><span class="s2"> tokens/request  "</span>
-          <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">share</span><span class="si">:</span><span class="s2">&gt;5.1f</span><span class="si">}</span><span class="s2">% of a 200k window  $</span><span class="si">{</span><span class="n">monthly</span><span class="si">:</span><span class="s2">&gt;7,.2f</span><span class="si">}</span><span class="s2">/month"</span><span class="p">)</span>
+          <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">share</span><span class="si">:</span><span class="s2">&gt;5.2f</span><span class="si">}</span><span class="s2">% of a 1M window  $</span><span class="si">{</span><span class="n">monthly</span><span class="si">:</span><span class="s2">&gt;7,.2f</span><span class="si">}</span><span class="s2">/month"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>5 simple tools         400 tokens/request    0.2% of a 200k window  $  30.00/month
-20 simple tools      1,600 tokens/request    0.8% of a 200k window  $ 120.00/month
-20 complex tools     5,750 tokens/request    2.9% of a 200k window  $ 431.25/month
-120 simple tools     9,600 tokens/request    4.8% of a 200k window  $ 720.00/month
+<div class="highlight" data-lang="text"><pre><span></span><code>5 simple tools         400 tokens/request   0.04% of a 1M window  $  30.00/month
+20 simple tools      1,600 tokens/request   0.16% of a 1M window  $ 120.00/month
+20 complex tools     5,750 tokens/request   0.57% of a 1M window  $ 431.25/month
+120 simple tools     9,600 tokens/request   0.96% of a 1M window  $ 720.00/month
 </code></pre></div>
 
 <p>Take the first row. Five tools of 320 characters is 1,600 characters, about 400 tokens. At 500 requests a day for 30 days, that is 6,000,000 tokens, and at $5 per million that is $30.00 a month. The other rows scale the same way.</p>
 <p>The <strong>pricing</strong> here is ordinary input-token pricing. There is no separate charge for declaring a tool, so this table is entirely a question of size. Read the two middle rows together: the same twenty tools cost 1,600 or 5,750 tokens, more than three and a half times as much, depending only on how big each definition is. Twenty complex definitions cost about as much as seventy-two simple ones. So "how many tools" is the wrong question, and "how much schema" is the right one.</p>
-<p>And note what the table does <strong>not</strong> show. Even the 120-tool row is under five per cent of a 200k window: 9,600 tokens out of 200,000. Context pressure is rarely the reason a large tool surface fails.</p>
+<p>And note what the table does <strong>not</strong> show. Even the 120-tool row is under one per cent of Opus 5's 1M window: 9,600 tokens out of 1,000,000. On the older Claude Haiku 4.5, whose window is 200,000 tokens, it is still under five per cent. Context pressure is rarely the reason a large tool surface fails.</p>
 <p>The reason it fails is selection accuracy, how often the model picks the right tool. The model is choosing from a longer list of similar-sounding options. A wrong choice costs a whole round trip, plus whatever the wrong tool did. That cost does not appear in any of these columns, which is exactly why sizing a surface by tokens alone is reassuring and misleading. In the picture, a writer facing 120 blank forms, many with similar titles, grabs the wrong one more often, however cheap the paper is.</p>
 <p>The grid below has five levers, and they compose: you can use several together. Four of them shrink the surface or make it cheaper. The fifth, fine-grained tool streaming, instead speeds up one large argument. A few terms first:</p>
 <ul>
@@ -5914,7 +5914,7 @@ strict  : True
           <span class="o">+</span> <span class="n">reads</span> <span class="o">/</span> <span class="mi">1_000_000</span> <span class="o">*</span> <span class="n">CACHE_HIT_PER_MTOK</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"definitions           : </span><span class="si">{</span><span class="n">defs_tokens</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> tokens per request"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"share of a 200k window: </span><span class="si">{</span><span class="n">defs_tokens</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">200_000</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">100</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"share of a 1M window  : </span><span class="si">{</span><span class="n">defs_tokens</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">1_000_000</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">100</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"model turns per month : </span><span class="si">{</span><span class="n">turns_per_month</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"tokens per month      : </span><span class="si">{</span><span class="n">tokens_per_month</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">()</span>
@@ -5925,7 +5925,7 @@ strict  : True
 </code></pre></div>
 
 <div class="highlight" data-lang="text"><pre><span></span><code>definitions           : 3,230 tokens per request
-share of a 200k window: 1.6%
+share of a 1M window  : 0.3%
 model turns per month : 360,000
 tokens per month      : 1,162,800,000
 
@@ -5936,7 +5936,7 @@ saving                : $4,118.25 (71%)
 
 <p><strong>The money is larger than it feels, and that is the first lesson.</strong> 3,230 tokens looks trivial. Multiplied by 360,000 model turns a month, it is 1.16 <em>billion</em> input tokens and $5,814, for text that never changes. Nobody arrives at that figure by intuition, which is the argument for spending two minutes on the arithmetic before spending a sprint on anything.</p>
 <p><strong>Caching removes 71% of it</strong>, taking $5,814 to $1,696. That is the highest-value change available, and it is roughly twenty minutes of work, because tools render first in the request, before <code>system</code> and before <code>messages</code>, and are therefore already the natural stable prefix (§9.3). Note that the saving is 71% and not 90%, because one turn in six is a cache <em>write</em> at $6.25 per million, which is more expensive than an ordinary input token. Conversations with more turns each would do better.</p>
-<p><strong>The context window is not the problem here.</strong> 3,230 tokens is 1.6% of a 200k window and negligible against 1M, so context pressure is <em>not</em> the argument for restructuring. This is exactly the sort of conclusion this arithmetic exists to reach before someone builds tool search that nothing needed.</p>
+<p><strong>The context window is not the problem here.</strong> 3,230 tokens is 0.3% of a 1M window, and only 1.6% even of Claude Haiku 4.5's 200,000-token one, so context pressure is <em>not</em> the argument for restructuring. This is exactly the sort of conclusion this arithmetic exists to reach before someone builds tool search that nothing needed.</p>
 <p><strong>What I would actually do, in order.</strong> Add caching. Then look at the 34 tools for consolidation, not to save tokens but because 34 similar-sounding names is where selection accuracy degrades, and a wrong tool call costs a full round trip plus whatever the wrong tool did. Consider tool search only after that. Anthropic suggests it from about ten tools or 10k tokens of definitions, and consolidation may well bring 34 tools under the first; at 3,230 tokens the definitions are already far under the second.</p>
 <p><strong>The number this calculation does not contain</strong>, and which dominates all of it, is tool <em>results</em>. Six turns of a search tool returning even 800 tokens each is 4,800 tokens per conversation, against 3,200 for the definitions. Unlike the definitions, results are different every time and therefore uncacheable. That is what §9.6's context editing is for, and it is why sizing a tool surface by its definitions alone always looks reassuring.</p>
 </details>
@@ -7133,7 +7133,7 @@ a 4 MB photo base64-encodes to about 5,461 kB of request body
 </ul>
 <p><strong>Formats: JPEG, PNG, GIF and WebP.</strong> Animations are not supported, and only the first frame is used, silently. <em>Silently</em> means with no error and no warning: an animated GIF is accepted, and the model sees one still picture.</p>
 <p>One capability worth naming, because it removes a design decision, is that <strong>multilingual</strong> input and output need no configuration. Text in any supported language goes in the same blocks as English, whether it is a French support ticket, a Japanese product description or a document that mixes scripts. The model answers in the language of the request unless told otherwise. What <em>does</em> change is the token count (§1.2). Non-Latin scripts, such as Japanese, Arabic or Hindi, run considerably denser: the same message needs more tokens. So a <strong>multilingual</strong> workload budgeted on English prose is under-budgeted.</p>
-<p>The limits worth knowing before you design around them are in the grid below. "A 200k window" means a context window of 200,000 tokens:</p>
+<p>The limits worth knowing before you design around them are in the grid below. "A 200k window" means a context window of 200,000 tokens, which among current models only the older Claude Haiku 4.5 has; every other one has 1,000,000:</p>
 <div style="display:grid;grid-template-columns:210px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#4a9eda">100 images per request</div><div><strong>On models with a 200k window</strong>; 600 on models with a larger one. Request size usually binds first.</div>
 <div style="font-weight:600;color:#35b37e">10 MB per image</div><div><strong>Base64-encoded, on the Claude API.</strong> 5 MB on Bedrock and Google Cloud.</div>
@@ -7407,14 +7407,14 @@ input tokens: 48210
 </div>
 
 <p>The third row needs care. The docs give 1,500–3,000 tokens per page for the <em>text</em> of a page. Every page is also an image, and that image costs tokens too, by the same arithmetic as any other image. So the figures below are a floor, not an estimate. <code>count_tokens</code> (§2.8) on a few real pages gives the true number.</p>
-<p>The example below sizes three documents with the text figures only, against a 200,000-token window and $5 per million input tokens:</p>
+<p>The example below sizes three documents with the text figures only, against Claude Opus 5's 1,000,000-token window and $5 per million input tokens:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">PAGES_PER_DOC</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"a 4-page invoice"</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="s2">"a 40-page contract"</span><span class="p">,</span> <span class="mi">40</span><span class="p">),</span>
                  <span class="p">(</span><span class="s2">"a 300-page annual report"</span><span class="p">,</span> <span class="mi">300</span><span class="p">)]</span>
 <span class="n">TOKENS_PER_PAGE_LOW</span><span class="p">,</span> <span class="n">TOKENS_PER_PAGE_HIGH</span> <span class="o">=</span> <span class="mi">1_500</span><span class="p">,</span> <span class="mi">3_000</span>
-<span class="n">WINDOW</span><span class="p">,</span> <span class="n">INPUT_PER_MTOK</span> <span class="o">=</span> <span class="mi">200_000</span><span class="p">,</span> <span class="mf">5.00</span>
+<span class="n">WINDOW</span><span class="p">,</span> <span class="n">INPUT_PER_MTOK</span> <span class="o">=</span> <span class="mi">1_000_000</span><span class="p">,</span> <span class="mf">5.00</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'document'</span><span class="si">:</span><span class="s2">&lt;28</span><span class="si">}{</span><span class="s1">'pages'</span><span class="si">:</span><span class="s2">&gt;7</span><span class="si">}{</span><span class="s1">'tokens (low-high)'</span><span class="si">:</span><span class="s2">&gt;22</span><span class="si">}</span><span class="s2">"</span>
-      <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'</span><span class="si">% o</span><span class="s1">f 200k window'</span><span class="si">:</span><span class="s2">&gt;19</span><span class="si">}{</span><span class="s1">'cost'</span><span class="si">:</span><span class="s2">&gt;9</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+      <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'</span><span class="si">% o</span><span class="s1">f 1M window'</span><span class="si">:</span><span class="s2">&gt;19</span><span class="si">}{</span><span class="s1">'cost'</span><span class="si">:</span><span class="s2">&gt;9</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">pages</span> <span class="ow">in</span> <span class="n">PAGES_PER_DOC</span><span class="p">:</span>
     <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="n">pages</span> <span class="o">*</span> <span class="n">TOKENS_PER_PAGE_LOW</span><span class="p">,</span> <span class="n">pages</span> <span class="o">*</span> <span class="n">TOKENS_PER_PAGE_HIGH</span>
     <span class="n">share</span> <span class="o">=</span> <span class="n">high</span> <span class="o">/</span> <span class="n">WINDOW</span>
@@ -7422,24 +7422,24 @@ input tokens: 48210
           <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">share</span><span class="si">:</span><span class="s2">&gt;18.0%</span><span class="si">}{</span><span class="s1">'$</span><span class="si">%.3f</span><span class="s1">'</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="p">(</span><span class="n">high</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e6</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">INPUT_PER_MTOK</span><span class="p">)</span><span class="si">:</span><span class="s2">&gt;9</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 <span class="nb">print</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"the 300-page report does not fit a 200k window at all —"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">"the PAGE limit is 600, and the window binds long before that"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"the 300-page report fills up to 90</span><span class="si">% o</span><span class="s2">f the window with text alone;"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"its page images come on top, so it may not fit at all"</span><span class="p">)</span>
 </code></pre></div>
 
-<div class="highlight" data-lang="text"><pre><span></span><code>document                      pages     tokens (low-high)   % of 200k window     cost
-a 4-page invoice                  4          6,000-12,000                6%   $0.060
-a 40-page contract               40        60,000-120,000               60%   $0.600
-a 300-page annual report        300       450,000-900,000              450%   $4.500
+<div class="highlight" data-lang="text"><pre><span></span><code>document                      pages     tokens (low-high)     % of 1M window     cost
+a 4-page invoice                  4          6,000-12,000                1%   $0.060
+a 40-page contract               40        60,000-120,000               12%   $0.600
+a 300-page annual report        300       450,000-900,000               90%   $4.500
 
-the 300-page report does not fit a 200k window at all —
-the PAGE limit is 600, and the window binds long before that
+the 300-page report fills up to 90% of the window with text alone;
+its page images come on top, so it may not fit at all
 </code></pre></div>
 
 <p>Reading it:</p>
 <ul>
-<li>The 4-page invoice takes at most 12,000 tokens, 6% of the window, for 6 cents.</li>
-<li>The 40-page contract takes up to 60% of the window before you have asked anything.</li>
-<li>The 300-page report needs up to four and a half windows of text alone, before a single image token is counted.</li>
+<li>The 4-page invoice takes at most 12,000 tokens, about 1% of the window, for 6 cents.</li>
+<li>The 40-page contract takes up to 12% of the window before you have asked anything.</li>
+<li>The 300-page report needs up to 90% of the window in text alone, before a single image token is counted. Add a page image for each of its 300 pages and it can overflow even a 1M window. On a model with a 200,000-token window, such as the older Claude Haiku 4.5, it would need four and a half windows, and the page limit there is 100 anyway.</li>
 </ul>
 <p>Note the <code>cited_text</code> field on each citation. It carries the passage verbatim, word for word, so a check can compare <code>cited_text</code> against the source and not trust the page number alone (§8.5).</p>
 <p><strong>The page limit is almost never what stops you.</strong> A dense document fills the context window well before 600 pages, and the failure looks like a context error and not a document error. Split long documents into sections, or retrieve the relevant pages (§10) and do not send the whole thing. To <em>retrieve</em> is to search the document first and send only the parts that match the question.</p>
@@ -9043,13 +9043,13 @@ cached + clearing       105,000 token-equivalents   0.56x  $ 0.525
 
 <h2 id="section-9-101-when-retrieval-is-the-wrong-answer">10.1 When Retrieval Is the Wrong Answer</h2>
 <p>Start with the question most teams skip: do you need retrieval at all? Context windows are large now. The reflex to build a pipeline is often wrong, and the cheapest pipeline is the one you never build.</p>
-<p>To decide, you need three numbers per corpus. A <em>corpus</em> is the whole collection of documents you might answer from. The numbers are how many documents it has, how many tokens each one is, and therefore whether the total fits in the window. The block below takes four corpora of very different sizes and asks that question for each. It uses the course's 200,000-token window from §2.8 and the Opus 5 prices from §2: $5.00 per million input tokens, and $0.50 per million for a cache read (§9.3). The last column is what one question costs if the whole corpus is in the window and cached:</p>
+<p>To decide, you need three numbers per corpus. A <em>corpus</em> is the whole collection of documents you might answer from. The numbers are how many documents it has, how many tokens each one is, and therefore whether the total fits in the window. The block below takes four corpora of very different sizes and asks that question for each. It uses Claude Opus 5's 1,000,000-token window (§2.8) and the Opus 5 prices from §2: $5.00 per million input tokens, and $0.50 per million for a cache read (§9.3). The last column is what one question costs if the whole corpus is in the window and cached:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">CORPUS_SIZES</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"a product FAQ"</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">600</span><span class="p">),</span>
                 <span class="p">(</span><span class="s2">"an employee handbook"</span><span class="p">,</span> <span class="mi">220</span><span class="p">,</span> <span class="mi">900</span><span class="p">),</span>
                 <span class="p">(</span><span class="s2">"one year of engineering docs"</span><span class="p">,</span> <span class="mi">3_400</span><span class="p">,</span> <span class="mi">1_100</span><span class="p">),</span>
                 <span class="p">(</span><span class="s2">"a support ticket archive"</span><span class="p">,</span> <span class="mi">210_000</span><span class="p">,</span> <span class="mi">400</span><span class="p">)]</span>
 
-<span class="n">WINDOW</span> <span class="o">=</span> <span class="mi">200_000</span>
+<span class="n">WINDOW</span> <span class="o">=</span> <span class="mi">1_000_000</span>
 <span class="n">INPUT_PER_MTOK</span><span class="p">,</span> <span class="n">CACHE_READ_PER_MTOK</span> <span class="o">=</span> <span class="mf">5.00</span><span class="p">,</span> <span class="mf">0.50</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'corpus'</span><span class="si">:</span><span class="s2">&lt;30</span><span class="si">}{</span><span class="s1">'docs'</span><span class="si">:</span><span class="s2">&gt;9</span><span class="si">}{</span><span class="s1">'tokens'</span><span class="si">:</span><span class="s2">&gt;12</span><span class="si">}{</span><span class="s1">'fits?'</span><span class="si">:</span><span class="s2">&gt;8</span><span class="si">}{</span><span class="s1">'cached/query'</span><span class="si">:</span><span class="s2">&gt;14</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -9075,8 +9075,8 @@ if it fits and it is stable, cache it and skip retrieval entirely
 <p>Read it line by line:</p>
 <ul>
 <li><strong>A product FAQ</strong>, 40 documents of 600 tokens, is 24,000 tokens. It fits easily, and reading it from the cache costs just over a cent per question.</li>
-<li><strong>An employee handbook</strong>, 220 documents of 900 tokens, is 198,000 tokens. It fits, barely, and costs about ten cents per question from the cache. In practice you would also need room for the question and the reply (§2.8), so this one is right at the edge.</li>
-<li><strong>One year of engineering docs</strong> is 3,740,000 tokens, almost nineteen times the window. It does not fit.</li>
+<li><strong>An employee handbook</strong>, 220 documents of 900 tokens, is 198,000 tokens. It fits with room to spare, about a fifth of the window, and costs about ten cents per question from the cache. On a model with a 200,000-token window, such as the older Claude Haiku 4.5, it would fit only barely: you also need room for the question and the reply (§2.8), so there it would be right at the edge.</li>
+<li><strong>One year of engineering docs</strong> is 3,740,000 tokens, almost four times the window. It does not fit.</li>
 <li><strong>A support ticket archive</strong> is 84,000,000 tokens. It is not even close.</li>
 </ul>
 <p>So the first two do not need retrieval, and the last two do. That leads to the rule.</p>
@@ -9114,7 +9114,7 @@ edited every minute     1440 writes/day  $ 1,782.00/day in writes alone
 
 <p>Read it line by line. One write of the handbook costs about $1.24. Edited once a day, that is nothing. Edited every hour, it is about $30 a day before anyone has asked a single question. Edited every minute, it is $1,782 a day in writes alone. So a cache write per change is fine at daily granularity and untenable at per-minute. Retrieval does not have this problem, because it reads current state at query time: the search runs against whatever the documents say right now.</p>
 <p><strong>Most of the corpus is irrelevant to any given query, and its presence hurts.</strong> This is the subtle one, and §9 already made the argument. A window stuffed with material the model must sift is a window in which the relevant sentence is harder to use. Think of the writer handed a two-hundred-page binder to answer one question about refunds: everything is there, and the one paragraph that matters is buried. Beyond some size, retrieval improves <em>accuracy</em> and not just cost.</p>
-<p>Anthropic's own write-up on retrieval, published in 2024, gives the same advice from the other side: for a knowledge base under about 200,000 tokens, you can include the whole thing in the prompt and skip RAG.</p>
+<p>Anthropic's own write-up on retrieval, published in 2024, gives the same advice from the other side: for a knowledge base under about 200,000 tokens, you can include the whole thing in the prompt and skip RAG. That advice was written when 200,000 tokens was the usual window. Today's 1,000,000-token windows raise the ceiling on what <em>fits</em>, but they do nothing about the third reason above: a window five times fuller is five times more material for the model to sift.</p>
 <p>The failure to avoid is building a pipeline for a 40-document FAQ because RAG is what one builds.</p>
 <h2 id="section-9-102-chunking">10.2 Chunking</h2>
 <p>Suppose the corpus does not fit, so you must retrieve. The first real decision is how to split documents into pieces. A piece is called a <em>chunk</em>, and splitting is <em>chunking</em>. In the archive picture, this is where you cut the pages with scissors.</p>
@@ -15899,7 +15899,7 @@ refunds actually made: {'ORD-4471': 1500}
 <p>Note that <strong>no tool takes a customer id</strong>. §14.4 called that the most common real vulnerability in agent code: a tool that takes the account as an argument lets a fooled model ask for someone else's. The fix here is not validation. It is that there is nothing to validate.</p>
 <h2 id="section-15-164-retrieval">16.4 Retrieval</h2>
 <p>Policy answers come from a small <em>corpus</em>, the whole collection of policy documents. §10.1's first question is whether it needs retrieval at all. If the whole corpus fits in the context window and changes rarely, you can simply put all of it in every request and cache it.</p>
-<p>§2.8 and §10.1 worked with a 200,000-token window to keep the arithmetic small. Claude Opus 5's real window is 1,000,000 tokens; the Models API reports it as <code>max_input_tokens</code> (§2.2). The program below uses the real figure. It asks whether the corpus fits, what one turn would cost with the whole corpus read from the cache, and what a month of that costs next to retrieving five chunks of 240 tokens:</p>
+<p>Claude Opus 5's window is 1,000,000 tokens, the figure §2.8 read from the Models API as <code>max_input_tokens</code> (§2.2). The program below uses it. It asks whether the corpus fits, what one turn would cost with the whole corpus read from the cache, and what a month of that costs next to retrieving five chunks of 240 tokens:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">POLICY_DOCS</span><span class="p">,</span> <span class="n">TOKENS_EACH</span> <span class="o">=</span> <span class="mi">340</span><span class="p">,</span> <span class="mi">700</span>
 <span class="n">WINDOW</span><span class="p">,</span> <span class="n">CACHE_READ_PER_MTOK</span> <span class="o">=</span> <span class="mi">1_000_000</span><span class="p">,</span> <span class="mf">0.50</span>   <span class="c1"># Opus 5</span>
 
