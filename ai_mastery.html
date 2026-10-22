@@ -14594,10 +14594,146 @@ manual retry + fallback credit  full control of the chain                       
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-12">← Back</button><button class="btn-next" data-next="section-14">Next: Cost, Latency and Operations →</button></div>
 </section>
-<section class="course-section" id="section-14" data-section-id="section-14"><div class="section-header-meta">  <span class="section-tag">SECTION 15</span>  <button class="btn-complete" data-complete="section-14"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Cost, Latency and Operations</h1><p>The previous fourteen sections built something that works. This one is about running it: knowing what it costs before the invoice arrives, making it fast enough that people use it, and noticing when it stops working.</p>
-<p>There is a reason this comes last and not first. <strong>Almost every operational lever in this section is a decision made somewhere else</strong>: the model in §2, the cache in §9, the effort in §5, and the tool surface in §6. What this section adds is the arithmetic that tells you which lever to pull, and the instrumentation that tells you a lever moved.</p>
+<section class="course-section" id="section-14" data-section-id="section-14"><div class="section-header-meta">  <span class="section-tag">SECTION 15</span>  <button class="btn-complete" data-complete="section-14"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Cost, Latency and Operations</h1><p>Start with a puzzle. §15.1 adds up one month of a support assistant's bill: 14.3 billion tokens and $35,655. Look at three lines of it. <em>Cache reads</em>, the cheap re-use of text the system has seen before (§9.3), are 78% of the tokens but only 16% of the money. <em>Output</em>, the words the model writes back, is 3% of the tokens but 30% of the money. And the biggest line of all, a third of the bill, is <em>cache writes</em>: storing text so that it can be re-used later. They are only 13% of the tokens. How can the feature you switched on to save money be the most expensive line on the invoice? Guess before you read on. §15.1 answers it, and §15.7 shows the gauge that would have warned you.</p>
+<p>The previous fourteen sections built something that works. This one is about <em>running</em> it, which means three jobs:</p>
+<ul>
+<li>knowing what it costs before the invoice arrives;</li>
+<li>making it fast enough that people want to use it;</li>
+<li>noticing when it stops working, even when nothing reports an error.</li>
+</ul>
+<p>The trade has a name for those jobs: <em>operations</em>, the work of keeping a system running well once real people depend on it. The system people depend on is called <em>production</em>: the real application your users reach, as opposed to your own laptop or a test copy.</p>
+<p>There is a reason this section comes last and not first. <strong>Almost every operational lever in this section is a decision made somewhere else</strong>: the model in §2, the cache in §9, the effort in §5, and the tool surface in §6. A <em>lever</em> here is a setting you can change to move cost or speed. This section adds two things the earlier sections did not have:</p>
+<ul>
+<li>the arithmetic that tells you which lever to pull;</li>
+<li>the <em>instrumentation</em>, meaning the records and measurements your code keeps, that tells you a lever really moved.</li>
+</ul>
+<p>Here is the picture for the whole section. Since §1 the model has been a ghostwriter you can only reach by telegram, and the telegraph office charges by the word. Since §11 you have run an office around that writer. This section is <strong>the office's books</strong>: the bill, the post, the clock, the logbook and the gauges on the manager's wall. Every part of it has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>In the office</th>
+<th>In this section</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The monthly telegraph bill, read line by line</td>
+<td>a cost model</td>
+<td>§15.1</td>
+</tr>
+<tr>
+<td>The writer's own words cost five times what yours do</td>
+<td>output priced at five times input</td>
+<td>§15.1</td>
+</tr>
+<tr>
+<td>Making a printing plate, and printing from it</td>
+<td>cache writes and cache reads</td>
+<td>§15.1</td>
+</tr>
+<tr>
+<td>The courier's fee for each errand to the library</td>
+<td>server-tool fees</td>
+<td>§15.1</td>
+</tr>
+<tr>
+<td>A junior writer, paid a fraction of the wage</td>
+<td>a smaller model</td>
+<td>§15.1</td>
+</tr>
+<tr>
+<td>Overnight post: half price, delivered by morning</td>
+<td>the Batch API</td>
+<td>§15.2</td>
+</tr>
+<tr>
+<td>How long until the first line of the reply arrives</td>
+<td>time to first token</td>
+<td>§15.3</td>
+</tr>
+<tr>
+<td>The reply read to you down the line as it is written</td>
+<td>streaming</td>
+<td>§15.3</td>
+</tr>
+<tr>
+<td>The telegraph line carries only so many words a minute</td>
+<td>rate limits</td>
+<td>§15.4</td>
+</tr>
+<tr>
+<td>The bank stops your cheques until next month</td>
+<td>the spend cap</td>
+<td>§15.4</td>
+</tr>
+<tr>
+<td>The office logbook, one row per telegram</td>
+<td>a request record</td>
+<td>§15.5</td>
+</tr>
+<tr>
+<td>The edition number printed on every standing memo</td>
+<td>prompt versioning</td>
+<td>§15.5</td>
+</tr>
+<tr>
+<td>The checklist before a new memo reaches the writer</td>
+<td>deployment gates</td>
+<td>§15.6</td>
+</tr>
+<tr>
+<td>Trying the new memo at one desk in ten</td>
+<td>a flagged rollout</td>
+<td>§15.6</td>
+</tr>
+<tr>
+<td>Four gauges on the manager's wall</td>
+<td>the signals to watch</td>
+<td>§15.7</td>
+</tr>
+</tbody>
+</table>
+<p>The section has seven subsections, in three parts:</p>
+<ol>
+<li>money: what a request costs (§15.1), and the cheapest way to send work that can wait (§15.2);</li>
+<li>time and capacity: what users actually wait for (§15.3), and how much traffic you are allowed (§15.4);</li>
+<li>running it: what to record (§15.5), how to ship a change safely (§15.6), and what to watch (§15.7).</li>
+</ol>
 <h2 id="section-14-151-a-complete-cost-model">15.1 A Complete Cost Model</h2>
-<p>Cost estimates for LLM applications are almost always wrong in the same direction, because they count the obvious meter and miss three others.</p>
+<p>A <em>cost model</em> is a small program that predicts your bill from how your application is used. You build one before launch, so that the first invoice is not a surprise.</p>
+<p>Start with one request. Every response from the API reports its <code>usage</code>: how many tokens went through each <em>meter</em> (§2.10). A meter here is one kind of token with its own price, like the separate lines for water and electricity on a household bill. The program below prices one typical request on Claude Opus 5, the model this course has used throughout. <code>PRICE</code> holds the dollars per million tokens for three meters, and <code>request</code> holds the tokens one request used on each:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">PRICE</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"input"</span><span class="p">:</span> <span class="mf">5.00</span><span class="p">,</span> <span class="s2">"cache_read"</span><span class="p">:</span> <span class="mf">0.50</span><span class="p">,</span> <span class="s2">"output"</span><span class="p">:</span> <span class="mf">25.00</span><span class="p">}</span>   <span class="c1"># Opus 5, $ per million</span>
+<span class="n">request</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"input"</span><span class="p">:</span> <span class="mi">900</span><span class="p">,</span> <span class="s2">"cache_read"</span><span class="p">:</span> <span class="mi">12_400</span><span class="p">,</span> <span class="s2">"output"</span><span class="p">:</span> <span class="mi">480</span><span class="p">}</span>  <span class="c1"># tokens in one request</span>
+
+<span class="n">total</span> <span class="o">=</span> <span class="mf">0.0</span>
+<span class="k">for</span> <span class="n">meter</span><span class="p">,</span> <span class="n">tokens</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">dollars</span> <span class="o">=</span> <span class="n">tokens</span> <span class="o">/</span> <span class="mi">1_000_000</span> <span class="o">*</span> <span class="n">PRICE</span><span class="p">[</span><span class="n">meter</span><span class="p">]</span>
+    <span class="n">total</span> <span class="o">+=</span> <span class="n">dollars</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">meter</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}{</span><span class="n">tokens</span><span class="si">:</span><span class="s2">&gt;7,</span><span class="si">}</span><span class="s2"> tokens   $</span><span class="si">{</span><span class="n">dollars</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'total'</span><span class="si">:</span><span class="s2">&lt;12</span><span class="si">}{</span><span class="nb">sum</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">values</span><span class="p">())</span><span class="si">:</span><span class="s2">&gt;7,</span><span class="si">}</span><span class="s2"> tokens   $</span><span class="si">{</span><span class="n">total</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>input           900 tokens   $0.0045
+cache_read   12,400 tokens   $0.0062
+output          480 tokens   $0.0120
+total        13,780 tokens   $0.0227
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong><code>input</code></strong> is the 900 tokens of new text in this request, such as the user's question. At $5 per million they cost under half a cent.</li>
+<li><strong><code>cache_read</code></strong> is the 12,400 tokens read back from the cache: the system prompt, the tool definitions and the retrieved documents, all sent before and stored (§9.3). There are fourteen times as many of them as new input tokens, yet they cost only a little more, because a cache read costs a tenth of the input price.</li>
+<li><strong><code>output</code></strong> is the 480 tokens the model wrote. That is the smallest count on the page, and the largest cost: $0.0120, more than half of the request's $0.0227. An output token costs five times an input token.</li>
+</ul>
+<p>That last line is the habit to build. Count by money, never by tokens, because the meters have very different prices.</p>
+<p>A real bill is that request multiplied by a month of traffic, plus the meters a single request does not show. Cost estimates for LLM applications are almost always wrong in the same direction, because they count the obvious meter and miss three others. The next program is the whole month for an assistant that handles 30,000 requests a day. Read <code>PROFILE</code> first, because it describes one average request:</p>
+<ul>
+<li><code>uncached_input</code> and <code>cache_read</code> are the two halves of the input, as above.</li>
+<li><code>cache_write</code> is the cost of <em>storing</em> the prefix. A <em>prefix</em> is the stable start of a request that the cache can re-use (§9.3). It is written once per conversation, and this profile assumes a conversation lasts six turns, so each request carries a sixth of one write.</li>
+<li><code>searches</code> is the share of requests that make one web search. Web search is a <em>server tool</em> (§7), a tool Anthropic runs for you, and it is billed per search on top of the tokens.</li>
+</ul>
+<p>Here is the program:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">PRICES</span> <span class="o">=</span> <span class="p">{</span>                       <span class="c1"># per million tokens, Claude Opus 5</span>
     <span class="s2">"input"</span><span class="p">:</span> <span class="mf">5.00</span><span class="p">,</span> <span class="s2">"output"</span><span class="p">:</span> <span class="mf">25.00</span><span class="p">,</span>
     <span class="s2">"cache_write_5m"</span><span class="p">:</span> <span class="mf">6.25</span><span class="p">,</span> <span class="s2">"cache_write_1h"</span><span class="p">:</span> <span class="mf">10.00</span><span class="p">,</span> <span class="s2">"cache_read"</span><span class="p">:</span> <span class="mf">0.50</span><span class="p">,</span>
@@ -14646,22 +14782,84 @@ TOTAL                                  $35,655
 per request: $0.03962
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong>The four token lines</strong> are the month's meters. The token counts are the profile times 900,000 requests (30,000 a day for 30 days).</li>
+<li><strong><code>cache reads</code></strong> is 11.16 billion tokens, by far the biggest count, and only $5,580.</li>
+<li><strong><code>cache writes</code></strong> is 1.86 billion tokens and $11,625, the biggest single line. This is the puzzle from the start of the section, and the three paragraphs after the figure explain it.</li>
+<li><strong><code>output</code></strong> is the smallest token count and the second-largest dollar line.</li>
+<li><strong><code>web search fees</code></strong> has no token count at all, because it is priced per search: 0.4 searches times 900,000 requests is 360,000 searches, at $10 per 1,000.</li>
+<li><strong><code>per request</code></strong> is the whole month divided by the number of requests: about four cents.</li>
+</ul>
+<p>The figure shows the same month twice: once measured in tokens, once in dollars.</p>
 <!-- fig:ai-cost-stack -->
 <figure id="fig-ai-cost-stack" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 400" role="img" aria-labelledby="t-ai-cost-stack d-ai-cost-stack" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-cost-stack">The same month, counted in tokens and in dollars</title><desc id="d-ai-cost-stack">Two stacked bars for 30,000 requests a day. By tokens output is 3%, cache reads are 78%. By dollars output is 30% and cache writes are 33%, with web search fees 10%. The total is $35,655 a month.</desc><defs><marker id="ah-ai-cost-stack" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="46" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">BY TOKENS  (14.3 billion a month)</text><rect x="20" y="56" width="35.4842" height="50" rx="2" style="fill:#4a9eda;fill-opacity:0.32;stroke:#4a9eda;stroke-width:1.2"/><rect x="57.4842" y="56" width="514.449" height="50" rx="2" style="fill:#35b37e;fill-opacity:0.32;stroke:#35b37e;stroke-width:1.2"/><text x="314.709" y="86" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">78%</text><rect x="573.934" y="56" width="84.0749" height="50" rx="2" style="fill:#d9a441;fill-opacity:0.32;stroke:#d9a441;stroke-width:1.2"/><text x="615.971" y="86" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">13%</text><rect x="660.008" y="56" width="17.9916" height="50" rx="2" style="fill:#cf4b6c;fill-opacity:0.32;stroke:#cf4b6c;stroke-width:1.2"/><text x="20" y="146" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">BY DOLLARS  ($35,655 a month)</text><rect x="20" y="156" width="72.9684" height="50" rx="2" style="fill:#4a9eda;fill-opacity:0.32;stroke:#4a9eda;stroke-width:1.2"/><text x="56.4842" y="186" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">11%</text><rect x="94.9684" y="156" width="101.29" height="50" rx="2" style="fill:#35b37e;fill-opacity:0.32;stroke:#35b37e;stroke-width:1.2"/><text x="145.613" y="186" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">16%</text><rect x="198.258" y="156" width="213.187" height="50" rx="2" style="fill:#d9a441;fill-opacity:0.32;stroke:#d9a441;stroke-width:1.2"/><text x="304.852" y="186" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">33%</text><rect x="413.446" y="156" width="197.916" height="50" rx="2" style="fill:#cf4b6c;fill-opacity:0.32;stroke:#cf4b6c;stroke-width:1.2"/><text x="512.403" y="186" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">30%</text><rect x="613.361" y="156" width="64.6386" height="50" rx="2" style="fill:#8a94a6;fill-opacity:0.32;stroke:#8a94a6;stroke-width:1.2"/><text x="645.681" y="186" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">10%</text><rect x="20" y="236" width="116.25" height="23.5" rx="11.75" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="78.125" y="250" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">uncached input</text><rect x="144.25" y="236" width="95.625" height="23.5" rx="11.75" style="fill:#35b37e;fill-opacity:.16;stroke:#35b37e;stroke-width:1.2"/><text x="192.062" y="250" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">cache reads</text><rect x="247.875" y="236" width="102.5" height="23.5" rx="11.75" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="299.125" y="250" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">cache writes</text><rect x="358.375" y="236" width="61.25" height="23.5" rx="11.75" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="389" y="250" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">output</text><rect x="427.625" y="236" width="123.125" height="23.5" rx="11.75" style="fill:#8a94a6;fill-opacity:.16;stroke:#8a94a6;stroke-width:1.2"/><text x="489.188" y="250" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">web search fees</text><rect x="12" y="290" width="696" height="60" rx="8" style="fill:#cf4b6c;fill-opacity:0.09"/><text x="360" y="316" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">output: 3% of the tokens, 30% of the money</text><text x="360" y="338" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">it costs five times what input does</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Output tokens are the line people under-count: 3% of tokens, 30% of the bill. Server-tool fees are a separate meter, 10% here.</figcaption></figure>
 <!-- /fig:ai-cost-stack -->
 
-<p><strong>Output tokens are the line people under-count.</strong> 432 million tokens is by far the smallest count in the table, and $10,800 is its second-largest line, because output costs five times what input does. Anything that shortens responses, such as §5.2's effort or §4's structured output, works on the expensive end, and a 20% reduction there is worth more than a 20% reduction anywhere else in the table.</p>
-<p><strong>Server-tool fees are a separate meter and are invisible in token accounting</strong> (§7.1). A search-heavy workload can have a materially different cost shape from what the token columns suggest.</p>
-<p><strong>Cache writes are the largest single line here, at 33%</strong>, and that is the result most people find surprising. At 1.25× input they cost more per token than uncached input does. This profile writes the cache once every six turns, and that is enough to outweigh all 11.2 billion cache <em>reads</em>. Every clearing event (§9.6) and every prefix change (§9.5) adds another write. If that line is large in your own profile, the fix is longer conversations per write, or the 1-hour TTL, which at 2× the write cost pays for itself as soon as it avoids a second write.</p>
-<p>Three multipliers stack on all of it, and they compose:</p>
+<p>Three things in that table are worth slowing down for.</p>
+<p><strong>Output tokens are the line people under-count.</strong> 432 million tokens is by far the smallest count in the table, and $10,800 is its second-largest line, because output costs five times what input does. In the office, the writer's own words are the expensive ones. Anything that shortens responses works on the expensive end. Two examples from earlier sections are §5.2's effort, which makes the model think and write less, and §4's structured output, which makes it reply in a fixed, compact shape. A 20% reduction there is worth more than a 20% reduction anywhere else in the table.</p>
+<p><strong>Server-tool fees are a separate meter and are invisible in token accounting</strong> (§7.1). If you add up only the token columns, you miss them entirely. In the office, they are the courier's fee for each errand to the library, charged whether the letter that comes back is long or short. A search-heavy workload can have a materially different cost shape from what the token columns suggest.</p>
+<p><strong>Cache writes are the largest single line here, at 33%</strong>, and that is the result most people find surprising. Here is the arithmetic that answers the puzzle:</p>
+<ul>
+<li>A cache write costs 1.25× the input price, $6.25 per million. That is more per token than uncached input, and 12.5 times the price of a cache read.</li>
+<li>This profile writes the cache once every six turns. So for every token written, about six are read.</li>
+<li>Six reads at $0.50 cost $3.00. One write costs $6.25. The single write outweighs all six reads together, and across the month that is enough to outweigh all 11.2 billion cache <em>reads</em>.</li>
+</ul>
+<p>In the office picture from §9, a cache write is making a printing plate, and a cache read is printing from it. A plate pays for itself only when it is printed from many times. This profile prints from each plate only six times.</p>
+<p>Each extra write makes the line bigger. Every clearing event (§9.6) and every prefix change (§9.5) forces another write. If that line is large in your own profile, there are two fixes:</p>
+<ul>
+<li>longer conversations per write, so each plate is printed from more often;</li>
+<li>the 1-hour TTL. The <em>TTL</em>, or time to live, is how long the cache keeps an entry: five minutes by default, or an hour for a higher write price (§9.4). At 2× the input price instead of 1.25×, the 1-hour write pays for itself as soon as it avoids a second write.</li>
+</ul>
+<p>Three multipliers stack on all of it, and they compose. A <em>multiplier</em> is a discount that scales a price, and <em>compose</em> means they combine: you can apply all three to the same request. The program below prices one request with 13,300 input tokens and 480 output tokens, nothing cached. It tries three models, each at full price and through the Batch API (§15.2), and compares each with Opus 5 at full price:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="n">PRICES</span> <span class="o">=</span> <span class="p">{</span>                      <span class="c1"># $ per million tokens: (input, output)</span>
+    <span class="s2">"Opus 5"</span><span class="p">:</span> <span class="p">(</span><span class="mf">5.00</span><span class="p">,</span> <span class="mf">25.00</span><span class="p">),</span>
+    <span class="s2">"Haiku 4.5"</span><span class="p">:</span> <span class="p">(</span><span class="mf">1.00</span><span class="p">,</span> <span class="mf">5.00</span><span class="p">),</span>
+    <span class="s2">"Haiku 5.5"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.10</span><span class="p">,</span> <span class="mf">0.50</span><span class="p">),</span>  <span class="c1"># for prompts up to 100,000 tokens</span>
+<span class="p">}</span>
+<span class="n">INPUT</span><span class="p">,</span> <span class="n">OUTPUT</span> <span class="o">=</span> <span class="mi">13_300</span><span class="p">,</span> <span class="mi">480</span>     <span class="c1"># one request, nothing cached</span>
+
+<span class="n">baseline</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="k">for</span> <span class="n">model</span><span class="p">,</span> <span class="p">(</span><span class="n">input_price</span><span class="p">,</span> <span class="n">output_price</span><span class="p">)</span> <span class="ow">in</span> <span class="n">PRICES</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="k">for</span> <span class="n">batched</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="n">cost</span> <span class="o">=</span> <span class="p">(</span><span class="n">INPUT</span> <span class="o">*</span> <span class="n">input_price</span> <span class="o">+</span> <span class="n">OUTPUT</span> <span class="o">*</span> <span class="n">output_price</span><span class="p">)</span> <span class="o">/</span> <span class="mi">1_000_000</span>
+        <span class="k">if</span> <span class="n">batched</span><span class="p">:</span>
+            <span class="n">cost</span> <span class="o">*=</span> <span class="mf">0.5</span>
+        <span class="k">if</span> <span class="n">baseline</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">baseline</span> <span class="o">=</span> <span class="n">cost</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">model</span> <span class="o">+</span> <span class="p">(</span><span class="s2">" + batch"</span> <span class="k">if</span> <span class="n">batched</span> <span class="k">else</span> <span class="s2">""</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">label</span><span class="si">:</span><span class="s2">&lt;18</span><span class="si">}</span><span class="s2">$</span><span class="si">{</span><span class="n">cost</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">   1/</span><span class="si">{</span><span class="n">baseline</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">cost</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> of Opus 5"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>Opus 5            $0.078500   1/1 of Opus 5
+Opus 5 + batch    $0.039250   1/2 of Opus 5
+Haiku 4.5         $0.015700   1/5 of Opus 5
+Haiku 4.5 + batch $0.007850   1/10 of Opus 5
+Haiku 5.5         $0.001570   1/50 of Opus 5
+Haiku 5.5 + batch $0.000785   1/100 of Opus 5
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong><code>Opus 5 + batch</code></strong> is exactly half, <code>1/2</code>. Batching halves every meter.</li>
+<li><strong><code>Haiku 4.5</code></strong> is <code>1/5</code> of Opus 5, because both its input and output prices are a fifth.</li>
+<li><strong><code>Haiku 4.5 + batch</code></strong> is <code>1/10</code>. The two discounts multiply: a fifth of the price, then half of that.</li>
+<li><strong><code>Haiku 5.5</code></strong> is <code>1/50</code>, and <code>1/100</code> batched. Claude Haiku 5.5 is the newest small model, at $0.10 per million input tokens and $0.50 per million output tokens.</li>
+</ul>
+<p>Two cautions keep that last line honest. Haiku 5.5's prices apply to prompts up to 100,000 tokens. Above that, every token of the request costs five times as much ($0.50 and $2.50). And the table assumes the same token counts on every model, which is rarely true. Haiku 5.5 thinks by default, and thinking is billed as output (§5). It also counts tokens differently from Haiku 4.5. So measure the real counts with §9.2's counting endpoint before you trust a ratio. A smaller model is also a <em>quality</em> change, which only §13's evals can price.</p>
+<p>Here are the three multipliers side by side:</p>
 <div style="display:grid;grid-template-columns:170px 1fr;gap:.4rem .8rem;margin:.7rem 0;align-items:start">
 <div style="font-weight:600;color:#35b37e">Batch API: 50% off</div><div><strong>Everything, halved</strong>, for work that can wait. The single largest discount available and the one most often left on the table.</div>
-<div style="font-weight:600;color:#4a9eda">A smaller model</div><div><strong>Haiku 4.5 is a fifth of Opus 5</strong> on input and output alike. Composes with batching.</div>
-<div style="font-weight:600;color:#d9a441">Caching: 90% off reads</div><div><strong>On the repeated prefix</strong>, which in most applications is most of the input. §9.3.</div>
+<div style="font-weight:600;color:#4a9eda">A smaller model</div><div><strong>Haiku 4.5 is a fifth of Opus 5</strong> on input and output alike, and Haiku 5.5 is a fiftieth, for prompts up to 100,000 tokens. Composes with batching.</div>
+<div style="font-weight:600;color:#d9a441">Caching: 90% off reads</div><div><strong>On the repeated prefix</strong>, which in most applications is most of the input. §9.3. The read discount depends on the model: 90% on Opus 5 and both Haikus, 95% on Opus 5.5.</div>
 </div>
 
+<p>Prices change, and new models arrive with new ones. Claude Opus 5.5, for example, costs $4 and $20 per million where Opus 5 costs $5 and $25. Keep the prices in one place in your code, as <code>PRICES</code> does here, and check them against Anthropic's pricing page whenever you change models.</p>
 <h2 id="section-14-152-batch-processing">15.2 Batch Processing</h2>
-<p>If nobody is waiting, use the Batch API. It is 50% off with higher throughput, and the change is a scheduling one and not an architectural one.</p>
+<p>Some work has nobody waiting for it. A nightly job that extracts fields from yesterday's documents, a rerun of an eval suite, a clean-up pass over a year of old records: nobody is staring at a screen until those finish.</p>
+<p>For that work there is the <em>Batch API</em>, also called the Message Batches API. Instead of sending requests one at a time and waiting for each reply, you hand over a whole file of requests at once. The API works through them in the background, and you collect all the results later. In the office, it is the overnight post: the same letters, delivered by morning, at half the price.</p>
+<p>If nobody is waiting, use the Batch API. It is 50% off with higher throughput, and the change is a scheduling one and not an architectural one. <em>Throughput</em> means how much work gets done per hour. <em>Not architectural</em> means the requests themselves do not change: the same model, prompt and tools, sent through a different door.</p>
+<p>The program below lists five workloads, marks which ones have a person waiting (<em>interactive</em>), and prices each at a flat four cents a request, real time and batched:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">WORKLOADS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"nightly document extraction"</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="mi">60_000</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"running an eval suite"</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="mi">5_000</span><span class="p">),</span>
@@ -14696,15 +14894,106 @@ an interactive agent            yes                2,000                $84     
 batchable work saves $9,765/month for a scheduling change
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong>The three <code>no</code> rows</strong> are the work nobody waits for. Each costs exactly half in the last column.</li>
+<li><strong>The two <code>yes</code> rows</strong> have a person on the other end: someone chatting, or watching an agent work. They get <code>—</code>, because a person cannot wait hours for a reply. They stay real time.</li>
+<li><strong>The last line</strong> adds up the savings on the three batchable rows: $1,260 + $105 + $8,400 = $9,765 a month.</li>
+</ul>
+<p>Nothing about those three jobs changed except when their results arrive.</p>
 <!-- fig:ai-batch -->
 <figure id="fig-ai-batch" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 440" role="img" aria-labelledby="t-ai-batch d-ai-batch" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-batch">What batching saves</title><desc id="d-ai-batch">Five workloads at $0.042 a request. The three that nobody waits for, nightly extraction, an eval suite and a moderation backfill, cost half as much through the Batch API: they save $9,765 a month between them. Live chat and an interactive agent cannot wait and stay real time.</desc><defs><marker id="ah-ai-batch" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="46" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">nightly document extraction</text><text x="20" y="66" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">60,000 requests</text><rect x="250" y="28" width="49.5" height="24" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="307.5" y="46" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text);opacity:1">$2,520 real time</text><rect x="250" y="56" width="24.75" height="20" rx="2" style="fill:#35b37e;fill-opacity:0.4;stroke:#35b37e;stroke-width:1.2"/><text x="282.75" y="72" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:#35b37e;opacity:1">$1,260 batched</text><text x="20" y="116" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">running an eval suite</text><text x="20" y="136" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">5,000 requests</text><rect x="250" y="98" width="4.125" height="24" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="262.125" y="116" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text);opacity:1">$210 real time</text><rect x="250" y="126" width="3" height="20" rx="2" style="fill:#35b37e;fill-opacity:0.4;stroke:#35b37e;stroke-width:1.2"/><text x="261" y="142" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:#35b37e;opacity:1">$105 batched</text><text x="20" y="186" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">content moderation backfill</text><text x="20" y="206" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">400,000 requests</text><rect x="250" y="168" width="330" height="24" rx="2" style="fill:#4a9eda;fill-opacity:0.3;stroke:#4a9eda;stroke-width:1.2"/><text x="588" y="186" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text);opacity:1">$16,800 real time</text><rect x="250" y="196" width="165" height="20" rx="2" style="fill:#35b37e;fill-opacity:0.4;stroke:#35b37e;stroke-width:1.2"/><text x="423" y="212" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:#35b37e;opacity:1">$8,400 batched</text><text x="20" y="256" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">live chat</text><text x="20" y="276" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">30,000 requests</text><rect x="250" y="238" width="24.75" height="24" rx="2" style="fill:#8a94a6;fill-opacity:0.3;stroke:#8a94a6;stroke-width:1.2"/><text x="282.75" y="256" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text);opacity:1">$1,260 real time</text><text x="20" y="326" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">an interactive agent</text><text x="20" y="346" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">2,000 requests</text><rect x="250" y="308" width="4" height="24" rx="2" style="fill:#8a94a6;fill-opacity:0.3;stroke:#8a94a6;stroke-width:1.2"/><text x="262" y="326" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:400;fill:var(--text);opacity:1">$84 real time</text><rect x="12" y="380" width="696" height="48" rx="8" style="fill:#35b37e;fill-opacity:0.12"/><text x="360" y="410" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">saved by batching what nobody waits for: $9,765 a month</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Batchable work saves $9,765 a month for a scheduling change. At half price, running a large eval suite mostly stops being expensive.</figcaption></figure>
 <!-- /fig:ai-batch -->
 
-<p>The limits are generous and worth knowing: <strong>100,000 requests or 256 MB per batch</strong>, whichever comes first. Most batches finish in under an hour. Results are available when everything completes or after 24 hours, whichever is sooner, and a batch that has not finished in 24 hours expires. Results stay downloadable for 29 days.</p>
-<p><strong>The eval suite is the row to notice.</strong> §13 argued for hundreds of cases and not dozens, and the objection is always cost. At half price, run asynchronously, that objection mostly disappears, because a 5,000-case suite is a batch job you start and read later.</p>
-<p>There is one incompatibility to remember. <code>fallbacks</code> (§14.6) is not supported in the Batches API, and a batch item that includes it comes back as an errored result.</p>
+<p>The limits are generous and worth knowing: <strong>100,000 requests or 256 MB per batch</strong>, whichever comes first. Here is what happens to a batch after you send it:</p>
+<ul>
+<li>Most batches finish in under an hour.</li>
+<li>Results are available when everything completes or after 24 hours, whichever is sooner.</li>
+<li>A batch that has not finished in 24 hours <em>expires</em>: the requests not yet processed are dropped, and you are not billed for them.</li>
+<li>Results stay downloadable for 29 days.</li>
+</ul>
+<p>So the question to ask of a job is not "can it wait an hour?" but "can it wait a day?". A report due at 9am and batched at 6pm the evening before will usually be ready. But the only promise is the 24-hour limit, so ask what happens on the morning it is late.</p>
+<p>A big job may need more than one batch. The program below splits a job by both limits. It counts 256 MB cautiously, as 256 million bytes, and asks which limit runs out first:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+
+<span class="n">MAX_REQUESTS</span> <span class="o">=</span> <span class="mi">100_000</span>          <span class="c1"># per batch</span>
+<span class="n">MAX_BYTES</span> <span class="o">=</span> <span class="mi">256_000_000</span>         <span class="c1"># 256 MB, counted cautiously as millions of bytes</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">plan</span><span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="n">bytes_each</span><span class="p">):</span>
+    <span class="n">fits</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">MAX_REQUESTS</span><span class="p">,</span> <span class="n">MAX_BYTES</span> <span class="o">//</span> <span class="n">bytes_each</span><span class="p">)</span>
+    <span class="n">limit</span> <span class="o">=</span> <span class="s2">"request count"</span> <span class="k">if</span> <span class="n">fits</span> <span class="o">==</span> <span class="n">MAX_REQUESTS</span> <span class="k">else</span> <span class="s2">"size"</span>
+    <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">requests</span> <span class="o">/</span> <span class="n">fits</span><span class="p">),</span> <span class="n">limit</span>
+
+<span class="k">for</span> <span class="n">requests</span><span class="p">,</span> <span class="n">bytes_each</span> <span class="ow">in</span> <span class="p">[(</span><span class="mi">400_000</span><span class="p">,</span> <span class="mi">1_500</span><span class="p">),</span> <span class="p">(</span><span class="mi">400_000</span><span class="p">,</span> <span class="mi">6_000</span><span class="p">),</span> <span class="p">(</span><span class="mi">60_000</span><span class="p">,</span> <span class="mi">1_500</span><span class="p">)]:</span>
+    <span class="n">batches</span><span class="p">,</span> <span class="n">limit</span> <span class="o">=</span> <span class="n">plan</span><span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="n">bytes_each</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">requests</span><span class="si">:</span><span class="s2">&gt;7,</span><span class="si">}</span><span class="s2"> requests of </span><span class="si">{</span><span class="n">bytes_each</span><span class="si">:</span><span class="s2">&gt;5,</span><span class="si">}</span><span class="s2"> bytes -&gt; "</span>
+          <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">batches</span><span class="si">:</span><span class="s2">&gt;2</span><span class="si">}</span><span class="s2"> batch</span><span class="si">{</span><span class="s1">'es'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">batches</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2"> (limited by </span><span class="si">{</span><span class="n">limit</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>400,000 requests of 1,500 bytes -&gt;  4 batches (limited by request count)
+400,000 requests of 6,000 bytes -&gt; 10 batches (limited by size)
+ 60,000 requests of 1,500 bytes -&gt;  1 batch (limited by request count)
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong>400,000 small requests</strong> need four batches, because the count limit, 100,000, runs out first.</li>
+<li><strong>400,000 requests of 6,000 bytes</strong> need ten. A request that carries long documents is bigger, so only 42,666 of them fit in 256 million bytes, and size becomes the limit.</li>
+<li><strong>60,000 requests</strong> fit in one batch.</li>
+</ul>
+<p><strong>The eval suite is the row to notice.</strong> §13 argued for hundreds of cases and not dozens, and the objection is always cost. At half price, run asynchronously, that objection mostly disappears, because a 5,000-case suite is a batch job you start and read later. <em>Asynchronously</em> means you do not wait for it: you start it, do something else, and come back for the results.</p>
+<p>A few request settings are not supported in a batch, and each one fails as a validation error:</p>
+<ul>
+<li><code>fallbacks</code> (§14.6), the automatic retry on another model after a refusal. It is not supported in the Batches API. Because a batch checks its requests in the background, a batch item that includes it comes back as an errored result, and you see that only when you collect the results.</li>
+<li><code>speed</code> (fast mode, §15.3), because fast mode is about how quickly one person gets a reply.</li>
+<li><code>stream: true</code> (§2.7), because results come back as one file, not a stream.</li>
+<li><code>max_tokens: 0</code>, a request that only writes the cache and generates nothing, called <em>pre-warming</em>. In a batch the entry it wrote would probably expire before the request that needed it ran.</li>
+</ul>
+<p>An errored item is not billed, but it is not done either, so check every result's type instead of assuming success.</p>
+<p>One more tip from the docs: a batch can take longer than five minutes, so a five-minute cache entry often expires between items that share a long prefix. When the items in a batch share a big document or system prompt, use the 1-hour cache TTL.</p>
 <h2 id="section-14-153-latency">15.3 Latency</h2>
-<p>Cost is measured in aggregate, but latency is experienced one request at a time, and the number that matters is not the one most teams track.</p>
+<p><em>Latency</em> is the time a user waits. Cost is measured in aggregate, over a month and a million requests. Latency is experienced one request at a time, by one person, and the number that matters is not the one most teams track.</p>
+<p>First, a word you need for the rest of the section. Latencies are not all the same: most requests are quick and a few are slow. So engineers describe them with <em>percentiles</em>. The <em>p50</em>, or median, is the time half of the requests stay under. The <em>p99</em> is the time that 99% of requests stay under, so it tells you about the slowest one in a hundred. The program below makes 100 made-up waits, ninety quick, eight slower and two very slow, and prints the average and four percentiles:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+
+<span class="c1"># Time to first token for 100 requests, in milliseconds.</span>
+<span class="n">latencies</span> <span class="o">=</span> <span class="p">[</span><span class="mi">600</span><span class="p">]</span> <span class="o">*</span> <span class="mi">90</span> <span class="o">+</span> <span class="p">[</span><span class="mi">900</span><span class="p">]</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">+</span> <span class="p">[</span><span class="mi">4_000</span><span class="p">,</span> <span class="mi">9_000</span><span class="p">]</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">percentile</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The time that p% of requests stay at or under."""</span>
+    <span class="n">ordered</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="n">rank</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">p</span> <span class="o">/</span> <span class="mi">100</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">ordered</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">ordered</span><span class="p">[</span><span class="n">rank</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"mean  </span><span class="si">{</span><span class="nb">sum</span><span class="p">(</span><span class="n">latencies</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">len</span><span class="p">(</span><span class="n">latencies</span><span class="p">)</span><span class="si">:</span><span class="s2">&gt;6,.0f</span><span class="si">}</span><span class="s2"> ms"</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="mi">95</span><span class="p">,</span> <span class="mi">99</span><span class="p">,</span> <span class="mi">100</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"p</span><span class="si">{</span><span class="n">p</span><span class="si">:</span><span class="s2">&lt;4</span><span class="si">}{</span><span class="n">percentile</span><span class="p">(</span><span class="n">latencies</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">)</span><span class="si">:</span><span class="s2">&gt;6,</span><span class="si">}</span><span class="s2"> ms"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>mean     742 ms
+p50     600 ms
+p95     900 ms
+p99   4,000 ms
+p100  9,000 ms
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong><code>mean</code></strong>, the plain average, says 742 ms. No request took 742 ms. It is a blend of many quick ones and two slow ones.</li>
+<li><strong><code>p50</code></strong>, the median, is 600 ms: the typical request.</li>
+<li><strong><code>p95</code></strong> is 900 ms. Ninety-five requests in a hundred are no slower than that.</li>
+<li><strong><code>p99</code></strong> is 4,000 ms, and <strong><code>p100</code></strong>, the slowest request, is 9,000 ms. Those two people waited four and nine seconds, and the average hid them completely.</li>
+</ul>
+<p>That is why the tables below report a p50 and a p99, never an average.</p>
+<p>Now the parts of one request. The program below lists five things that take time, each with a p50 and a p99 in milliseconds:</p>
+<ul>
+<li>the <em>network round trip</em>, the time for your request to reach the API and the first bytes to come back;</li>
+<li><em>time to first token</em>, how long the model takes before it produces the first piece of the answer;</li>
+<li><em>streaming the answer</em>, how long the rest of the answer takes to arrive;</li>
+<li><em>tool execution</em>, the time your own code spends running the tools the model asked for (§6);</li>
+<li>your own <em>middleware</em>, the code between your user and the API, such as logging and checks.</li>
+</ul>
+<p>It adds them up, and then asks a second question: how long does the user wait before seeing <em>anything</em>? Here is the program:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">COMPONENTS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"network round trip"</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">40</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"time to first token"</span><span class="p">,</span> <span class="mi">620</span><span class="p">,</span> <span class="mi">1_900</span><span class="p">),</span>
@@ -14741,6 +15030,15 @@ what a non-streaming user waits for            : 2,165 ms
 streaming makes the perceived wait 2.0x shorter
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong>The five component rows</strong> are the parts of one request. Look at the p99 column: the slow requests are slower in every part, and tool execution grows the most, from 380 ms to 2,100 ms.</li>
+<li><strong><code>TOTAL</code></strong> is 2,165 ms at the median and 7,500 ms at p99. The worst one in a hundred takes more than three times as long as the typical one.</li>
+<li><strong>The first <code>what the user waits for</code> line</strong> is the median total minus the streaming time: 1,065 ms. With streaming, that is when the first words appear on the screen.</li>
+<li><strong>The second line</strong> is what a user waits when the answer is not streamed: the whole 2,165 ms, staring at a blank screen.</li>
+<li><strong>The last line</strong> divides one by the other: streaming makes the wait feel 2.0× shorter, with no change to the model at all.</li>
+</ul>
+<p>In the office, the first case is the reply read to you down the line as the writer writes it. The second is waiting at the counter until the whole letter is finished.</p>
 <!-- fig:ai-latency -->
 <figure id="fig-ai-latency" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 420" role="img" aria-labelledby="t-ai-latency d-ai-latency" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-latency">Where the time goes in one request</title><desc id="d-ai-latency">Stacked bars of five latency components at the median and the 99th percentile. The total is 2,165 ms at the median and 7,500 ms at p99. With streaming the user sees text after 1,065 ms, so the perceived wait is 2.0 times shorter than a non-streaming user’s 2,165 ms.</desc><defs><marker id="ah-ai-latency" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="86" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">p50</text><rect x="90" y="56" width="1.2" height="44" rx="2" style="fill:#8a94a6;fill-opacity:0.32;stroke:#8a94a6;stroke-width:1.2"/><rect x="93.2" y="56" width="47.6" height="44" rx="2" style="fill:#d9a441;fill-opacity:0.32;stroke:#d9a441;stroke-width:1.2"/><rect x="142.8" y="56" width="86" height="44" rx="2" style="fill:#4a9eda;fill-opacity:0.32;stroke:#4a9eda;stroke-width:1.2"/><text x="186.8" y="82" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text);opacity:1">1,100</text><rect x="230.8" y="56" width="28.4" height="44" rx="2" style="fill:#7c8cff;fill-opacity:0.32;stroke:#7c8cff;stroke-width:1.2"/><rect x="261.2" y="56" width="1" height="44" rx="2" style="fill:#cf4b6c;fill-opacity:0.32;stroke:#cf4b6c;stroke-width:1.2"/><text x="271.2" y="83" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">2,165 ms</text><text x="20" y="156" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">p99</text><rect x="90" y="126" width="1.2" height="44" rx="2" style="fill:#8a94a6;fill-opacity:0.32;stroke:#8a94a6;stroke-width:1.2"/><rect x="93.2" y="126" width="150" height="44" rx="2" style="fill:#d9a441;fill-opacity:0.32;stroke:#d9a441;stroke-width:1.2"/><text x="169.2" y="152" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text);opacity:1">1,900</text><rect x="245.2" y="126" width="270" height="44" rx="2" style="fill:#4a9eda;fill-opacity:0.32;stroke:#4a9eda;stroke-width:1.2"/><text x="381.2" y="152" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text);opacity:1">3,400</text><rect x="517.2" y="126" width="166" height="44" rx="2" style="fill:#7c8cff;fill-opacity:0.32;stroke:#7c8cff;stroke-width:1.2"/><text x="601.2" y="152" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text);opacity:1">2,100</text><rect x="685.2" y="126" width="2.8" height="44" rx="2" style="fill:#cf4b6c;fill-opacity:0.32;stroke:#cf4b6c;stroke-width:1.2"/><text x="698" y="153" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:650;fill:var(--text);opacity:1">7,500 ms</text><path d="M175.2,44 L175.2,108" style="fill:none;stroke:#35b37e;stroke-width:1.6" stroke-dasharray="6 5"/><text x="175.2" y="36" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;font-weight:650;fill:#35b37e;opacity:1">first text at 1,065 ms</text><rect x="20" y="214" width="64.275" height="22.5" rx="11.25" style="fill:#8a94a6;fill-opacity:.16;stroke:#8a94a6;stroke-width:1.2"/><text x="52.1375" y="227" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">network</text><rect x="92.275" y="214" width="140.175" height="22.5" rx="11.25" style="fill:#d9a441;fill-opacity:.16;stroke:#d9a441;stroke-width:1.2"/><text x="162.363" y="227" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">time to first token</text><rect x="240.45" y="214" width="146.5" height="22.5" rx="11.25" style="fill:#4a9eda;fill-opacity:.16;stroke:#4a9eda;stroke-width:1.2"/><text x="313.7" y="227" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">streaming the answer</text><rect x="394.95" y="214" width="108.55" height="22.5" rx="11.25" style="fill:#7c8cff;fill-opacity:.16;stroke:#7c8cff;stroke-width:1.2"/><text x="449.225" y="227" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">tool execution</text><rect x="511.5" y="214" width="114.875" height="22.5" rx="11.25" style="fill:#cf4b6c;fill-opacity:.16;stroke:#cf4b6c;stroke-width:1.2"/><text x="568.938" y="227" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:650;fill:var(--text);opacity:1">your middleware</text><rect x="12" y="276" width="696" height="96" rx="8" style="fill:#35b37e;fill-opacity:0.09"/><text x="360" y="306" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">user waits 1,065 ms before seeing anything (streaming)</text><text x="360" y="330" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:400;fill:var(--text);opacity:1">or 2,165 ms if the response is not streamed</text><text x="360" y="354" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:12.5px;font-weight:400;fill:var(--text-dim);opacity:1">streaming: 2.0x shorter perceived wait</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Time to first token is the number, not total time. Streaming makes the perceived wait 2.0x shorter at the median.</figcaption></figure>
 <!-- /fig:ai-latency -->
@@ -14749,14 +15047,51 @@ streaming makes the perceived wait 2.0x shorter
 <p>The levers, in the order they are usually worth trying:</p>
 <p><strong>Stream</strong> (§2.7). Nothing else comes close for perceived latency, and it is one method call.</p>
 <p><strong>Lower <code>effort</code></strong> (§5.2). Fewer output tokens means less time streaming <em>and</em> fewer tool calls.</p>
-<p><strong><code>display: "omitted"</code></strong> for thinking (§5.3). The server skips streaming thinking tokens, so text starts sooner. It costs nothing, because you are billed for the thinking either way.</p>
-<p><strong>Cache the prefix</strong> (§9.3). Cache reads improve time to first token on long prompts, which is the case where TTFT is worst.</p>
+<p><strong><code>display: "omitted"</code></strong> for thinking (§5.3). Thinking is the model's reasoning before it answers. With <code>"omitted"</code>, the server does not stream the thinking text, so the answer's text starts sooner. It is already the default on Opus 5, so this lever is mostly a warning: do not switch to <code>"summarized"</code> unless someone actually reads the summary. It costs nothing either way, because you are billed for the thinking whether you see it or not.</p>
+<p><strong>Cache the prefix</strong> (§9.3). Cache reads improve time to first token on long prompts, which is the case where TTFT is worst. The model has already processed the cached part, so it does not process it again.</p>
 <p><strong>A smaller model.</strong> Haiku is faster as well as cheaper, and §13 tells you whether it is good enough.</p>
-<p><strong>Fast mode</strong>, on Opus 5 and Opus 4.8, trades a dedicated rate-limit pool for faster output. Note that it invalidates system and message caches when you switch into or out of it (§9.5), so a fallback from fast to standard on a 429 also costs a cache write.</p>
-<p>And here is the lever that is not about the model at all: <strong>run independent tool calls concurrently</strong> (§6.6). In the table above, tool execution is a large share of p99 (the latency that 99% of requests stay under), and half of it is often parallelisable.</p>
+<p><strong>Fast mode</strong> runs the same model faster, at a higher price. It is available on Opus 5.5, Opus 5 and Opus 4.8, and only on Anthropic's own Claude API, not through the cloud providers. On Opus 5 and Opus 4.8 it is still a <em>research preview</em>, an early version that can change. It can produce output up to 2.5 times faster, and on Opus 5 it costs twice the standard price ($10 and $50 per million). It has its own rate-limit pool, separate from the standard one (§15.4), and it cannot be used in a batch. It also invalidates system and message caches when you switch into or out of it (§9.5), so a fallback from fast to standard on a 429 also costs a cache write.</p>
+<p>And here is the lever that is not about the model at all: <strong>run independent tool calls concurrently</strong> (§6.6). <em>Concurrently</em> means at the same time instead of one after another. In the table above, tool execution is a large share of p99 (the latency that 99% of requests stay under), and half of it is often parallelisable. If the model asks for two lookups that do not depend on each other, run them together and wait for the slower one, not for the sum.</p>
 <h2 id="section-14-154-rate-limits-and-capacity">15.4 Rate Limits and Capacity</h2>
-<p>Rate limits are measured in requests per minute, input tokens per minute and output tokens per minute, per model class. Exceeding any of them is a 429 with <code>retry-after</code>.</p>
-<p>The mistake is treating them as an error case and not as a capacity constraint you plan around.</p>
+<p>A <em>rate limit</em> is the most traffic the API accepts from your organisation in a period of time. In the office, it is the telegraph line itself: it can carry only so many words a minute, however much you are willing to pay.</p>
+<p>Rate limits are measured in requests per minute, input tokens per minute and output tokens per minute, per model class. Their short names are RPM, ITPM and OTPM. A <em>model class</em> is a model or a group of models that share one limit. Opus 5, for example, has a limit of its own. Exceeding any of them is a 429 with <code>retry-after</code>: HTTP status 429 means "too many requests", and the <code>retry-after</code> header says how many seconds to wait.</p>
+<p>The limit is enforced smoothly, not once a minute. The API uses a <em>token bucket</em>: imagine a bucket that slowly refills with allowance, and every request takes some out. The docs give an example: a limit of 60 requests per minute may be enforced as one request per second. The program below models that bucket and sends five requests, three of them in the same fifth of a second:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Bucket</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Holds up to `size` requests of allowance and refills `rate` per second."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">rate</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rate</span> <span class="o">=</span> <span class="n">size</span><span class="p">,</span> <span class="n">rate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">level</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">last</span> <span class="o">=</span> <span class="n">size</span><span class="p">,</span> <span class="mf">0.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">take</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">now</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="o">+</span> <span class="p">(</span><span class="n">now</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">last</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">rate</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last</span> <span class="o">=</span> <span class="n">now</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">level</span> <span class="o">-=</span> <span class="mi">1</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+<span class="n">bucket</span> <span class="o">=</span> <span class="n">Bucket</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">rate</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>  <span class="c1"># "60 a minute", enforced as one a second</span>
+<span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">20.0</span><span class="p">,</span> <span class="mf">40.0</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"t = </span><span class="si">{</span><span class="n">t</span><span class="si">:</span><span class="s2">&gt;4.1f</span><span class="si">}</span><span class="s2">s   </span><span class="si">{</span><span class="s1">'ok'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">bucket</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">'429'</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>t =  0.0s   ok
+t =  0.1s   429
+t =  0.2s   429
+t = 20.0s   ok
+t = 40.0s   ok
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong><code>t =  0.0s   ok</code></strong> finds the bucket full and takes the allowance.</li>
+<li><strong>The next two requests</strong> arrive 0.1 and 0.2 seconds later. The bucket has refilled only a tenth and a fifth of a request, so both get <code>429</code>.</li>
+<li><strong>The last two</strong>, twenty seconds apart, find it full again and succeed.</li>
+</ul>
+<p>Five requests in a minute is far below 60 a minute, and two of them were still refused. A <em>burst</em>, many requests at once, can hit a limit that your per-minute average never comes near.</p>
+<p>The mistake is treating rate limits as an error case and not as a capacity constraint you plan around. <em>Capacity</em> is how much traffic you can serve. You plan it the way you would plan the seats in a restaurant: before the busy night, not during it.</p>
+<p>The next program does that arithmetic. Suppose your limit is 400,000 input tokens a minute, and each request is 13,300 tokens. Real limits depend on your <em>usage tier</em>, the level Anthropic places your organisation at as it builds a history with the API. On the Start tier, Opus 5's limit is 2,000,000 input tokens a minute; a brand-new organisation may begin lower, and the Console's Rate limits page shows yours. The question is how many requests a minute fit, without caching and with 93% of each request read from the cache:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">ITPM_LIMIT</span> <span class="o">=</span> <span class="mi">400_000</span>
 <span class="n">TOKENS_PER_REQUEST</span> <span class="o">=</span> <span class="mi">13_300</span>
 <span class="n">CACHE_READ_SHARE</span> <span class="o">=</span> <span class="mf">0.93</span>          <span class="c1"># cache hits are NOT deducted from rate limits</span>
@@ -14783,18 +15118,84 @@ requests/minute with caching    :        430
 headroom gained                 :       14.3x
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong><code>requests/minute without caching</code></strong>: 400,000 divided by 13,300 is 30 requests a minute.</li>
+<li><strong><code>tokens counted when 93% is cached</code></strong>: only 931 of the 13,300 tokens count against the limit. Those are the 7% that are not cache reads. Note that <em>new</em> input and cache <em>writes</em> both count; only reads are free.</li>
+<li><strong><code>requests/minute with caching</code></strong>: 400,000 divided by 931 is 430 requests a minute.</li>
+<li><strong><code>headroom gained</code></strong>: 14.3 times as much traffic, from the same limit. <em>Headroom</em> is the spare capacity between what you use and what you are allowed.</li>
+</ul>
 <!-- fig:ai-ratelimit -->
 <figure id="fig-ai-ratelimit" style="margin:1.6rem 0;padding:14px 12px 10px;border:1px solid var(--border);border-radius:12px;background:var(--bg-elevated);overflow-x:auto"><svg viewBox="0 0 720 340" role="img" aria-labelledby="t-ai-ratelimit d-ai-ratelimit" style="display:block;width:100%;min-width:540px;height:auto;max-width:720px;margin:0 auto"><title id="t-ai-ratelimit">Caching is a capacity mechanism as well as a cost one</title><desc id="d-ai-ratelimit">With a limit of 400,000 input tokens a minute and 13,300 tokens per request, about 30 requests a minute fit. With 93% of each request read from cache, only 931 tokens count against the limit and 430 requests a minute fit, 14.3 times as many.</desc><defs><marker id="ah-ai-ratelimit" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" style="fill:var(--text-dim)"/></marker></defs><text x="20" y="58" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">no caching</text><text x="20" y="78" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">13,300 tokens count per request</text><rect x="240" y="38" width="30.8" height="36" rx="2" style="fill:#cf4b6c;fill-opacity:0.3;stroke:#cf4b6c;stroke-width:1.2"/><text x="280.8" y="62" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">30 requests a minute</text><text x="20" y="150" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;font-weight:650;fill:var(--text);opacity:1">93% cache reads</text><text x="20" y="170" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:11.5px;font-weight:400;fill:var(--text-dim);opacity:1">931 tokens count per request</text><rect x="240" y="130" width="440" height="36" rx="2" style="fill:#35b37e;fill-opacity:0.3;stroke:#35b37e;stroke-width:1.2"/><text x="690" y="154" text-anchor="start" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:650;fill:var(--text);opacity:1">430 requests a minute</text><rect x="12" y="232" width="696" height="56" rx="8" style="fill:#35b37e;fill-opacity:0.12"/><text x="360" y="266" text-anchor="middle" style="font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;font-weight:650;fill:var(--text);opacity:1">14.3x the headroom from the same 400,000-token allowance</text></svg><figcaption style="margin-top:8px;font-family:'Inter Tight',-apple-system,BlinkMacSystemFont,sans-serif;font-size:.82rem;color:var(--text-dim);text-align:center;line-height:1.45">Cache hits are not deducted from the rate limit: 14.3x headroom from the same allowance.</figcaption></figure>
 <!-- /fig:ai-ratelimit -->
 
-<p><strong>Cache hits are not deducted from your rate limit.</strong> That makes caching a <em>capacity</em> mechanism as well as a cost one, and it is the single least-known fact in this section. An application that is rate-limited before it is expensive can often fix both with the same parameter.</p>
+<p><strong>Cache hits are not deducted from your rate limit.</strong> On current models, only uncached input tokens and cache writes count toward the input-token limit. That makes caching a <em>capacity</em> mechanism as well as a cost one, and it is the single least-known fact in this section. An application that is rate-limited before it is expensive can often fix both with the same parameter.</p>
+<p>One more detail from the docs: the output-token limit counts the tokens the model actually writes, not the <code>max_tokens</code> you allowed. So a generous <code>max_tokens</code> does not use up capacity.</p>
 <p>Two further mechanisms:</p>
-<p><strong>Read the <code>anthropic-ratelimit-*</code> headers on every response</strong>, and not only on failures (§2.9). <code>anthropic-ratelimit-input-tokens-remaining</code> lets you throttle before you are throttled.</p>
-<p><strong>And reconcile against the Usage and Cost API and not your own arithmetic.</strong> Everything in §15.1 is a model. The Usage and Cost API reports what was actually billed, broken down by model, workspace and API key. Run the comparison monthly, because a model that has drifted from reality is worse than no model, since it is trusted.</p>
-<p><strong>Service tiers.</strong> The <code>service_tier</code> parameter chooses between standard capacity and <strong>priority tier</strong> capacity. <code>"auto"</code> uses priority tier when you have a commitment and falls back to standard. <code>"standard_only"</code> keeps a background job from consuming the priority tier capacity you reserved for interactive traffic. The response reports which service tier served the request in <code>usage.service_tier</code>.</p>
-<p>And here is a distinction that will otherwise cost you an afternoon: <strong>a spend-cap 429 is not a rate-limit 429.</strong> It carries no <code>retry-after</code> and does not clear on its own (§2.9). Branch on the header.</p>
+<p><strong>Read the <code>anthropic-ratelimit-*</code> headers on every response</strong>, and not only on failures (§2.9). Every response carries headers that say how much of each limit is left. <code>anthropic-ratelimit-input-tokens-remaining</code> lets you throttle before you are throttled: slow your own sending when it runs low, instead of waiting for a 429.</p>
+<p><strong>And reconcile against the Usage and Cost API and not your own arithmetic.</strong> <em>Reconcile</em> means compare two records of the same thing and explain any difference. Everything in §15.1 is a model. The Usage and Cost API reports what was actually billed, broken down by model, workspace and API key. It is part of the <em>Admin API</em>, so it needs an Admin API key, a separate kind of key that starts <code>sk-ant-admin</code> and is not available on individual accounts. Run the comparison monthly, because a model that has drifted from reality is worse than no model, since it is trusted.</p>
+<p><strong>Service tiers.</strong> The <code>service_tier</code> parameter chooses between standard capacity and <strong>priority tier</strong> capacity. Priority tier was capacity reserved ahead of time under a contract, served before everyone else's traffic. Two facts limit it today. Anthropic no longer sells new Priority Tier commitments: only organisations with an existing one can use it, until their contract ends. And it does not cover the newest models: Opus 5, Opus 5.5, Haiku 5.5, Sonnet 5 and Sonnet 5.5 are all excluded. So on this course's model every request runs at standard capacity. If you do have a commitment on a supported model, the parameter works like this:</p>
+<ul>
+<li><code>"auto"</code>, the default, uses priority tier when you have a commitment and falls back to standard.</li>
+<li><code>"standard_only"</code> keeps a background job from consuming the priority tier capacity you reserved for interactive traffic.</li>
+</ul>
+<p>The response reports which service tier served the request in <code>usage.service_tier</code>: <code>"standard"</code>, <code>"priority"</code> or <code>"batch"</code>. Logging that field tells you, per request, which capacity you actually got.</p>
+<p>And here is a distinction that will otherwise cost you an afternoon: <strong>a spend-cap 429 is not a rate-limit 429.</strong> The Start, Build and Scale tiers each have a monthly <em>spend cap</em>, the most the organisation may spend in a calendar month. When you reach it, every request fails until the first day of the next month, unless you ask for a higher tier. In the office, the line is not busy: the bank has stopped your cheques. Both failures come back as status 429 with the same error type, <code>rate_limit_error</code>. The difference is in the details:</p>
+<ul>
+<li>A rate-limit 429 usually carries <code>retry-after</code>, and clears on its own.</li>
+<li>A spend-cap 429 carries no <code>retry-after</code> and does not clear on its own (§2.9). Its body says <code>"error_code": "enforced_spend_limit_reached"</code> inside <code>error.details</code>.</li>
+<li>A spend limit <em>you</em> set below the cap is different again. It returns status 400, an <code>invalid_request_error</code> whose message begins "You have reached your specified".</li>
+</ul>
+<p>Branch on the header, and confirm with the error code. The program below sorts four responses into what your code should do:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">what_to_do</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">body</span><span class="p">):</span>
+    <span class="n">error</span> <span class="o">=</span> <span class="n">body</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"error"</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">code</span> <span class="o">=</span> <span class="n">error</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"details"</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"error_code"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">429</span> <span class="ow">and</span> <span class="s2">"retry-after"</span> <span class="ow">in</span> <span class="n">headers</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"rate limit: wait </span><span class="si">{</span><span class="n">headers</span><span class="p">[</span><span class="s1">'retry-after'</span><span class="p">]</span><span class="si">}</span><span class="s2">s, then retry"</span>
+    <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">429</span> <span class="ow">and</span> <span class="n">code</span> <span class="o">==</span> <span class="s2">"enforced_spend_limit_reached"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"spend cap: stop retrying and page a human"</span>
+    <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">400</span> <span class="ow">and</span> <span class="n">error</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"message"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span>
+            <span class="s2">"You have reached your specified"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"your own spend limit: raise it, or wait"</span>
+    <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">429</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"429 without retry-after: back off and retry slowly"</span>
+    <span class="k">return</span> <span class="s2">"not a limit"</span>
+
+<span class="n">cases</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="mi">429</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry-after"</span><span class="p">:</span> <span class="s2">"12"</span><span class="p">},</span> <span class="p">{</span><span class="s2">"error"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"rate_limit_error"</span><span class="p">}}),</span>
+    <span class="p">(</span><span class="mi">429</span><span class="p">,</span> <span class="p">{},</span> <span class="p">{</span><span class="s2">"error"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"rate_limit_error"</span><span class="p">,</span>
+                         <span class="s2">"details"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"error_code"</span><span class="p">:</span> <span class="s2">"enforced_spend_limit_reached"</span><span class="p">}}}),</span>
+    <span class="p">(</span><span class="mi">400</span><span class="p">,</span> <span class="p">{},</span> <span class="p">{</span><span class="s2">"error"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"invalid_request_error"</span><span class="p">,</span>
+                         <span class="s2">"message"</span><span class="p">:</span> <span class="s2">"You have reached your specified API usage limits."</span><span class="p">}}),</span>
+    <span class="p">(</span><span class="mi">429</span><span class="p">,</span> <span class="p">{},</span> <span class="p">{</span><span class="s2">"error"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"rate_limit_error"</span><span class="p">}}),</span>
+<span class="p">]</span>
+<span class="k">for</span> <span class="n">status</span><span class="p">,</span> <span class="n">headers</span><span class="p">,</span> <span class="n">body</span> <span class="ow">in</span> <span class="n">cases</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">  </span><span class="si">{</span><span class="n">what_to_do</span><span class="p">(</span><span class="n">status</span><span class="p">,</span><span class="w"> </span><span class="n">headers</span><span class="p">,</span><span class="w"> </span><span class="n">body</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>429  rate limit: wait 12s, then retry
+429  spend cap: stop retrying and page a human
+400  your own spend limit: raise it, or wait
+429  429 without retry-after: back off and retry slowly
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong>The first 429</strong> has <code>retry-after: 12</code>, so it is an ordinary rate limit: wait twelve seconds and try again.</li>
+<li><strong>The second 429</strong> has no header and carries the spend-cap code. Retrying is pointless, and the SDK's automatic retries will fail too. A person needs to know.</li>
+<li><strong>The 400</strong> is your own spend limit. Raise it, or wait until it resets.</li>
+<li><strong>The last 429</strong> has neither the header nor the code. Not every rate-limit 429 carries <code>retry-after</code>; a sudden jump in traffic can trip a short-term limit too. Back off: wait, and wait longer after each failure.</li>
+</ul>
 <h2 id="section-14-155-observability">15.5 Observability</h2>
-<p>What to log is decided by what you will need to answer at three in the morning. In practice that is four questions: what did it cost, was it slow, did it work, and what exactly was sent.</p>
+<p><em>Observability</em> is how well you can tell what your system is doing from the records it leaves behind. In the office, it is the logbook: one row for every telegram sent, written down as it happens.</p>
+<p>What to log is decided by what you will need to answer at three in the morning. In practice that is four questions:</p>
+<ul>
+<li>what did it cost?</li>
+<li>was it slow?</li>
+<li>did it work?</li>
+<li>what exactly was sent?</li>
+</ul>
+<p>The program below builds one log row from a request's <code>usage</code> and a few facts your code knows. It returns a plain dictionary that you would write to your logs, and prints it as JSON. Notice the line that works out <code>total_input</code>. <code>input_tokens</code> counts only the uncached part, so the three input meters are added together, and the hit rate is the share of that total read from the cache:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">record</span><span class="p">(</span><span class="n">request_id</span><span class="p">,</span> <span class="n">response_usage</span><span class="p">,</span> <span class="n">stop_reason</span><span class="p">,</span> <span class="n">latency</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span>
@@ -14855,21 +15256,60 @@ headroom gained                 :       14.3x
 }
 </code></pre></div>
 
-<p>Five fields earn their place by answering a question nothing else can.</p>
-<p><strong><code>prompt_version</code>.</strong> This is a hash or tag of the prompt that produced this response, which is <strong>prompt versioning</strong> applied to the log and not only to the repository. Prompt versioning that exists only in git answers what changed. Recording it per request answers <em>which requests got which prompt</em>, which is the question an incident actually asks. §13.8 put it in the eval record for the same reason: six weeks later, "the quality dropped on the 14th" is only answerable if you know what changed.</p>
+<p>Every field in that row is there for a reason. Five fields earn their place by answering a question nothing else can.</p>
+<p><strong><code>prompt_version</code>.</strong> This is a hash or tag of the prompt that produced this response, which is <strong>prompt versioning</strong> applied to the log and not only to the repository. A <em>hash</em> is a short fingerprint computed from the text, which changes whenever the text changes, like the <code>9f2c1a</code> in <code>triage-v7-9f2c1a</code>. In the office, it is the edition number printed on every standing memo. Prompt versioning that exists only in git answers what changed. Recording it per request answers <em>which requests got which prompt</em>, which is the question an incident actually asks. §13.8 put it in the eval record for the same reason: six weeks later, "the quality dropped on the 14th" is only answerable if you know what changed.</p>
 <p><strong><code>cache_hit_rate</code>.</strong> This is §9.5's diagnostic. Alert on it dropping, because a silent cache miss is a tenfold cost increase with no error.</p>
-<p><strong><code>stop_reason</code>.</strong> Refusals are HTTP 200s (§14.6) and truncations are HTTP 200s (§2.6). Neither appears in an error-rate dashboard. Count them by value.</p>
+<p><strong><code>stop_reason</code>.</strong> Refusals are HTTP 200s (§14.6) and truncations are HTTP 200s (§2.6). HTTP 200 means "success", so neither appears in an error-rate dashboard. Count them by value.</p>
 <p><strong><code>ttft_ms</code> separately from <code>total_ms</code>.</strong> This is §15.3's argument: they move independently, and only one is what users feel.</p>
 <p><strong><code>tool_calls</code>.</strong> Log the names, at minimum. §13.10's required-call and forbidden-call assertions run against production traffic as well as against an eval set, and this is the field they read.</p>
-<p>Two cautions. <strong>A trace contains everything the model saw</strong>, which is customer content, so the retention and redaction rules that apply to your other logs apply here (§11.7). And <strong>sample and do not log everything at volume</strong>. Full request bodies at 30,000 requests a day is a large amount of sensitive data to store, so log the metadata always and the bodies for a sample plus every failure.</p>
-<p>Your own logs are not the only place this content can sit, and the platform-side controls are worth knowing before a compliance review asks about them. <strong>Data retention</strong> policies govern what the API keeps. A <strong>zero data retention</strong> arrangement means prompts and outputs are not stored at all, and most features, though not all, are ZDR-eligible, with batch processing and the Files API among the exceptions. Separately, <code>inference_geo</code> controls <strong>data residency</strong>, meaning where the processing happens. Setting <code>inference_geo</code> to <code>"us"</code> and not <code>"global"</code> pins where inference runs, per request, and carries its own pricing. Neither is a substitute for redacting your own logs, and both are questions with real answers and not shrugs.</p>
+<p>Three more fields are cheap to add and worth having: <code>usage.service_tier</code> (§15.4), whether the request used <code>speed: "fast"</code>, and the <code>model</code> the response reports. That last one is the model that actually answered, which after a fallback (§14.6) is not the one you asked for.</p>
+<p>Two cautions. <strong>A trace contains everything the model saw</strong>, which is customer content, so the retention and redaction rules that apply to your other logs apply here (§11.7). A <em>trace</em> is the full record of one request, bodies included. And <strong>sample and do not log everything at volume</strong>. Full request bodies at 30,000 requests a day is a large amount of sensitive data to store, so log the metadata always and the bodies for a sample plus every failure.</p>
+<p><em>Sample</em> means keep only some, chosen fairly. The program below keeps a body when the request failed, and otherwise keeps the same 5% of requests every time. It decides by hashing the request id, so the choice never depends on luck or on when the code ran:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+
+<span class="n">FAILURES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"refusal"</span><span class="p">,</span> <span class="s2">"max_tokens"</span><span class="p">}</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">keep_body</span><span class="p">(</span><span class="n">request_id</span><span class="p">,</span> <span class="n">stop_reason</span><span class="p">,</span> <span class="n">percent</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Always keep a failure's body; keep the same 5% of the rest, every time."""</span>
+    <span class="k">if</span> <span class="n">stop_reason</span> <span class="ow">in</span> <span class="n">FAILURES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">request_id</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">digest</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="o">%</span> <span class="mi">100</span> <span class="o">&lt;</span> <span class="n">percent</span>
+
+<span class="n">normal</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"req_</span><span class="si">{</span><span class="n">n</span><span class="si">:</span><span class="s2">05</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10_000</span><span class="p">)]</span>
+<span class="n">kept</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">keep_body</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="s2">"end_turn"</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">normal</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"normal requests kept : </span><span class="si">{</span><span class="n">kept</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">normal</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a refusal kept       : </span><span class="si">{</span><span class="n">keep_body</span><span class="p">(</span><span class="s1">'req_00001'</span><span class="p">,</span><span class="w"> </span><span class="s1">'refusal'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"same answer twice    : </span><span class="si">{</span><span class="n">keep_body</span><span class="p">(</span><span class="s1">'req_00042'</span><span class="p">,</span><span class="w"> </span><span class="s1">'end_turn'</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">keep_body</span><span class="p">(</span><span class="s1">'req_00042'</span><span class="p">,</span><span class="w"> </span><span class="s1">'end_turn'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>normal requests kept : 482 of 10,000
+a refusal kept       : True
+same answer twice    : True
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong><code>normal requests kept</code></strong> is 482 of 10,000, close to the 5% asked for. A hash spreads ids evenly only on average, so the count is near 500 rather than exactly 500.</li>
+<li><strong><code>a refusal kept</code></strong> is <code>True</code>: every failure keeps its body, because failures are what you will investigate.</li>
+<li><strong><code>same answer twice</code></strong> is <code>True</code>: one request id always gets the same decision, so a request is never half-logged by two servers that disagree.</li>
+</ul>
+<p>Your own logs are not the only place this content can sit, and the platform-side controls are worth knowing before a compliance review asks about them. A <em>compliance review</em> is a check, often by a customer's lawyers or auditors, that you handle data the way you promised.</p>
+<ul>
+<li><strong>Data retention</strong> policies govern what the API keeps, and for how long.</li>
+<li>A <strong>zero data retention</strong> arrangement (ZDR) means prompts and outputs are not stored at all after the response. You arrange it with Anthropic. Most features, though not all, are ZDR-eligible, with batch processing and the Files API among the exceptions: a batch's results are kept for 29 days so you can download them. Using an ineligible feature is not blocked, it is a step outside your arrangement, so know which features your application uses. Some models, Claude Fable 5.1 among them, are not available under ZDR at all.</li>
+<li>Separately, <code>inference_geo</code> controls <strong>data residency</strong>, meaning where the processing happens. Setting <code>inference_geo</code> to <code>"us"</code> and not <code>"global"</code> pins where inference runs, per request, and carries its own pricing: 1.1× on every token meter. Requests set to <code>"us"</code> and to <code>"global"</code> draw on the same rate limit.</li>
+</ul>
+<p>Neither is a substitute for redacting your own logs, and both are questions with real answers and not shrugs.</p>
 <h2 id="section-14-156-versioning-and-deployment">15.6 Versioning and Deployment</h2>
-<p>A prompt is code. It has versions, it has a review, it has a rollback, and it has an eval that gates it. Treating it as configuration to be edited in a console is how a regression ships on a Friday.</p>
+<p><em>Deployment</em> means putting a new version into production. For an AI application, the thing you deploy most often is not code. It is a prompt.</p>
+<p>A prompt is code. It has versions, it has a review, it has a rollback, and it has an eval that gates it. A <em>rollback</em> is going back to the previous version when the new one misbehaves, and a <em>gate</em> is a check that must pass before a change can ship. Treating it as configuration to be edited in a console is how a regression ships on a Friday.</p>
+<p>In the office, it is the checklist before a new standing memo reaches the writer. The program below writes that checklist down. Each row is a gate, whether it blocks the release, and where in this course it comes from:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">DEPLOY_GATES</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"prompt is in version control"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"diffable, reviewable, revertible"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"eval suite passes"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"13.8, against the held-out split"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"no regression on any criterion"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"13.2's table, not one number"</span><span class="p">),</span>
-    <span class="p">(</span><span class="s2">"adversarial cases pass"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"14.2's forbidden-call assertions"</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">"adversarial cases pass"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"Exercise 14.2's forbidden-call assertions"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"cost per request within budget"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"15.1, computed not guessed"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"p95 TTFT within budget"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"15.3"</span><span class="p">),</span>
     <span class="p">(</span><span class="s2">"rolled out behind a flag"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"so rollback is a config change"</span><span class="p">),</span>
@@ -14887,7 +15327,7 @@ headroom gained                 :       14.3x
 prompt is in version control      yes        diffable, reviewable, revertible
 eval suite passes                 yes        13.8, against the held-out split
 no regression on any criterion    yes        13.2's table, not one number
-adversarial cases pass            yes        14.2's forbidden-call assertions
+adversarial cases pass            yes        Exercise 14.2's forbidden-call assertions
 cost per request within budget    yes        15.1, computed not guessed
 p95 TTFT within budget            yes        15.3
 rolled out behind a flag          yes        so rollback is a config change
@@ -14896,11 +15336,49 @@ rolled out behind a flag          yes        so rollback is a config change
 none of them requires a human to read an answer and form an impression
 </code></pre></div>
 
-<p><strong>Pin what can move underneath you.</strong> Model IDs from the 4.6 generation onward are pinned snapshots (§2.2), so the model will not change under a fixed ID. But Skills default to <code>"latest"</code> (§7.8) and will change, and a Skill's instructions changing is a prompt change you did not make.</p>
-<p><strong>Roll out behind a flag.</strong> Comparing an old prompt and a new one on live traffic is the only evaluation with the real input distribution, and §13.9's statistics apply exactly: the difference needs to clear the noise before it is real.</p>
-<p><strong>Keep the old prompt runnable.</strong> A rollback that requires a deploy is a rollback that happens twenty minutes too late.</p>
+<p>Line by line:</p>
+<ul>
+<li><strong>The first row</strong> is the precondition for everything else: if the prompt is not in version control, nothing can be diffed, reviewed or reverted.</li>
+<li><strong>The middle rows</strong> are checks this course already built: §13's suite, §13.2's per-criterion table, Exercise 14.2's injection cases, and this section's cost and latency budgets. A <em>budget</em> here is a limit you set in advance, such as "no more than four cents a request".</li>
+<li><strong>The last row</strong> is what makes a rollback cheap.</li>
+<li><strong>The final two lines</strong> are the point: every gate is something a program checks, not an opinion someone forms.</li>
+</ul>
+<p><strong>Pin what can move underneath you.</strong> Model IDs from the 4.6 generation onward are pinned snapshots (§2.2), so the model will not change under a fixed ID. But Skills default to <code>"latest"</code> (§7.8) and will change, and a Skill's instructions changing is a prompt change you did not make. Pin a dated version in production.</p>
+<p><strong>Roll out behind a flag.</strong> A <em>feature flag</em> is a setting, outside the code, that turns a change on for some users and off for others. Comparing an old prompt and a new one on live traffic is the only evaluation with the real input distribution, and §13.9's statistics apply exactly: the difference needs to clear the noise before it is real. In the office, it is trying the new memo at one desk in ten.</p>
+<p>The program below sends 10% of users to a new prompt. It puts each user in one of 100 buckets by hashing their id, so the same user always sees the same prompt, and then rolls back by changing one number:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+
+<span class="n">PROMPTS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"old"</span><span class="p">:</span> <span class="s2">"triage-v7-9f2c1a"</span><span class="p">,</span> <span class="s2">"new"</span><span class="p">:</span> <span class="s2">"triage-v8-41d07e"</span><span class="p">}</span>
+<span class="n">FLAG</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"new_percent"</span><span class="p">:</span> <span class="mi">10</span><span class="p">}</span>     <span class="c1"># the one number a rollback changes</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">prompt_for</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">user_id</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+    <span class="n">bucket</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">digest</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="o">%</span> <span class="mi">100</span>            <span class="c1"># every user lands in 0..99, for good</span>
+    <span class="k">return</span> <span class="n">PROMPTS</span><span class="p">[</span><span class="s2">"new"</span> <span class="k">if</span> <span class="n">bucket</span> <span class="o">&lt;</span> <span class="n">FLAG</span><span class="p">[</span><span class="s2">"new_percent"</span><span class="p">]</span> <span class="k">else</span> <span class="s2">"old"</span><span class="p">]</span>
+
+<span class="n">users</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"user_</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2_000</span><span class="p">)]</span>
+<span class="n">on_new</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">prompt_for</span><span class="p">(</span><span class="n">u</span><span class="p">)</span> <span class="o">==</span> <span class="n">PROMPTS</span><span class="p">[</span><span class="s2">"new"</span><span class="p">]</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">users</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"on the new prompt: </span><span class="si">{</span><span class="n">on_new</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">users</span><span class="p">)</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> users"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"user_7 twice     : </span><span class="si">{</span><span class="n">prompt_for</span><span class="p">(</span><span class="s1">'user_7'</span><span class="p">)</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">prompt_for</span><span class="p">(</span><span class="s1">'user_7'</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">FLAG</span><span class="p">[</span><span class="s2">"new_percent"</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>        <span class="c1"># the rollback</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"after rollback   : </span><span class="si">{</span><span class="nb">sum</span><span class="p">(</span><span class="n">prompt_for</span><span class="p">(</span><span class="n">u</span><span class="p">)</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">PROMPTS</span><span class="p">[</span><span class="s1">'new'</span><span class="p">]</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">u</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">users</span><span class="p">)</span><span class="si">}</span><span class="s2"> users"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>on the new prompt: 200 of 2,000 users
+user_7 twice     : triage-v7-9f2c1a, triage-v7-9f2c1a
+after rollback   : 0 users
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong><code>on the new prompt</code></strong> is 200 of 2,000 users: the 10% the flag asked for.</li>
+<li><strong><code>user_7 twice</code></strong> gets the old prompt both times. A user never flips between two versions in the middle of a conversation, which would make both versions look worse.</li>
+<li><strong><code>after rollback</code></strong> is 0. Setting the percentage to zero moved everyone back, and no code was deployed.</li>
+</ul>
+<p><strong>Keep the old prompt runnable.</strong> A rollback that requires a deploy is a rollback that happens twenty minutes too late. That is why <code>PROMPTS</code> above keeps both versions side by side.</p>
 <h2 id="section-14-157-what-to-watch">15.7 What to Watch</h2>
-<p>There are four signals, and the reason each is separate is that they fail independently.</p>
+<p>The last job is noticing trouble. In the office, it is four gauges on the manager's wall.</p>
+<p>There are four signals, and the reason each is separate is that they fail independently. One can go wrong while the other three look perfectly normal. The program below lists each signal, the section that explains it, what a change in it usually means, and what to alert on. To <em>alert</em> is to have the system notify a person automatically:</p>
 <div class="highlight" data-lang="python"><pre><span></span><code><span class="n">SIGNALS</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">(</span><span class="s2">"cost per request"</span><span class="p">,</span> <span class="s2">"15.1"</span><span class="p">,</span> <span class="s2">"a prefix change, or a prompt that grew"</span><span class="p">,</span>
      <span class="s2">"a step change on a deploy"</span><span class="p">),</span>
@@ -14929,8 +15407,47 @@ eval score on live traffic  13          the world changed, not your code
                                         alert on: a drop with no deploy behind it
 </code></pre></div>
 
+<p>Line by line:</p>
+<ul>
+<li><strong><code>cost per request</code></strong> catches a prompt that grew or a prefix that changed. Alert on a sudden step, especially one that lines up with a deploy.</li>
+<li><strong><code>cache hit rate</code></strong> catches something in the prefix that started varying. Alert on any drop that lasts.</li>
+<li><strong><code>stop_reason mix</code></strong> catches refusals or truncations rising, both of which are HTTP 200s.</li>
+<li><strong><code>eval score on live traffic</code></strong> catches quality falling.</li>
+</ul>
 <p><strong>The fourth one is the one nobody builds, and it is the most important.</strong> An LLM application can degrade without any change on your side. Your users start asking different questions, a retrieved corpus goes stale, a Skill updates, or the traffic mix shifts after a marketing campaign. Nothing in your deploy history explains it, and no error rate reflects it.</p>
 <p>The mechanism is to run a slice of production traffic through the §13 harness on a schedule, batched so that it is cheap, and to alert on the score and not on the infrastructure. That closes the loop this whole course has been building: criteria in §13.2, cases in §13.3, graders in §13.4, and here the thing that runs them against reality and not against a fixed set.</p>
+<p>The first two gauges are cheap to wire up, and here is why they deserve it. The program below checks one night of hourly numbers against a normal baseline: a hit rate of 93% and $0.0272 a request. It alerts when the hit rate falls more than ten points or the cost more than doubles:</p>
+<div class="highlight" data-lang="python"><pre><span></span><code><span class="c1"># Hourly cache hit rate and cost per request, overnight. No deploy happened.</span>
+<span class="n">HOURS</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"22:00"</span><span class="p">,</span> <span class="mf">0.93</span><span class="p">,</span> <span class="mf">0.0272</span><span class="p">),</span> <span class="p">(</span><span class="s2">"23:00"</span><span class="p">,</span> <span class="mf">0.94</span><span class="p">,</span> <span class="mf">0.0270</span><span class="p">),</span> <span class="p">(</span><span class="s2">"00:00"</span><span class="p">,</span> <span class="mf">0.31</span><span class="p">,</span> <span class="mf">0.1180</span><span class="p">),</span>
+         <span class="p">(</span><span class="s2">"01:00"</span><span class="p">,</span> <span class="mf">0.30</span><span class="p">,</span> <span class="mf">0.1191</span><span class="p">),</span> <span class="p">(</span><span class="s2">"02:00"</span><span class="p">,</span> <span class="mf">0.30</span><span class="p">,</span> <span class="mf">0.1188</span><span class="p">),</span> <span class="p">(</span><span class="s2">"03:00"</span><span class="p">,</span> <span class="mf">0.29</span><span class="p">,</span> <span class="mf">0.1203</span><span class="p">)]</span>
+<span class="n">BASELINE_HIT</span><span class="p">,</span> <span class="n">BASELINE_COST</span> <span class="o">=</span> <span class="mf">0.93</span><span class="p">,</span> <span class="mf">0.0272</span>
+
+<span class="k">for</span> <span class="n">hour</span><span class="p">,</span> <span class="n">hit</span><span class="p">,</span> <span class="n">cost</span> <span class="ow">in</span> <span class="n">HOURS</span><span class="p">:</span>
+    <span class="n">alerts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">hit</span> <span class="o">&lt;</span> <span class="n">BASELINE_HIT</span> <span class="o">-</span> <span class="mf">0.10</span><span class="p">:</span>
+        <span class="n">alerts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"hit rate"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cost</span> <span class="o">&gt;</span> <span class="n">BASELINE_COST</span> <span class="o">*</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">alerts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"cost"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">hour</span><span class="si">}</span><span class="s2">  hit </span><span class="si">{</span><span class="n">hit</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2">  $</span><span class="si">{</span><span class="n">cost</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">/request  "</span>
+          <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">'ALERT: '</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">alerts</span><span class="p">)</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">alerts</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">'ok'</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight" data-lang="text"><pre><span></span><code>22:00  hit 93%  $0.0272/request  ok
+23:00  hit 94%  $0.0270/request  ok
+00:00  hit 31%  $0.1180/request  ALERT: hit rate, cost
+01:00  hit 30%  $0.1191/request  ALERT: hit rate, cost
+02:00  hit 30%  $0.1188/request  ALERT: hit rate, cost
+03:00  hit 29%  $0.1203/request  ALERT: hit rate, cost
+</code></pre></div>
+
+<p>Line by line:</p>
+<ul>
+<li><strong>The first two hours</strong> are normal.</li>
+<li><strong>At midnight</strong> the hit rate falls from 94% to 31%, and the cost per request rises more than fourfold. Both alerts fire in the same hour.</li>
+<li><strong>The hours after</strong> stay there. Nothing recovers by itself, and nothing reported an error.</li>
+</ul>
+<p>Midnight is a clue, because nobody deployed anything. A date written into the system prompt changes at midnight, and every request after it starts a new prefix. Exercise 15.2 walks through that diagnosis in full.</p>
+<p>This is also the answer the opening puzzle was pointing at. Cache writes became the biggest line in §15.1 because each prefix was written often and read only six times. A cache that stops hitting turns <em>every</em> read into a write, and the bill shows it a month later. The hit-rate gauge shows it within the hour.</p>
 <h2 id="section-14-exercises">Exercises</h2>
 <p><strong>Exercise 15.1 — Halve this bill.</strong> An agent costs about $274,000 a month. Its profile: 18,000 conversations a day, 5 model turns each, context growing to 22,000 tokens by the final turn, 700 output tokens per turn, no caching, Opus 5, all real time. Find the savings in order of value, and say which you would refuse to make.</p>
 <details>
