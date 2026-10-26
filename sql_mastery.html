@@ -1412,10 +1412,106 @@ INSERT 0 2
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="intro">← Back</button><button class="btn-next" data-next="section-1">Next: SQL Syntax, Expressions and Type Conversion →</button></div>
 </section>
-<section class="course-section" id="section-1" data-section-id="section-1"><div class="section-header-meta">  <span class="section-tag">SECTION 2</span>  <button class="btn-complete" data-complete="section-1"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">SQL Syntax, Expressions and Type Conversion</h1><p>This section is about the layer beneath the statements: how PostgreSQL reads your text, what the pieces of an expression are, and — the part that produces real surprises — how it decides what type everything is.</p>
-<p>Type resolution is worth the attention it gets here. SQL has no type declarations in a query, so every literal's type is <em>inferred</em> from context, and every operator is chosen by looking at its operands. When that inference lands somewhere you did not expect, the result is not an error; it is a different answer, or an index that stops being used.</p>
+<section class="course-section" id="section-1" data-section-id="section-1"><div class="section-header-meta">  <span class="section-tag">SECTION 2</span>  <button class="btn-complete" data-complete="section-1"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">SQL Syntax, Expressions and Type Conversion</h1><p>Start with a puzzle. A shop has six orders, and three of them are over $100. You want the share of orders that are over $100. So you count the big orders, divide by the count of all orders, and ask the server for the answer.</p>
+<p>Three out of six is one half. Guess what the server prints before reading on.</p>
+<p>It prints <code>0</code>. Not an error, not a warning: a plain zero, looking perfectly reasonable. Exercise 2 at the end of this section runs exactly that query, and the server's real output is printed there. §2.6 explains why it happens, and the fix is a few characters long.</p>
+<p>That puzzle is what this section is about. §1 showed what a database holds and how to talk to it. This section looks one level down, at the text of a statement itself:</p>
+<ul>
+<li>how PostgreSQL reads the characters you type and splits them into pieces;</li>
+<li>what the pieces of an <em>expression</em> are (an expression is anything that works out to a value, like <code>1 + 2</code> or <code>price * 2</code>);</li>
+<li>and, the part that produces the real surprises, how PostgreSQL decides what <em>type</em> each value is: whole number, decimal, text, date, and so on.</li>
+</ul>
+<p>Why types get so much attention here: a SQL query never declares them. Nowhere do you write "this <code>'2026-01-01'</code> is a date". PostgreSQL <em>infers</em> each value's type, which means it works the type out from where the value sits. It also picks each operator, such as <code>+</code> or <code>&gt;</code>, by looking at the types on both sides. Usually it lands on what you meant. When it lands somewhere else, you do not get an error. You get a different answer, like the <code>0</code> above, or a query that quietly stops using an index (a lookup structure that makes searches fast, taught in §12) and becomes slow.</p>
+<p>The archive from §1 still works as the picture. This section is about <strong>how the archivist reads your request slip</strong>:</p>
+<ul>
+<li>The slip is read word by word, and the archivist copies every name in small letters unless you put it in quotes.</li>
+<li>A value you write on the slip, like <code>'2026-01-01'</code>, carries no label saying what kind of thing it is. The archivist labels it by looking at the field you compare it with.</li>
+<li>To compare or combine two things, the archivist picks a tool that fits both labels: a ruler for numbers, a calendar for dates. If two tools fit equally well, the archivist refuses to guess and hands the slip back.</li>
+</ul>
+<p>Every idea in this section has a place in that picture:</p>
+<table>
+<thead>
+<tr>
+<th>At the archivist's desk</th>
+<th>In PostgreSQL</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The words on the slip, read one at a time</td>
+<td>tokens, the lexical structure</td>
+<td>§2.1</td>
+</tr>
+<tr>
+<td>Names copied in small letters unless in quotes</td>
+<td>identifiers fold to lower case</td>
+<td>§2.2</td>
+</tr>
+<tr>
+<td>The printed words of the request form, the same on every slip</td>
+<td>key words</td>
+<td>§2.3</td>
+</tr>
+<tr>
+<td>Text copied exactly, between quote marks</td>
+<td>string constants</td>
+<td>§2.4</td>
+</tr>
+<tr>
+<td>A value written with no label</td>
+<td>a constant of type <code>unknown</code></td>
+<td>§2.5</td>
+</tr>
+<tr>
+<td>Writing the label yourself</td>
+<td>a cast, <code>x::t</code></td>
+<td>§2.5</td>
+</tr>
+<tr>
+<td>The counting tool that only knows whole numbers</td>
+<td>integer division</td>
+<td>§2.6</td>
+</tr>
+<tr>
+<td>Two conditions the archivist may check in either order</td>
+<td>undefined evaluation order</td>
+<td>§2.7</td>
+</tr>
+<tr>
+<td>A numbered checklist, checked from the top</td>
+<td><code>CASE</code></td>
+<td>§2.8</td>
+</tr>
+<tr>
+<td>Labels added without asking, only when filing, or only on request</td>
+<td>implicit, assignment and explicit casts</td>
+<td>§2.10</td>
+</tr>
+<tr>
+<td>Picking the tool that fits both labels</td>
+<td>operator resolution</td>
+<td>§2.11</td>
+</tr>
+<tr>
+<td>Which alphabetical filing rule to follow</td>
+<td>collation</td>
+<td>§2.12</td>
+</tr>
+</tbody>
+</table>
 <h2 id="section-1-21-what-a-statement-is-made-of">2.1 What a Statement Is Made Of</h2>
-<p>A statement's <strong>lexical structure</strong> — the level at which PostgreSQL reads the characters — is a sequence of <strong>tokens</strong>: key words, identifiers, quoted identifiers, constants, operators, and special characters. Whitespace separates them and is otherwise insignificant, so a statement may be spread over any number of lines. A semicolon terminates it.</p>
+<p>A <em>statement</em> is one complete instruction to the server, such as a <code>SELECT</code>. Before PostgreSQL can run it, it has to read it, and it reads it the way you read a sentence: as a row of separate words. Each word is called a <em>token</em>.</p>
+<p>A statement's <strong>lexical structure</strong> — the level at which PostgreSQL reads the characters — is a sequence of <strong>tokens</strong>. There are six kinds:</p>
+<ul>
+<li><em>key words</em>, the fixed words of the language, like <code>SELECT</code> and <code>AS</code>;</li>
+<li><em>identifiers</em>, the names you choose, like a table or column name;</li>
+<li><em>quoted identifiers</em>, names written inside double quotes;</li>
+<li><em>constants</em>, values written straight into the statement, like <code>42</code> or <code>'hello'</code>;</li>
+<li><em>operators</em>, symbols like <code>+</code> and <code>=</code>;</li>
+<li><em>special characters</em>, like commas, parentheses and the semicolon.</li>
+</ul>
+<p>Whitespace (spaces, tabs, line breaks) separates tokens and is otherwise insignificant, so a statement may be spread over any number of lines. A semicolon terminates it. Here is one statement spread over four lines, with two comments inside it:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="s1">'hello'</span><span class="w">  </span><span class="k">AS</span><span class="w"> </span><span class="n">greeting</span><span class="p">,</span><span class="w">     </span><span class="c1">-- a line comment</span>
 <span class="w">       </span><span class="mi">42</span><span class="w">       </span><span class="k">AS</span><span class="w"> </span><span class="n">answer</span><span class="w">        </span><span class="cm">/* a block comment,</span>
 <span class="cm">                                    which may span lines */</span>
@@ -1428,10 +1524,13 @@ INSERT 0 2
 (1 row)
 </code></pre></div>
 
-<p>A <strong>SQL comment</strong> runs to the end of the line with <code>--</code>, or between <code>/*</code> and <code>*/</code>. Block comments <strong>nest</strong>, unlike C's, so commenting out a region that already contains a block comment works.</p>
+<p>Reading the output: one row, with two columns called <code>greeting</code> and <code>answer</code>. Everything after <code>--</code>, and everything between <code>/*</code> and <code>*/</code>, is gone. The server skipped it.</p>
+<p>A <strong>SQL comment</strong> is a note for human readers that the server ignores. It runs to the end of the line with <code>--</code>, or between <code>/*</code> and <code>*/</code>. Block comments <strong>nest</strong>, unlike C's (C being the programming language whose comment style SQL borrowed). So you can comment out a region that already contains a block comment, and the inner <code>*/</code> does not end the outer comment early.</p>
 <p>Named once more, since each is referred to later: <strong>lexical structure</strong> and <strong>sql comment</strong>.</p>
 <h2 id="section-1-22-identifiers-fold-to-lower-case">2.2 Identifiers Fold to Lower Case</h2>
-<p>An unquoted <strong>SQL identifier</strong> is folded to <strong>lower</strong> case. This is the single most consequential lexical rule in PostgreSQL, and it differs from the SQL standard, which folds to upper case.</p>
+<p>An <em>identifier</em> is a name you choose: the name of a table, a column or a function. Here is the first rule that catches people. An unquoted <strong>SQL identifier</strong> is folded to <strong>lower</strong> case. "Folded" means converted: whatever case you type, PostgreSQL turns the name into small letters before it looks the name up. That is the archivist copying every name in small letters.</p>
+<p>This is the single most consequential lexical rule in PostgreSQL, and it differs from the SQL standard (the official rulebook that SQL databases are meant to follow), which folds to upper case.</p>
+<p>To see it, create a table whose name is in double quotes. Double quotes tell PostgreSQL "keep this name exactly as written". Then ask <code>information_schema</code> (one of the catalogs from §1.9, where the database lists its own tables) what was stored:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="ss">"MixedCase"</span><span class="w"> </span><span class="p">(</span><span class="ss">"Col"</span><span class="w"> </span><span class="nb">int</span><span class="p">);</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="k">table_name</span><span class="p">,</span><span class="w"> </span><span class="k">column_name</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">information_schema</span><span class="p">.</span><span class="n">columns</span>
 <span class="k">WHERE</span><span class="w"> </span><span class="k">table_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'MixedCase'</span><span class="p">;</span>
@@ -1444,7 +1543,7 @@ INSERT 0 2
 (1 row)
 </code></pre></div>
 
-<p>The quoted name preserved its case exactly. Now try to reach it without quotes:</p>
+<p>Reading the output: <code>CREATE TABLE</code> means the table was made, and the catalog lists it as <code>MixedCase</code> with a column <code>Col</code>, capitals intact. The quoted name preserved its case exactly. Now try to reach it without quotes:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">MixedCase</span><span class="p">;</span>
 </code></pre></div>
@@ -1454,15 +1553,30 @@ LINE 1: SELECT * FROM MixedCase;
                       ^
 </code></pre></div>
 
-<p><code>MixedCase</code> folded to <code>mixedcase</code>, which does not exist. <strong>Every reference to a quoted identifier must itself be quoted, forever.</strong> That is why the convention in PostgreSQL is <code>lower_snake_case</code> without quotes: it is the only spelling that survives being written in any case anywhere.</p>
-<p>The rule catches people arriving from tools that quote everything — some ORMs and GUI designers create <code>"userId"</code>, and then every hand-written query against it needs the quotes too, or fails with "column useridentifier does not exist".</p>
-<p>An unquoted identifier may contain letters, digits, underscores and <code>$</code>, and may not start with a digit. A quoted one may contain anything except a null byte, including spaces, punctuation and key words.</p>
+<p>Reading the error: the server looked for a table called <code>mixedcase</code>, in small letters, and found none. The caret <code>^</code> points at the word it could not find.</p>
+<p><code>MixedCase</code> folded to <code>mixedcase</code>, which does not exist. <strong>Every reference to a quoted identifier must itself be quoted, forever.</strong> Once a name has a capital letter in it, the only way to reach it is to write it in double quotes, spelled exactly, every time.</p>
+<p>That is why the convention in PostgreSQL is <code>lower_snake_case</code> without quotes: small letters, with words joined by underscores, like <code>order_items</code>. It is the only spelling that survives being written in any case anywhere, because <code>ORDER_ITEMS</code>, <code>Order_Items</code> and <code>order_items</code> all fold to the same name.</p>
+<p>The rule catches people arriving from tools that quote everything. Some ORMs (libraries that write SQL for a program, so the programmer does not have to) and GUI designers (programs for drawing tables with the mouse) create a column called <code>"userId"</code>. From then on, every hand-written query against it needs the quotes too. Leave them out and <code>userId</code> folds to <code>userid</code>, and the query fails with <code>column "userid" does not exist</code>.</p>
+<p>What a name may contain:</p>
+<ul>
+<li>An unquoted identifier may contain letters, digits, underscores and <code>$</code>, and may not start with a digit.</li>
+<li>A quoted one may contain anything except a null byte (the character whose code is zero), including spaces, punctuation and key words.</li>
+</ul>
 <p>In summary, the vocabulary here is <strong>sql identifier</strong>.</p>
 <h2 id="section-1-23-key-words">2.3 Key Words</h2>
-<p>Key words are case-insensitive: <code>select</code>, <code>SELECT</code> and <code>SeLeCt</code> are the same token. The convention in this course, and in most SQL, is upper case for key words and lower case for identifiers, because it makes the shape of a statement readable at a glance.</p>
-<p>PostgreSQL classifies key words as <strong>reserved</strong> (cannot be an identifier without quoting), <strong>unreserved</strong> (can), and two in-between categories. <code>SELECT</code> and <code>FROM</code> are reserved; <code>name</code>, <code>value</code>, <code>type</code>, <code>year</code> and several hundred others are not. Relying on that is fragile — a word unreserved today can become reserved in a later major version — so a column called <code>end</code> or <code>order</code> should be renamed rather than quoted.</p>
-<p><code>pg_get_keywords()</code> lists them all with their category, which is the authoritative answer rather than a remembered list.</p>
+<p><em>Key words</em> are the fixed words of the language: <code>SELECT</code>, <code>FROM</code>, <code>WHERE</code>, <code>CREATE</code>. They are the printed words on the request form, the same on every slip. Key words are case-insensitive: <code>select</code>, <code>SELECT</code> and <code>SeLeCt</code> are the same token.</p>
+<p>The convention in this course, and in most SQL, is upper case for key words and lower case for identifiers. The reason is readability: the capitals stand out, so the shape of a statement is visible at a glance.</p>
+<p>Can a key word be used as a name? It depends on the word. PostgreSQL sorts its key words into groups:</p>
+<ul>
+<li><strong>reserved</strong> words cannot be an identifier without quoting. <code>SELECT</code> and <code>FROM</code> are reserved.</li>
+<li><strong>unreserved</strong> words can. <code>name</code>, <code>value</code>, <code>type</code>, <code>year</code> and several hundred others are unreserved.</li>
+<li>two in-between categories hold words that are allowed as some kinds of name but not others.</li>
+</ul>
+<p>Relying on a word being unreserved is fragile. A word unreserved today can become reserved in a later major version, and then every query that uses it as a name breaks. So a column called <code>end</code> or <code>order</code> should be renamed rather than quoted.</p>
+<p>You do not need to memorise the list. <code>pg_get_keywords()</code> lists them all with their category, which is the authoritative answer rather than a remembered list.</p>
 <h2 id="section-1-24-string-constants">2.4 String Constants</h2>
+<p>A <em>constant</em>, also called a <em>literal</em>, is a value written straight into the statement. A <em>string constant</em> is a piece of text, and its plain form is text between single quotes, like <code>'hello'</code>.</p>
+<p>What if the text itself contains a single quote, or a tab? PostgreSQL has four spellings for those cases. Here they are side by side:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="s1">'it''s'</span><span class="w">                                     </span><span class="k">AS</span><span class="w"> </span><span class="n">doubled_quote</span><span class="p">,</span>
 <span class="w">       </span><span class="n">E</span><span class="s1">'tab\there'</span><span class="w">                                </span><span class="k">AS</span><span class="w"> </span><span class="n">escape_string</span><span class="p">,</span>
 <span class="w">       </span><span class="n">U</span><span class="o">&amp;</span><span class="s1">'\0041\0042'</span><span class="w">                              </span><span class="k">AS</span><span class="w"> </span><span class="n">unicode_escape</span><span class="p">,</span>
@@ -1475,6 +1589,14 @@ LINE 1: SELECT * FROM MixedCase;
 (1 row)
 </code></pre></div>
 
+<p>Reading the output, column by column:</p>
+<ul>
+<li><code>doubled_quote</code>: two single quotes in a row, <code>''</code>, came out as one, giving <code>it's</code>.</li>
+<li><code>escape_string</code>: the <code>E</code> in front switched on backslash codes, so <code>\t</code> became a real tab character, which psql shows as a wide gap.</li>
+<li><code>unicode_escape</code>: <code>\0041</code> and <code>\0042</code> are the Unicode code points for <code>A</code> and <code>B</code>. (A <em>code point</em> is the number the Unicode table gives each character.)</li>
+<li><code>dollar_quoted</code>: everything between the <code>$$</code> marks came out exactly as written, quotes and backslashes included.</li>
+</ul>
+<p>The four forms, and what each is for:</p>
 <div style="display:grid;grid-template-columns:9rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem;font-weight:600"><code>'...'</code></div>
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem">The standard form. A single quote inside is written twice. <strong>A backslash is an ordinary character</strong> — <code>standard_conforming_strings</code> has been <code>on</code> since PostgreSQL 9.1.</div>
@@ -1486,10 +1608,16 @@ LINE 1: SELECT * FROM MixedCase;
   <div style="border-left:4px solid #f59e0b;padding-left:.6rem"><strong>Dollar quoting.</strong> A <strong>dollar-quoted</strong> string has nothing special inside it — no escaping at all. A tag may be added (<code>$sql$...$sql$</code>) so that nested bodies can be distinguished.</div>
 </div>
 
-<p><strong>Dollar quoting is what makes function bodies bearable</strong> (§18.12): a PL/pgSQL body full of single-quoted strings would otherwise need every quote doubled, and a body inside that body doubled again. Two adjacent string constants separated by a newline are concatenated, which is how a long literal is wrapped.</p>
+<p><strong>Dollar quoting is what makes function bodies bearable</strong> (§18.12). A <em>function body</em> is a small program stored in the database, and it is written as one long string. A PL/pgSQL body (PL/pgSQL is PostgreSQL's built-in language for writing such programs) is full of single-quoted strings of its own. Inside an ordinary <code>'...'</code> string, every one of those quotes would need doubling, and a body inside that body doubled again. Inside <code>$$...$$</code>, nothing needs escaping at all.</p>
+<p>One more trick: two adjacent string constants separated by a newline are concatenated (joined into one). That is how a long literal is wrapped over several lines.</p>
 <p>What to carry forward from this subsection: <strong>dollar-quoted</strong>.</p>
 <h2 id="section-1-25-numeric-constants-and-typed-literals">2.5 Numeric Constants and Typed Literals</h2>
-<p>A numeric constant with no decimal point and within range is <code>integer</code>, then <code>bigint</code>; with a decimal point or an exponent it is <code>numeric</code>.</p>
+<p>Every value in PostgreSQL has a <em>type</em>: <code>integer</code> for whole numbers, <code>numeric</code> for exact decimals, <code>text</code> for strings, <code>date</code> for dates, and many more. A numeric constant gets its type from how it is written:</p>
+<ul>
+<li>with no decimal point and within range, it is <code>integer</code>, then <code>bigint</code> when it is too big for an <code>integer</code>;</li>
+<li>with a decimal point or an exponent (like <code>1e3</code>, meaning 1 times 10 to the 3rd), it is <code>numeric</code>.</li>
+</ul>
+<p>The function <code>pg_typeof()</code> tells you the type of any value, so you can watch this happen:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="n">pg_typeof</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="n">int_literal</span><span class="p">,</span>
 <span class="w">       </span><span class="n">pg_typeof</span><span class="p">(</span><span class="mi">1</span><span class="p">.</span><span class="mi">5</span><span class="p">)</span><span class="w">        </span><span class="k">AS</span><span class="w"> </span><span class="n">decimal_literal</span><span class="p">,</span>
 <span class="w">       </span><span class="n">pg_typeof</span><span class="p">(</span><span class="s1">'x'</span><span class="p">)</span><span class="w">        </span><span class="k">AS</span><span class="w"> </span><span class="n">string_literal</span><span class="p">,</span>
@@ -1504,9 +1632,18 @@ LINE 1: SELECT * FROM MixedCase;
 (1 row)
 </code></pre></div>
 
-<p><strong>A bare string constant has the type <code>unknown</code>.</strong> It is not <code>text</code> — it is a placeholder, and PostgreSQL resolves it from context: compared to a <code>date</code> column it becomes a <code>date</code>, passed to a function expecting <code>inet</code> it becomes an <code>inet</code>. That deferred decision is what makes <code>WHERE created_at &gt; '2026-01-01'</code> work without a cast, and it is why an <code>unknown</code> in a position with no context (a bare <code>SELECT 'x'</code>) defaults to <code>text</code>.</p>
-<p>Note <code>1.5</code> is <code>numeric</code>, not <code>double precision</code> — PostgreSQL prefers exactness for a written decimal, which is the opposite of most programming languages.</p>
-<p>A <strong>typed literal</strong> can be written three ways, and they are equivalent:</p>
+<p>Reading the output, column by column:</p>
+<ul>
+<li><code>1</code> is <code>integer</code> and <code>1.5</code> is <code>numeric</code>, as the rules said.</li>
+<li><code>'x'</code> on its own is <code>unknown</code>. That is the surprise, and the next paragraph explains it.</li>
+<li><code>'x'::text</code> is <code>text</code>, because <code>::text</code> labelled it.</li>
+<li><code>1 + 1.5</code> is <code>numeric</code>: a whole number mixed with a decimal gives a decimal.</li>
+<li><code>now()</code> returns a <code>timestamp with time zone</code>, a date and time that knows its time zone.</li>
+</ul>
+<p><strong>A bare string constant has the type <code>unknown</code>.</strong> It is not <code>text</code> — it is a placeholder, and PostgreSQL resolves it from context. This is the value with no label from the archive. Compared to a <code>date</code> column it becomes a <code>date</code>; passed to a function expecting <code>inet</code> (the type for network addresses) it becomes an <code>inet</code>.</p>
+<p>That deferred decision is what makes <code>WHERE created_at &gt; '2026-01-01'</code> work without a cast. It is also why an <code>unknown</code> in a position with no context (a bare <code>SELECT 'x'</code>) defaults to <code>text</code>: with nothing to compare against, text is the safest guess.</p>
+<p>Note <code>1.5</code> is <code>numeric</code>, not <code>double precision</code>. Double precision is the fast, approximate kind of decimal that most programming languages use by default, where a value like 0.1 is stored only approximately. PostgreSQL prefers exactness for a written decimal, which is the opposite of most programming languages.</p>
+<p>A <strong>typed literal</strong> is a constant with its type written beside it, so PostgreSQL does not have to work the type out. Converting a value to a type you name is called a <em>cast</em>: you write the label yourself. A typed literal can be written three ways, and they are equivalent:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="k">CAST</span><span class="p">(</span><span class="s1">'42'</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="nb">integer</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">sql_standard</span><span class="p">,</span>
 <span class="w">       </span><span class="s1">'42'</span><span class="p">::</span><span class="nb">integer</span><span class="w">         </span><span class="k">AS</span><span class="w"> </span><span class="n">postgres_cast</span><span class="p">,</span>
 <span class="w">       </span><span class="nb">integer</span><span class="w"> </span><span class="s1">'42'</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="n">typed_literal</span><span class="p">;</span>
@@ -1518,9 +1655,16 @@ LINE 1: SELECT * FROM MixedCase;
 (1 row)
 </code></pre></div>
 
-<p><code>CAST(x AS t)</code> is the standard and portable; <code>x::t</code> uses the <strong>cast operator</strong>, which is PostgreSQL's and is what you will read everywhere; <code>t 'literal'</code> works only on a literal.</p>
+<p>All three printed <code>42</code>. They differ only in where you can use them:</p>
+<ul>
+<li><code>CAST(x AS t)</code> is the standard and portable: it works in every SQL database.</li>
+<li><code>x::t</code> uses the <strong>cast operator</strong>, which is PostgreSQL's and is what you will read everywhere.</li>
+<li><code>t 'literal'</code> works only on a literal, never on a column or a calculation.</li>
+</ul>
 <p>The terms above, gathered: <strong>cast operator</strong> and <strong>double precision</strong>.</p>
 <h2 id="section-1-26-operators-and-precedence">2.6 Operators and Precedence</h2>
+<p>An <em>operator</em> is a symbol that combines values, like <code>+</code>, <code>*</code>, <code>/</code>, or <code>||</code>, which joins two strings. The values on each side are its <em>operands</em>. <em>Precedence</em> is the rule for which operator runs first when there are several, the same as in school arithmetic, where multiplication comes before addition.</p>
+<p>Here are the common operators, including the one behind this section's puzzle:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w">       </span><span class="k">AS</span><span class="w"> </span><span class="n">precedence</span><span class="p">,</span>
 <span class="w">       </span><span class="p">(</span><span class="mi">1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">2</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w">     </span><span class="k">AS</span><span class="w"> </span><span class="n">with_parens</span><span class="p">,</span>
 <span class="w">       </span><span class="s1">'a'</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">'b'</span><span class="w">      </span><span class="k">AS</span><span class="w"> </span><span class="n">concatenation</span><span class="p">,</span>
@@ -1536,12 +1680,27 @@ LINE 1: SELECT * FROM MixedCase;
 (1 row)
 </code></pre></div>
 
-<p><strong><code>5 / 2</code> is <code>2</code>.</strong> Division between two integers is integer division and truncates toward zero — no rounding, no error. <code>5.0 / 2</code> is <code>2.5</code> because one operand is <code>numeric</code>, so the whole expression is. This is the most common arithmetic surprise in SQL, and the fix is to make one operand non-integer: <code>5::numeric / 2</code>, or <code>5 * 1.0 / 2</code>.</p>
-<p><strong>Operator precedence</strong>, loosest to tightest: <code>OR</code>, <code>AND</code>, <code>NOT</code>, comparison, <code>IS</code>/<code>BETWEEN</code>/<code>IN</code>/<code>LIKE</code>, addition, multiplication, exponentiation, casts, subscripts. Two practical consequences: <code>a AND b OR c</code> means <code>(a AND b) OR c</code>, and <code>::</code> binds tighter than everything arithmetic, so <code>1 + 2::text</code> is a type error rather than <code>'3'</code>.</p>
-<p>PostgreSQL lets you <strong>define new operators</strong> with <code>CREATE OPERATOR</code>, which is why extensions can add <code>@&gt;</code>, <code>&lt;-&gt;</code> and <code>-&gt;&gt;</code>. An operator is resolved by looking at the types on both sides, which is §2.11.</p>
+<p>Reading the output, column by column:</p>
+<ul>
+<li><code>precedence</code> is <code>7</code>: <code>2 * 3</code> ran first, then <code>1 +</code>.</li>
+<li><code>with_parens</code> is <code>9</code>: the parentheses forced the addition first.</li>
+<li><code>concatenation</code> is <code>ab</code>: <code>||</code> joined the two strings.</li>
+<li><code>integer_division</code> is <code>2</code>. Hold on to that one.</li>
+<li><code>numeric_division</code> is <code>2.5000000000000000</code>.</li>
+<li><code>modulo</code> is <code>1</code>: <code>%</code> gives the remainder, and 5 divided by 2 leaves 1.</li>
+<li><code>power</code> is <code>1024</code>: <code>^</code> raises to a power, and 2 to the 10th is 1024.</li>
+</ul>
+<p><strong><code>5 / 2</code> is <code>2</code>.</strong> This is the puzzle's answer. Division between two integers is integer division and truncates toward zero: it throws the fraction away, with no rounding and no error. It is the archivist's counting tool that only knows whole numbers. <code>5.0 / 2</code> is <code>2.5</code> because one operand is <code>numeric</code>, so the whole expression is.</p>
+<p>The puzzle's query divided one count by another, and a count is always a whole number, so 3 divided by 6 came out as <code>0</code>. This is the most common arithmetic surprise in SQL, and the fix is to make one operand non-integer: <code>5::numeric / 2</code>, or <code>5 * 1.0 / 2</code>.</p>
+<p><strong>Operator precedence</strong> is the full order, loosest to tightest (the tightest runs first): <code>OR</code>, <code>AND</code>, <code>NOT</code>, comparison, <code>IS</code>/<code>BETWEEN</code>/<code>IN</code>/<code>LIKE</code>, addition, multiplication, exponentiation, casts, subscripts. Two practical consequences:</p>
+<ul>
+<li><code>a AND b OR c</code> means <code>(a AND b) OR c</code>, because <code>AND</code> binds tighter than <code>OR</code>.</li>
+<li><code>::</code> binds tighter than everything arithmetic, so <code>1 + 2::text</code> is a type error rather than <code>'3'</code>. The cast applies to the <code>2</code> alone, and PostgreSQL is then asked to add a number to a piece of text, which it has no operator for.</li>
+</ul>
+<p>PostgreSQL lets you <strong>define new operators</strong> with <code>CREATE OPERATOR</code>, which is why extensions (add-on packages you install into PostgreSQL) can add <code>@&gt;</code>, <code>&lt;-&gt;</code> and <code>-&gt;&gt;</code>. An operator is resolved by looking at the types on both sides, which is §2.11.</p>
 <p>One line each, for reference: <strong>operator precedence</strong>.</p>
 <h2 id="section-1-27-value-expressions">2.7 Value Expressions</h2>
-<p>A <strong>value expression</strong> is anything that produces a value, and the list is worth having in one place because it explains where a subquery may appear:</p>
+<p>A <strong>value expression</strong> is anything that produces a value. You have already used several: a constant, a column name, an operator with its operands. The full list is worth having in one place, because it shows everywhere a value may appear, including where a subquery (a <code>SELECT</code> written inside another statement) may appear:</p>
 <div style="display:grid;grid-template-columns:12rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #64748b;padding-left:.6rem;font-weight:600">column reference</div>
   <div style="border-left:4px solid #64748b;padding-left:.6rem"><code>col</code>, <code>t.col</code>, <code>schema.t.col</code>.</div>
@@ -1561,11 +1720,21 @@ LINE 1: SELECT * FROM MixedCase;
   <div style="border-left:4px solid #64748b;padding-left:.6rem"><code>ROW(1,'a')</code> or just <code>(1,'a')</code> — the basis of §8.9's keyset comparison.</div>
 </div>
 
-<p><strong>The expression evaluation order — the order in which parts of an expression are computed — is not defined</strong>, and this is a documented absence of a guarantee rather than an observed behaviour. <code>WHERE x &lt;&gt; 0 AND 10 / x &gt; 1</code> is not promised to evaluate the guard first, so it is not promised to avoid a division by zero.</p>
-<p>Worth being precise about, because it is easy to over-claim: on PostgreSQL 18 this course could <strong>not</strong> provoke that failure — six variants of a guarded division, with and without an index, with <code>ORDER BY</code>, with <code>GROUP BY</code>, and across a join, all applied the filter before the division and returned the right answer. The hazard is real in the sense that nothing forbids the other order, and a future plan, a different version or a <code>LEAKPROOF</code>-related rewrite may take it. Write it correctly rather than relying on the observation:</p>
-<p><code>CASE</code> <em>does</em> guarantee that a <code>WHEN</code> is evaluated before its <code>THEN</code>, and that no later branch runs once one matches. That is the construct to reach for when a guard is load-bearing.</p>
+<p>A few words in that list are new, and each is taught where the list points:</p>
+<ul>
+<li>a <em>positional parameter</em> is a numbered placeholder, filled in with a real value later;</li>
+<li>an <em>aggregate</em> is a function such as <code>count()</code> or <code>sum()</code> that turns many rows into one value;</li>
+<li>a <em>composite</em> value is a row-shaped value with named fields;</li>
+<li><em>scalar</em> means a single value, one row and one column.</li>
+</ul>
+<p>Now a rule that is easy to get wrong. When a condition has several parts, which part does PostgreSQL work out first?</p>
+<p><strong>The expression evaluation order — the order in which parts of an expression are computed — is not defined</strong>, and this is a documented absence of a guarantee rather than an observed behaviour. <code>WHERE x &lt;&gt; 0 AND 10 / x &gt; 1</code> is not promised to evaluate the guard first, so it is not promised to avoid a division by zero. On the slip you wrote two conditions, and the archivist is free to check them in either order.</p>
+<p>Worth being precise about, because it is easy to over-claim: on PostgreSQL 18 this course could <strong>not</strong> provoke that failure. Six variants of a guarded division were tried: with and without an index, with <code>ORDER BY</code>, with <code>GROUP BY</code>, and across a join. All of them applied the filter before the division and returned the right answer.</p>
+<p>The hazard is real in the sense that nothing forbids the other order. A future plan, a different version or a <code>LEAKPROOF</code>-related rewrite may take it. (<code>LEAKPROOF</code> is a label on a function promising that it reveals nothing about its inputs, and it lets the planner run that function earlier than it otherwise would.) So write it correctly rather than relying on the observation.</p>
+<p><code>CASE</code> <em>does</em> guarantee that a <code>WHEN</code> is evaluated before its <code>THEN</code>, and that no later branch runs once one matches. It is the numbered checklist, checked from the top. That is the construct to reach for when a guard is load-bearing, meaning the query is only correct if the guard runs first. §2.8 introduces <code>CASE</code> itself.</p>
 <p>Collected, because the rest of the course leans on them: <strong>column reference</strong>, <strong>positional parameter</strong>, <strong>aggregate expression</strong>, <strong>array constructor</strong>, <strong>row constructor</strong> and <strong>expression evaluation order</strong>.</p>
 <h2 id="section-1-28-conditional-expressions">2.8 Conditional Expressions</h2>
+<p>A <em>conditional expression</em> picks a value depending on a test, like "if this, then that" in everyday speech. SQL's main one is <code>CASE</code>. Here it sorts three order amounts, in cents, into price tiers:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="n">cents</span><span class="p">,</span>
 <span class="w">       </span><span class="k">CASE</span><span class="w"> </span><span class="k">WHEN</span><span class="w"> </span><span class="n">cents</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">30000</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="s1">'premium'</span>
 <span class="w">            </span><span class="k">WHEN</span><span class="w"> </span><span class="n">cents</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">5000</span><span class="w">  </span><span class="k">THEN</span><span class="w"> </span><span class="s1">'standard'</span>
@@ -1582,8 +1751,14 @@ LINE 1: SELECT * FROM MixedCase;
 (3 rows)
 </code></pre></div>
 
-<p><code>CASE</code> comes in two forms: the <em>searched</em> form above, and the <em>simple</em> form <code>CASE expr WHEN v1 THEN ... END</code>, which compares with <code>=</code> and therefore never matches <code>NULL</code>. Without an <code>ELSE</code>, an unmatched <code>CASE</code> yields <code>NULL</code>.</p>
-<p>The three shorthands are worth knowing by name:</p>
+<p>Reading the output: <code>900</code> matched no <code>WHEN</code>, so it fell through to the <code>ELSE</code> and became <code>budget</code>. <code>6400</code> failed the first test and passed the second. <code>31900</code> passed the first test and stopped there, which is the "checked from the top" guarantee at work.</p>
+<p><code>CASE</code> comes in two forms:</p>
+<ul>
+<li>the <em>searched</em> form above, where each <code>WHEN</code> has its own test;</li>
+<li>the <em>simple</em> form <code>CASE expr WHEN v1 THEN ... END</code>, which compares one value against a list of values with <code>=</code>, and therefore never matches <code>NULL</code> (§1.12 showed that comparing with <code>NULL</code> never gives true).</li>
+</ul>
+<p>Without an <code>ELSE</code>, an unmatched <code>CASE</code> yields <code>NULL</code>.</p>
+<p>Four short functions cover jobs you would otherwise write a whole <code>CASE</code> for, and they are worth knowing by name:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="k">coalesce</span><span class="p">(</span><span class="k">NULL</span><span class="p">,</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w"> </span><span class="s1">'third'</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="k">coalesce</span><span class="p">,</span>
 <span class="w">       </span><span class="k">nullif</span><span class="p">(</span><span class="s1">'n/a'</span><span class="p">,</span><span class="w"> </span><span class="s1">'n/a'</span><span class="p">)</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="k">nullif</span><span class="p">,</span>
 <span class="w">       </span><span class="n">greatest</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w">             </span><span class="k">AS</span><span class="w"> </span><span class="n">greatest</span><span class="p">,</span>
@@ -1596,11 +1771,27 @@ LINE 1: SELECT * FROM MixedCase;
 (1 row)
 </code></pre></div>
 
-<p><code>coalesce</code> returns the first non-null argument and evaluates lazily. <code>nullif(a, b)</code> returns <code>NULL</code> when they are equal — the standard way to turn a sentinel like <code>''</code> or <code>'n/a'</code> into a proper null, and the standard way to avoid division by zero: <code>x / nullif(y, 0)</code> yields <code>NULL</code> rather than raising.</p>
-<p><strong>The <code>greatest(</code> and <code>least(</code> functions ignore nulls</strong> — <code>least(</code> in particular, unlike almost everything else in SQL — <code>greatest(1, NULL)</code> is <code>1</code>, not <code>NULL</code>. That is a genuine inconsistency in the standard, and it is occasionally exactly what you want.</p>
+<p>Reading the output, column by column:</p>
+<ul>
+<li><code>coalesce</code> returned <code>third</code>, the first argument that is not <code>NULL</code>.</li>
+<li><code>nullif</code> returned <code>NULL</code>, shown as an empty space, because its two arguments were equal.</li>
+<li><code>greatest</code> and <code>least</code> returned the largest and the smallest of their arguments.</li>
+</ul>
+<p><code>coalesce</code> returns the first non-null argument and evaluates lazily: it stops at the first non-null one and never computes the rest. <code>nullif(a, b)</code> returns <code>NULL</code> when they are equal, and that has two standard uses:</p>
+<ul>
+<li>turning a sentinel like <code>''</code> or <code>'n/a'</code> into a proper null. A <em>sentinel</em> is a made-up value standing in for "no value".</li>
+<li>avoiding division by zero: <code>x / nullif(y, 0)</code> yields <code>NULL</code> rather than raising an error.</li>
+</ul>
+<p><strong>The <code>greatest(</code> and <code>least(</code> functions ignore nulls</strong>, unlike almost everything else in SQL, where one <code>NULL</code> makes the whole result <code>NULL</code>. <code>greatest(1, NULL)</code> is <code>1</code>, not <code>NULL</code>, and <code>least(</code> behaves the same way. Other databases disagree here (some return <code>NULL</code> as soon as any argument is <code>NULL</code>), and PostgreSQL's choice is occasionally exactly what you want.</p>
 <p>The pieces this subsection introduced, in one line: <code>greatest(</code>.</p>
 <h2 id="section-1-29-calling-functions">2.9 Calling Functions</h2>
-<p><strong>Function call syntax</strong> allows arguments to be positional, named, or a mixture — and named notation makes a call with several optional arguments readable:</p>
+<p>A <em>function</em> takes some inputs, called <em>arguments</em>, and returns a value: <code>upper('hi')</code> returns <code>'HI'</code>. <strong>Function call syntax</strong> allows arguments to be passed three ways:</p>
+<ul>
+<li><em>positional</em>, matched by their order;</li>
+<li><em>named</em>, matched by name, as in <code>make_interval(days =&gt; 3)</code>;</li>
+<li>a mixture of the two.</li>
+</ul>
+<p>Named notation makes a call with several optional arguments readable, because each value says what it is for. Here are four calls, each in a different style:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="n">format</span><span class="p">(</span><span class="s1">'%s-%s'</span><span class="p">,</span><span class="w"> </span><span class="s1">'a'</span><span class="p">,</span><span class="w"> </span><span class="s1">'b'</span><span class="p">)</span><span class="w">                     </span><span class="k">AS</span><span class="w"> </span><span class="n">positional</span><span class="p">,</span>
 <span class="w">       </span><span class="k">overlay</span><span class="p">(</span><span class="s1">'Txxxxas'</span><span class="w"> </span><span class="k">placing</span><span class="w"> </span><span class="s1">'hom'</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="mi">4</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">keyword_syntax</span><span class="p">,</span>
 <span class="w">       </span><span class="k">substring</span><span class="p">(</span><span class="s1">'PostgreSQL'</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="mi">3</span><span class="p">)</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="k">substring</span><span class="p">,</span>
@@ -1613,11 +1804,19 @@ LINE 1: SELECT * FROM MixedCase;
 (1 row)
 </code></pre></div>
 
-<p>Several standard functions use key words rather than commas — <code>substring(x FROM y FOR z)</code>, <code>overlay</code>, <code>trim(BOTH ' ' FROM x)</code>, <code>extract(YEAR FROM d)</code> — which is the SQL standard's syntax and cannot be written with commas.</p>
-<p>A <strong>variadic</strong> function takes any number of trailing arguments: <code>concat_ws</code> above joined <code>'a'</code> and <code>'c'</code> and skipped the <code>NULL</code>, where plain <code>||</code> would have made the whole thing <code>NULL</code>.</p>
+<p>Reading the output, column by column:</p>
+<ul>
+<li><code>positional</code>: <code>format</code> filled each <code>%s</code> with the next argument in order, giving <code>a-b</code>.</li>
+<li><code>keyword_syntax</code>: <code>overlay</code> replaced 4 characters starting at position 2 with <code>hom</code>, turning <code>Txxxxas</code> into <code>Thomas</code>.</li>
+<li><code>substring</code>: the 3 characters starting at position 5 of <code>PostgreSQL</code>, which are <code>gre</code>.</li>
+<li><code>variadic_skipping_nulls</code>: <code>concat_ws</code> joined its arguments with <code>-</code> and left the <code>NULL</code> out.</li>
+</ul>
+<p>Several standard functions use key words rather than commas — <code>substring(x FROM y FOR z)</code>, <code>overlay</code>, <code>trim(BOTH ' ' FROM x)</code>, <code>extract(YEAR FROM d)</code> — which is the SQL standard's syntax. PostgreSQL also accepts a plain comma form for some of them (<code>substring('PostgreSQL', 5, 3)</code> returns the same <code>gre</code>), but not for <code>extract</code>, where a comma is a syntax error. The key-word form is the one that works everywhere.</p>
+<p>A <strong>variadic</strong> function takes any number of trailing arguments. <code>concat_ws</code> above joined <code>'a'</code> and <code>'c'</code> and skipped the <code>NULL</code>, where plain <code>||</code> would have made the whole thing <code>NULL</code>.</p>
 <p><strong>Mixed notation</strong> — positional first, then named — is allowed; named before positional is not.</p>
 <p>To have in hand before moving on: <strong>function call syntax</strong>, <strong>named notation</strong>, <strong>variadic function</strong> and <strong>as keyword</strong>.</p>
 <h2 id="section-1-210-casts-and-the-three-kinds">2.10 Casts, and the Three Kinds</h2>
+<p>§2.5 showed how to write a cast yourself. Most of the time you do not have to, because PostgreSQL converts or combines values for you when that is safe. Each of these three expressions mixes two different types, and none of them has a cast:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="p">::</span><span class="nb">int8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">::</span><span class="n">int4</span><span class="w">                              </span><span class="k">AS</span><span class="w"> </span><span class="n">cross_type_equality</span><span class="p">,</span>
 <span class="w">       </span><span class="nb">date</span><span class="w"> </span><span class="s1">'2026-01-01'</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">30</span><span class="w">                         </span><span class="k">AS</span><span class="w"> </span><span class="n">date_plus_integer</span><span class="p">,</span>
 <span class="w">       </span><span class="n">timestamptz</span><span class="w"> </span><span class="s1">'2026-01-01 00:00+00'</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">interval</span><span class="w"> </span><span class="s1">'1 month'</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">timestamp_plus_interval</span><span class="p">;</span>
@@ -1629,6 +1828,12 @@ LINE 1: SELECT * FROM MixedCase;
 (1 row)
 </code></pre></div>
 
+<p>Reading the output:</p>
+<ul>
+<li><code>cross_type_equality</code> is <code>t</code>, for true: an 8-byte integer (<code>int8</code>) and a 4-byte integer (<code>int4</code>) compared without complaint.</li>
+<li><code>date_plus_integer</code> is <code>2026-01-31</code>: adding 30 to a date adds 30 days.</li>
+<li><code>timestamp_plus_interval</code> is exactly one month later. An <em>interval</em> is a length of time, like <code>'1 month'</code>.</li>
+</ul>
 <p>None of those needed an explicit cast, because PostgreSQL's cast catalogue records, for each pair of types, whether the conversion may be applied automatically. There are three levels:</p>
 <div style="display:grid;grid-template-columns:10rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #10b981;padding-left:.6rem;font-weight:600">implicit</div>
@@ -1639,7 +1844,8 @@ LINE 1: SELECT * FROM MixedCase;
   <div style="border-left:4px solid #ef4444;padding-left:.6rem">Only when you write <code>::</code> or <code>CAST</code>. Anything lossy or potentially failing.</div>
 </div>
 
-<p><strong>Type conversion</strong> between two types is therefore not one thing but three, and which one applies decides whether you must write the cast yourself. A cast that cannot succeed on the data raises at run time, not plan time:</p>
+<p>In the archive, those are three kinds of label: one the archivist adds without asking, one added only when filing a card into a box, and one added only when you write it yourself.</p>
+<p><strong>Type conversion</strong> between two types is therefore not one thing but three, and which one applies decides whether you must write the cast yourself. A cast that cannot succeed on the data raises at run time, not plan time. The server accepts the statement, starts running it, and fails only when it meets a value it cannot convert:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="s1">'abc'</span><span class="p">::</span><span class="nb">integer</span><span class="p">;</span>
 </code></pre></div>
@@ -1649,24 +1855,28 @@ LINE 1: SELECT 'abc'::integer;
                ^
 </code></pre></div>
 
-<p><strong>The reason implicit casts are so restricted is that they interact with operator resolution.</strong> PostgreSQL used to have many more, and removed most of them in 8.3 because they made expressions resolve in surprising ways — the classic being that <code>date = 'literal'</code> might silently compare as text. The current conservatism is a deliberate correction.</p>
+<p>Reading the error: <code>abc</code> is not a number, so the conversion to <code>integer</code> failed, and the caret points at the value.</p>
+<p><strong>The reason implicit casts are so restricted is that they interact with operator resolution.</strong> Operator resolution is the process §2.11 describes for choosing which operator to run. PostgreSQL used to have many more implicit casts, and removed most of them in version 8.3 because they made expressions resolve in surprising ways. The classic was that <code>date = 'literal'</code> might silently compare as text. The current conservatism is a deliberate correction.</p>
 <p>Named once more, since each is referred to later: <strong>implicit cast</strong> and <strong>explicit cast</strong>.</p>
 <p>In summary, the vocabulary here is <strong>type conversion</strong>.</p>
 <h2 id="section-1-211-how-an-operator-is-chosen">2.11 How an Operator Is Chosen</h2>
-<p><strong>Type resolution</strong> is the process by which PostgreSQL decides what everything in an expression is. When you write <code>a + b</code>, it searches for an operator named <code>+</code> whose argument types match, and the algorithm, simplified to what matters:</p>
+<p>When you write <code>a + b</code>, PostgreSQL has to choose which <code>+</code> to run. There is not one <code>+</code> but dozens: one for two integers, one for two decimals, one for a date and a number, and so on. Choosing among them is the archivist picking the tool that fits both labels.</p>
+<p><strong>Type resolution</strong> is the process by which PostgreSQL decides what everything in an expression is. For <code>a + b</code>, it searches for an operator named <code>+</code> whose argument types match. The algorithm, simplified to what matters:</p>
 <ol>
 <li>Exact type match wins.</li>
 <li>Otherwise, candidates reachable by <strong>implicit</strong> casts are considered.</li>
-<li>Among those, one is chosen using <strong>preferred types</strong> within each type category — <code>int4</code> is preferred among integers, <code>text</code> among strings, <code>float8</code> among approximate numbers.</li>
+<li>Among those, one is chosen using <strong>preferred types</strong> within each type category — <code>text</code> among strings, <code>timestamptz</code> among dates and times, and <code>float8</code> among numbers. Note that <code>int4</code> is <em>not</em> preferred, even though it is the everyday integer type.</li>
 <li>An <code>unknown</code> argument is assumed to be whatever the other side needs.</li>
 <li>If no single candidate wins, it is an error rather than a guess.</li>
 </ol>
-<p>That last point is the important one, and it produces messages like "operator is not unique". The remedy is always the same: <strong>add an explicit cast</strong> so that one candidate matches exactly.</p>
-<p>Rule 4 is why <code>WHERE created_at &gt; '2026-01-01'</code> works: <code>'2026-01-01'</code> is <code>unknown</code>, the other side is <code>timestamptz</code>, so the literal becomes a <code>timestamptz</code>. And it is why the <em>opposite</em> order of operations is a performance trap — <code>WHERE created_at::date = '2026-01-01'</code> puts the cast on the <em>column</em>, which as §12.14 explains stops the index being usable.</p>
+<p>That last point is the important one, and it produces messages like "operator is not unique": two tools fit equally, and the archivist hands the slip back. The remedy is always the same: <strong>add an explicit cast</strong> so that one candidate matches exactly.</p>
+<p>Rule 4 is why <code>WHERE created_at &gt; '2026-01-01'</code> works: <code>'2026-01-01'</code> is <code>unknown</code>, the other side is <code>timestamptz</code>, so the literal becomes a <code>timestamptz</code>. And it is why the <em>opposite</em> order of operations is a performance trap. <code>WHERE created_at::date = '2026-01-01'</code> puts the cast on the <em>column</em>, which, as §12.14 explains, stops the index being usable. Exercise 6 shows both plans side by side.</p>
 <p>What to carry forward from this subsection: <strong>preferred type</strong>.</p>
 <p>The terms above, gathered: <strong>type resolution</strong>.</p>
 <h2 id="section-1-212-collation-in-expressions">2.12 Collation in Expressions</h2>
-<p>Text comparison and ordering are decided by a <strong>collation</strong> (§17.20), which propagates through an expression. When two inputs have different explicit collations the result is an error; when they have different <em>implicit</em> collations from their columns, one wins by a defined set of rules.</p>
+<p>Is <code>a</code> before <code>B</code>? It depends on the rules you sort by. In plain byte order (the order of the characters' codes, where every capital letter comes before every small one) it is not. In a dictionary it is.</p>
+<p>Text comparison and ordering are decided by a <strong>collation</strong> (§17.20): a set of rules for which character comes before which. It is the alphabetical filing rule the archivist follows. A collation propagates through an expression, travelling with the values. When two inputs have different explicit collations the result is an error; when they have different <em>implicit</em> collations from their columns, one wins by a defined set of rules.</p>
+<p>Here is the same comparison under two different collations:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="s1">'a'</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="s1">'B'</span><span class="w"> </span><span class="k">COLLATE</span><span class="w"> </span><span class="ss">"C"</span><span class="w">           </span><span class="k">AS</span><span class="w"> </span><span class="n">byte_order</span><span class="p">,</span>
 <span class="w">       </span><span class="s1">'a'</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="s1">'B'</span><span class="w"> </span><span class="k">COLLATE</span><span class="w"> </span><span class="ss">"en-US-x-icu"</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">dictionary_order</span><span class="p">;</span>
 </code></pre></div>
@@ -1677,9 +1887,16 @@ LINE 1: SELECT 'abc'::integer;
 (1 row)
 </code></pre></div>
 
-<p>The same comparison, opposite answers. A <code>COLLATE</code> clause makes a <strong>collation expression</strong>, attaching to any expression and can be written in a <code>WHERE</code>, an <code>ORDER BY</code>, or a column definition. It matters most in three places: <code>ORDER BY</code> on text, the <code>LIKE</code> prefix optimisation of §12.10, and unique constraints on case-varying text.</p>
+<p>The same comparison, opposite answers. Under <code>"C"</code>, which is byte order, <code>'a' &lt; 'B'</code> is <code>f</code> (false), because capital <code>B</code> has a smaller code than small <code>a</code>. Under <code>"en-US-x-icu"</code>, an English dictionary order, it is <code>t</code> (true).</p>
+<p>A <code>COLLATE</code> clause makes a <strong>collation expression</strong>, attaching to any expression and can be written in a <code>WHERE</code>, an <code>ORDER BY</code>, or a column definition. It matters most in three places:</p>
+<ul>
+<li><code>ORDER BY</code> on text;</li>
+<li>the <code>LIKE</code> prefix optimisation of §12.10;</li>
+<li>unique constraints on case-varying text.</li>
+</ul>
 <p>One line each, for reference: <strong>collation expression</strong>.</p>
 <h2 id="section-1-what-this-section-established">What This Section Established</h2>
+<p>The picture: the archivist reads your slip word by word, copies unquoted names in small letters, labels each unlabelled value from the field it is compared with, and picks the tool that fits both labels, refusing to guess when two fit equally. Most surprises in this section, the puzzle's <code>0</code> among them, come from a label you did not know was there.</p>
 <p>Statements are token streams; whitespace is insignificant; block comments nest.</p>
 <p><strong>Unquoted identifiers fold to lower case</strong>, quoted ones do not — measured, <code>"MixedCase"</code> is unreachable as <code>MixedCase</code>. Which is why the convention is unquoted <code>lower_snake_case</code>, forever.</p>
 <p>Key words are case-insensitive. Reserved words need quoting; the reserved list grows between versions, so rename rather than quote.</p>
