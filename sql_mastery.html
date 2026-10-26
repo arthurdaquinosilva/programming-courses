@@ -2048,10 +2048,107 @@ SET
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-0">← Back</button><button class="btn-next" data-next="section-2">Next: Data Types →</button></div>
 </section>
-<section class="course-section" id="section-2" data-section-id="section-2"><div class="section-header-meta">  <span class="section-tag">SECTION 3</span>  <button class="btn-complete" data-complete="section-2"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Data Types</h1><p>A column's type is the first and cheapest constraint you can put on your data. It is checked on every write, by every client, for free, and it cannot be forgotten by a code path that was written last year. Choosing well is therefore not a performance exercise — it is the foundation of §5's argument that the schema should make wrong data impossible to store.</p>
-<p>PostgreSQL's type system is unusually rich, and this section is about choosing from it: which numeric type for money, which of the four date/time types, when <code>text</code> is right and when it is not, and what the storage actually costs.</p>
+<section class="course-section" id="section-2" data-section-id="section-2"><div class="section-header-meta">  <span class="section-tag">SECTION 3</span>  <button class="btn-complete" data-complete="section-2"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Data Types</h1><p>Start with a puzzle. You add one cent to a total, a thousand times. A thousand cents is ten euros, so the total should be <code>10.00</code>.</p>
+<p>Guess what PostgreSQL prints before reading on.</p>
+<p>It depends on the column's type. With one type it prints <code>10.00</code>. With another it prints <code>9.999999999999831</code>: a little under ten, and if you ask "is this equal to ten?" the answer is <em>false</em>. No error and no warning. Exercise 1 at the end of this section runs exactly that query, and the server's real output is printed there. §3.2 and §3.3 explain why it happens.</p>
+<p>That puzzle is what this section is about. Every column in a table has a <em>type</em>: whole number, decimal, text, date, and so on. The type decides three things:</p>
+<ul>
+<li>which values the column will accept at all;</li>
+<li>what operations like <code>+</code>, <code>=</code> and rounding do to those values;</li>
+<li>and how many bytes each value takes on disk (a <em>byte</em> is 8 bits, enough to hold one of 256 different values).</li>
+</ul>
+<p>Why choose carefully? Because a column's type is the first and cheapest <em>constraint</em> you can put on your data. A constraint is a rule the database checks for you. The type rule is checked on every write, by every program that talks to the database, for free. It cannot be forgotten by some piece of code written last year by someone who has since left. That is the start of §5's argument: the schema (the design of your tables) should make wrong data impossible to store.</p>
+<p>PostgreSQL has an unusually rich set of types, and this section is about choosing from it:</p>
+<ul>
+<li>which number type to use for money;</li>
+<li>which of the four date and time types to use;</li>
+<li>when <code>text</code> is right and when it is not;</li>
+<li>and what each choice really costs in storage.</li>
+</ul>
+<p>The archive from §1 still works as the picture. Each box of index cards is a table, and each card is a row. This section is about <strong>the printed fields on each card</strong>: the shape of each blank you fill in, and what the archivist does with what you write there.</p>
+<table>
+<thead>
+<tr>
+<th>On the archive's cards</th>
+<th>In PostgreSQL</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A field with a fixed number of digit boxes</td>
+<td><code>smallint</code>, <code>integer</code>, <code>bigint</code></td>
+<td>§3.1</td>
+</tr>
+<tr>
+<td>Running out of boxes: the archivist refuses the card</td>
+<td>integer overflow is an error</td>
+<td>§3.1</td>
+</tr>
+<tr>
+<td>An amount written exactly, digit by digit</td>
+<td><code>numeric</code></td>
+<td>§3.2</td>
+</tr>
+<tr>
+<td>A measuring tape whose marks never land exactly on 0.1</td>
+<td><code>real</code>, <code>double precision</code></td>
+<td>§3.3</td>
+</tr>
+<tr>
+<td>The ticket machine at the door that never hands out a number twice</td>
+<td>sequences and identity columns</td>
+<td>§3.4</td>
+</tr>
+<tr>
+<td>A field printed with exactly n boxes, the empty ones filled with blanks</td>
+<td><code>char(n)</code></td>
+<td>§3.5</td>
+</tr>
+<tr>
+<td>A time written in world time and read out in your local time</td>
+<td><code>timestamptz</code></td>
+<td>§3.6</td>
+</tr>
+<tr>
+<td>A time written as a clock reading, with no place attached</td>
+<td><code>timestamp</code></td>
+<td>§3.6</td>
+</tr>
+<tr>
+<td>Asking "what did the clock in Tokyo read at that moment?"</td>
+<td><code>AT TIME ZONE</code></td>
+<td>§3.7</td>
+</tr>
+<tr>
+<td>"One month later" as a calendar instruction, not a number of seconds</td>
+<td><code>interval</code></td>
+<td>§3.8</td>
+</tr>
+<tr>
+<td>A field with a printed list of choices to tick</td>
+<td>an enum</td>
+<td>§3.10</td>
+</tr>
+<tr>
+<td>A rubber stamp "must be positive" for one kind of field</td>
+<td>a domain</td>
+<td>§3.11</td>
+</tr>
+<tr>
+<td>Big attachments kept in a side cabinet, with a note on the card</td>
+<td>TOAST</td>
+<td>§3.13</td>
+</tr>
+<tr>
+<td>Fields that must start at a ruler mark, leaving gaps between them</td>
+<td>alignment padding</td>
+<td>§3.14</td>
+</tr>
+</tbody>
+</table>
 <h2 id="section-2-31-integers">3.1 Integers</h2>
-<p>Three sizes, all signed, all exact.</p>
+<p>An <em>integer</em> is a whole number: no fraction, no decimal point. Picture a field on the card with a fixed number of digit boxes. PostgreSQL offers three sizes of that field. All three are <em>signed</em> (they hold negative numbers as well as positive ones) and all three are <em>exact</em> (the number you store is exactly the number you get back):</p>
 <div style="display:grid;grid-template-columns:9rem 5rem 1fr;gap:.4rem .8rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #64748b;padding-left:.6rem;font-weight:600"><code>smallint</code></div>
   <div style="border-left:4px solid #64748b;padding-left:.6rem">2 bytes</div>
@@ -2064,8 +2161,13 @@ SET
   <div style="border-left:4px solid #64748b;padding-left:.6rem">±9.2 quintillion. <strong>The default choice for a surrogate key</strong>, always.</div>
 </div>
 
-<p>That last recommendation is not caution for its own sake. Converting a primary key from <code>integer</code> to <code>bigint</code> on a live table rewrites the table <em>and</em> every index <em>and</em> every foreign key referencing it, under an <code>ACCESS EXCLUSIVE</code> lock (§15.2) — a genuine outage that several well-known services have had. Four extra bytes per row is nothing against that.</p>
-<p>Overflow raises rather than wrapping:</p>
+<p>That last row needs some words. A <em>key</em> is the column that identifies each row, usually called <code>id</code>. A <em>surrogate key</em> is a key that means nothing by itself: just a number the database hands out, 1, 2, 3, and so on. Why <code>bigint</code> and never <code>integer</code> for it? Because <code>integer</code> runs out at 2.1 billion, and changing the type later is very painful:</p>
+<ul>
+<li>PostgreSQL has to do a table rewrite: copy the whole table into new files, along with every <em>index</em> on it (an index is a lookup structure that makes searches fast, §12), and every <em>foreign key</em> in other tables that points at it (a foreign key is a column that refers to another table's key, §4).</li>
+<li>All of that happens under an <code>ACCESS EXCLUSIVE</code> lock (§15.2). A <em>lock</em> is a "do not touch" sign, and this kind stops every other query from even reading the table until the rewrite is done.</li>
+</ul>
+<p>On a big table that is hours of downtime, and several well-known services have had exactly that outage. Against it, <code>bigint</code> costs four extra bytes per row. That is nothing.</p>
+<p>What happens when a number gets too big for its boxes? Some programming languages <em>wrap around</em>: the number silently jumps to a large negative value and carries on. PostgreSQL refuses instead. Here is the largest <code>integer</code> plus one (<code>int4</code> is another name for <code>integer</code>, because it is 4 bytes):</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="mi">2147483647</span><span class="p">::</span><span class="n">int4</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
 </code></pre></div>
@@ -2073,10 +2175,22 @@ SET
 <div class="highlight" data-lang="text"><pre><span></span><code>ERROR:  integer out of range
 </code></pre></div>
 
-<p>Which is the right behaviour and worth knowing, because a language that wraps silently has taught you the opposite reflex.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>2147483647</code> is the largest value 4 bytes can hold as a signed integer.</li>
+<li>Adding 1 does not wrap. The statement fails with <code>integer out of range</code>, and nothing is stored.</li>
+</ul>
+<p>That is the right behaviour, and it is worth knowing for a reason. If you learned to program in a language that wraps silently, your instinct is to expect a strange number, not an error. In PostgreSQL the archivist simply refuses the card. The same happens to <code>smallint</code>: <code>32767::int2 + 1::int2</code> fails with <code>smallint out of range</code>.</p>
 <p>Collected, because the rest of the course leans on them: <strong>integer type</strong> and <strong>table rewrite</strong>.</p>
 <h2 id="section-2-32-numeric">3.2 numeric</h2>
-<p><code>numeric(p, s)</code> — equivalently <code>decimal</code> — stores exact decimal values with up to <code>p</code> significant digits and <code>s</code> after the point — its <strong>decimal precision</strong> and scale. Arithmetic on the <strong>numeric type</strong> is exact, at the cost of being software-implemented and therefore slower than the hardware types.</p>
+<p>Integers have no fractions. For amounts like <code>19.99</code> you need a decimal type, and the exact one is <code>numeric</code>. Think of writing an amount on the card digit by digit, in ink: what you write is exactly what is stored.</p>
+<p>You declare it as <code>numeric(p, s)</code>, and <code>decimal</code> is another name for the same type. The two numbers in the brackets are:</p>
+<ul>
+<li><code>p</code>, the <strong>decimal precision</strong>: how many significant digits the value may have in total;</li>
+<li><code>s</code>, the <em>scale</em>: how many of those digits come after the decimal point.</li>
+</ul>
+<p>Arithmetic on the <strong>numeric type</strong> is exact. The price is speed. Your computer's processor has circuits that do arithmetic on certain fixed-size numbers directly; those are the <em>hardware types</em>. <code>numeric</code> is not one of them, so PostgreSQL does its arithmetic in software, digit by digit, which is slower.</p>
+<p>Here is the difference that matters. The same sum, <code>0.1 + 0.2 = 0.3</code>, done once with <code>numeric</code> and once with <code>float8</code> (the floating-point type of §3.3):</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="mi">0</span><span class="p">.</span><span class="mi">1</span><span class="p">::</span><span class="nb">numeric</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">0</span><span class="p">.</span><span class="mi">2</span><span class="p">::</span><span class="nb">numeric</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">.</span><span class="mi">3</span><span class="p">::</span><span class="nb">numeric</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">numeric_is_exact</span><span class="p">,</span>
 <span class="w">       </span><span class="mi">0</span><span class="p">.</span><span class="mi">1</span><span class="p">::</span><span class="n">float8</span><span class="w">  </span><span class="o">+</span><span class="w"> </span><span class="mi">0</span><span class="p">.</span><span class="mi">2</span><span class="p">::</span><span class="n">float8</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">.</span><span class="mi">3</span><span class="p">::</span><span class="n">float8</span><span class="w">  </span><span class="k">AS</span><span class="w"> </span><span class="n">float_is_not</span><span class="p">,</span>
 <span class="w">       </span><span class="p">(</span><span class="mi">0</span><span class="p">.</span><span class="mi">1</span><span class="p">::</span><span class="n">float8</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">0</span><span class="p">.</span><span class="mi">2</span><span class="p">::</span><span class="n">float8</span><span class="p">)::</span><span class="nb">text</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="n">what_float_actually_gives</span><span class="p">;</span>
@@ -2088,8 +2202,15 @@ SET
 (1 row)
 </code></pre></div>
 
-<p><strong>That is the whole argument for <code>numeric</code> in anything financial.</strong> <code>numeric</code> without a precision holds any value at all, which is convenient and prevents the type from enforcing anything; <code>numeric(12,2)</code> both documents and enforces "money to the cent".</p>
-<p>The rounding rules differ too, and the difference is measurable:</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>numeric_is_exact</code> is <code>t</code>: with <code>numeric</code>, <code>0.1 + 0.2</code> is exactly <code>0.3</code>.</li>
+<li><code>float_is_not</code> is <code>f</code>: with <code>float8</code>, the same sum is <em>not</em> equal to <code>0.3</code>.</li>
+<li>The last column shows why. The float sum is really <code>0.30000000000000004</code>. That is tiny, but it is not zero, and <code>=</code> notices.</li>
+</ul>
+<p><strong>That is the whole argument for <code>numeric</code> in anything financial.</strong></p>
+<p>One more detail about declaring it. A plain <code>numeric</code>, with no precision in brackets, holds any value at all. That is convenient, but it means the type enforces nothing. <code>numeric(12,2)</code> does two jobs at once: it documents "this is money, to the cent", and it makes the database enforce it.</p>
+<p>The two types also round differently, and the difference can be measured. Here is <code>round()</code> on 2.5 and 3.5, once with <code>numeric</code> and once with <code>float8</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="n">round</span><span class="p">(</span><span class="mi">2</span><span class="p">.</span><span class="mi">5</span><span class="p">)</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="n">numeric_2_5</span><span class="p">,</span>
 <span class="w">       </span><span class="n">round</span><span class="p">(</span><span class="mi">3</span><span class="p">.</span><span class="mi">5</span><span class="p">)</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="n">numeric_3_5</span><span class="p">,</span>
 <span class="w">       </span><span class="n">round</span><span class="p">(</span><span class="mi">2</span><span class="p">.</span><span class="mi">5</span><span class="p">::</span><span class="n">float8</span><span class="p">)</span><span class="w">  </span><span class="k">AS</span><span class="w"> </span><span class="n">float_2_5</span><span class="p">,</span>
@@ -2102,16 +2223,46 @@ SET
 (1 row)
 </code></pre></div>
 
-<p><strong><code>round(2.5)</code> is 3 on <code>numeric</code> and 2 on <code>double precision</code>.</strong> That difference in <strong>floating-point rounding</strong> is not a bug in either: <code>numeric</code> rounds half away from zero, while floating point rounds half to even, which is IEEE 754's default and is what most languages do. Neither is wrong; picking the type without knowing which you get is.</p>
+<p>Read it line by line:</p>
+<ul>
+<li>On <code>numeric</code>, 2.5 rounds to 3 and 3.5 rounds to 4. A half always goes up, away from zero.</li>
+<li>On <code>float8</code>, 2.5 rounds to 2 and 3.5 rounds to 4. A half goes to whichever neighbour is even.</li>
+</ul>
+<p><strong><code>round(2.5)</code> is 3 on <code>numeric</code> and 2 on <code>double precision</code>.</strong> That difference in <strong>floating-point rounding</strong> is not a bug in either:</p>
+<ul>
+<li><code>numeric</code> rounds <em>half away from zero</em>, which is the rule most people learned at school.</li>
+<li>Floating point rounds <em>half to even</em>. That is the default in IEEE 754, the international standard for how computers store fractional numbers, and it is what most programming languages do.</li>
+</ul>
+<p>Neither rule is wrong. What is wrong is picking a type without knowing which rule you get.</p>
 <p>The pieces this subsection introduced, in one line: <strong>decimal precision</strong> and <strong>floating-point rounding</strong>.</p>
 <p>To have in hand before moving on: <strong>numeric type</strong>.</p>
 <h2 id="section-2-33-floating-point">3.3 Floating Point</h2>
-<p><code>real</code> (4 bytes) and <code>double precision</code> (8 bytes) are IEEE 754 binary floats: fast, hardware-implemented, and <strong>inexact for decimal fractions</strong> because 0.1 has no finite binary representation.</p>
-<p>Use them for measurements, scientific data, coordinates and anything where a relative error of 10⁻¹⁵ is irrelevant. Do not use them for money, quantities that must sum exactly, or anything compared with <code>=</code>.</p>
-<p>They also carry three special values — an <strong>infinity value</strong> in each direction, <code>'Infinity'</code> and <code>'-Infinity'</code>, plus <code>'NaN'</code> — with a PostgreSQL-specific twist: <strong><code>NaN</code> is considered equal to itself and greater than every other value</strong>, so that it can be sorted and indexed. That differs from IEEE 754, where <code>NaN = NaN</code> is false, and it will surprise anyone porting numeric code.</p>
-<p><strong>For money, the practical choice is <code>numeric(12,2)</code> or an <code>integer</code> count of the smallest unit</strong> — cents, as this course's <code>price_cents</code> columns do. The integer approach is exact by construction, sums and compares at hardware speed, and forces the display formatting to be explicit. Its cost is that every read must divide. The <code>money</code> type exists and should be avoided: its fractional precision is a server-wide setting and its output depends on <code>lc_monetary</code>, so the same value formats differently on two servers.</p>
+<p>The other kind of number with a fraction is <em>floating point</em>. PostgreSQL has two sizes: <code>real</code> (4 bytes) and <code>double precision</code> (8 bytes, also called <code>float8</code>).</p>
+<p>They are <em>binary</em> floats, defined by the IEEE 754 standard. They are fast, because the processor does their arithmetic in hardware. But they are <strong>inexact for decimal fractions</strong>. Here is why. A float stores a number in base 2, as a sum of halves, quarters, eighths, and so on. <code>0.1</code> cannot be written as a finite sum of those, just as one third cannot be written as a finite decimal (<code>0.3333...</code> never ends). So the stored value is the nearest one available, not <code>0.1</code> itself.</p>
+<p>Picture a measuring tape whose marks never land exactly on 0.1. Every reading is very close, and almost never exact.</p>
+<p>When are they the right choice? When "very close" is all you need:</p>
+<ul>
+<li>Use them for measurements, scientific data, map coordinates, and anything where a relative error of 10⁻¹⁵ (one part in a million billion) makes no difference.</li>
+<li>Do not use them for money, for quantities that must add up exactly, or for anything you will compare with <code>=</code>.</li>
+</ul>
+<p>Floats also carry three special values:</p>
+<ul>
+<li>an <strong>infinity value</strong> in each direction, written <code>'Infinity'</code> and <code>'-Infinity'</code>;</li>
+<li>and <code>'NaN'</code>, which means "not a number", the result of something like infinity minus infinity.</li>
+</ul>
+<p>PostgreSQL treats <code>NaN</code> in its own way: <strong><code>NaN</code> is considered equal to itself and greater than every other value</strong>. It does that so <code>NaN</code> can be sorted and indexed like any other value. The IEEE 754 standard says the opposite, that <code>NaN = NaN</code> is false. So code moved to PostgreSQL from another language can behave differently here, and that will surprise whoever moves it.</p>
+<p>So what should you use for money? <strong>For money, the practical choice is <code>numeric(12,2)</code> or an <code>integer</code> count of the smallest unit</strong>, such as cents. This course's <code>price_cents</code> columns do the second. The integer approach:</p>
+<ul>
+<li>is exact by construction, because there is no fraction to get wrong;</li>
+<li>adds and compares at hardware speed;</li>
+<li>and forces you to write the display formatting yourself, explicitly.</li>
+</ul>
+<p>Its cost is that every read has to divide by 100 to show euros.</p>
+<p>PostgreSQL also has a type called <code>money</code>. Avoid it. How many decimal places it keeps, and how it prints, both come from a locale setting called <code>lc_monetary</code>. That setting can differ between two servers, or even between two sessions, so the same stored value can print differently on each.</p>
 <p>Named once more, since each is referred to later: <strong>infinity value</strong>.</p>
 <h2 id="section-2-34-identity-columns">3.4 Identity Columns</h2>
+<p>Most tables need a surrogate key: a number that is different on every row, handed out by the database. Picture a ticket machine at the archive's door. Each new card takes the next ticket, and the machine never hands out the same number twice.</p>
+<p>In PostgreSQL that machine is a <em>sequence</em>, and the modern way to attach one to a column is an <em>identity column</em>. The <code>RETURNING</code> clause at the end asks the <code>INSERT</code> to show the rows it just stored:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">ident_demo</span><span class="w"> </span><span class="p">(</span>
 <span class="w">  </span><span class="n">id</span><span class="w">   </span><span class="nb">bigint</span><span class="w"> </span><span class="k">GENERATED</span><span class="w"> </span><span class="n">ALWAYS</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="k">IDENTITY</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
 <span class="w">  </span><span class="n">note</span><span class="w"> </span><span class="nb">text</span>
@@ -2129,13 +2280,42 @@ SET
 INSERT 0 2
 </code></pre></div>
 
-<p><strong><code>GENERATED ALWAYS AS IDENTITY</code> is the standard-SQL form and the one to use.</strong> The <strong>serial type</strong> — <code>serial</code> and <code>bigserial</code> — is PostgreSQL's older shorthand — they create a sequence, set a default, and leave the sequence's ownership only loosely attached, which is why a <code>serial</code> column's sequence survives some operations that should have removed it. Identity columns are properly owned, are dropped with the column, and come in two forms: <strong>identity always</strong>, which rejects an explicit value unless <code>OVERRIDING SYSTEM VALUE</code> is given, and <strong>identity by default</strong>, which accepts one.</p>
-<p>Two properties of the underlying sequence matter and surprise people.</p>
-<p><strong>A sequence object is not transactional.</strong> A rolled-back <code>INSERT</code> does not give the number back, so a <strong>gap in a sequence</strong> is normal and expected. Anything that requires a gapless series — invoice numbers, in some jurisdictions — cannot use a sequence, and needs a counter row updated inside the transaction, with the contention that implies (§15.10).</p>
-<p><strong><code>nextval(</code> is exempt from MVCC on purpose.</strong> Two concurrent sessions never get the same value, without either blocking, which is what makes identity columns fast. <code>currval</code> reports what <em>your</em> session last got, which is safe; <code>lastval</code> reports the last value from any sequence in your session, which is fragile if a trigger touched another one.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>CREATE TABLE</code> made the table. The <code>id</code> column is a <code>bigint</code> filled in by the database.</li>
+<li>The <code>INSERT</code> gave only the <code>note</code>. The database filled in <code>id</code> with 1 and then 2.</li>
+<li><code>RETURNING</code> printed the two new rows, and <code>INSERT 0 2</code> reports that two rows were inserted.</li>
+</ul>
+<p><strong><code>GENERATED ALWAYS AS IDENTITY</code> is the standard-SQL form and the one to use.</strong></p>
+<p>You will also meet the older way. The <strong>serial type</strong> — <code>serial</code> and <code>bigserial</code> — is PostgreSQL's older shorthand. A <code>serial</code> column is not really a type of its own. It expands into three separate pieces: a sequence, an <code>integer</code> column, and a <em>default</em> (a value filled in when an <code>INSERT</code> does not give one) that calls the sequence. Because the pieces are separate, they can drift apart:</p>
+<ul>
+<li>The sequence is a separate object with its own permissions. Granting a user <code>INSERT</code> on the table is not enough. Their insert fails with <code>permission denied for sequence</code>, until you also grant them the sequence.</li>
+<li>Copying the table's design with <code>CREATE TABLE ... (LIKE ... INCLUDING DEFAULTS)</code> copies the default as it is, so the new table quietly takes its numbers from the <em>old</em> table's sequence.</li>
+<li>An <code>INSERT</code> that gives its own <code>id</code> is accepted without complaint. The sequence does not know about that number, so later it hands out the same number again, and that insert fails on a duplicate key.</li>
+</ul>
+<p>An identity column is part of the column itself, so none of that happens. It comes in two forms:</p>
+<ul>
+<li><strong>identity always</strong>, which rejects an explicit value unless the <code>INSERT</code> says <code>OVERRIDING SYSTEM VALUE</code>;</li>
+<li><strong>identity by default</strong>, which accepts one.</li>
+</ul>
+<p>Two properties of the sequence underneath matter, and both surprise people.</p>
+<p><strong>A sequence object is not transactional.</strong> A <em>transaction</em> is a group of statements that succeed or fail together, and a <em>rollback</em> undoes all of them (§14). But a rolled-back <code>INSERT</code> does not give its number back. The ticket was torn off the machine, and nobody puts it back. So a <strong>gap in a sequence</strong> is normal and expected: ids 1, 2, 4 just mean that the insert that got 3 was rolled back.</p>
+<p>Some things really must have no gaps, such as invoice numbers in some countries. Those cannot use a sequence. They need a counter row in a table, updated inside the same transaction as the invoice. The cost is that two invoices created at the same moment must wait for each other, one at a time (§15.10).</p>
+<p><strong><code>nextval(</code> is exempt from MVCC on purpose.</strong> <code>nextval()</code> is the function that takes the next number from a sequence. <em>MVCC</em> is how PostgreSQL lets many sessions work at once without seeing each other's unfinished changes (§14). The sequence is deliberately left outside it: two sessions asking at the same moment never get the same value, and neither has to wait for the other. That is what makes identity columns fast.</p>
+<p>Two related functions:</p>
+<ul>
+<li><code>currval</code> reports the number <em>your</em> session last got from a given sequence. That is safe, because other sessions cannot change it.</li>
+<li><code>lastval</code> reports the last number from <em>any</em> sequence in your session. That is fragile: if a <em>trigger</em> (code the database runs automatically on an insert, §18) took a number from another sequence, <code>lastval</code> returns that one instead.</li>
+</ul>
 <p>In summary, the vocabulary here is <strong>serial type</strong>, <strong>identity always</strong>, <strong>identity by default</strong>, <strong>sequence object</strong>, <code>nextval(</code> and <strong>gap in a sequence</strong>.</p>
 <h2 id="section-2-35-text">3.5 Text</h2>
-<p>PostgreSQL has three character types — the <strong>text type</strong>, <strong>character varying</strong> (<code>varchar</code>) and <code>character</code> (<code>char</code>) — and, with one exception, one right answer.</p>
+<p>PostgreSQL has three types for text:</p>
+<ul>
+<li>the <strong>text type</strong>, any length;</li>
+<li><strong>character varying</strong> (<code>varchar</code>), written <code>varchar(n)</code>, which refuses anything longer than <code>n</code> characters;</li>
+<li><code>character</code> (<code>char</code>), written <code>char(n)</code>, which is always exactly <code>n</code> characters long.</li>
+</ul>
+<p>With one exception, there is one right answer. To see why, look at what <code>char(3)</code> does with the one-letter value <code>'a'</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="s1">'a'</span><span class="p">::</span><span class="nb">char</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">'|'</span><span class="w">          </span><span class="k">AS</span><span class="w"> </span><span class="n">char_concat</span><span class="p">,</span>
 <span class="w">       </span><span class="k">length</span><span class="p">(</span><span class="s1">'a'</span><span class="p">::</span><span class="nb">char</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span><span class="w">         </span><span class="k">AS</span><span class="w"> </span><span class="k">char_length</span><span class="p">,</span>
 <span class="w">       </span><span class="s1">'a '</span><span class="p">::</span><span class="nb">text</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s1">'a'</span><span class="p">::</span><span class="nb">text</span><span class="w">   </span><span class="k">AS</span><span class="w"> </span><span class="n">text_comparison</span><span class="p">,</span>
@@ -2148,12 +2328,32 @@ INSERT 0 2
 (1 row)
 </code></pre></div>
 
-<p><strong><code>char(n)</code> blank-pads to <code>n</code> and then ignores the padding</strong>, so its <strong>character length</strong> is not what is stored. The stored value is <code>'a  '</code>, <code>length</code> reports 1, concatenation dropped the spaces, and <code>'a '</code> compares <em>equal</em> to <code>'a'</code> where the same comparison on <code>text</code> is false. Every one of those is standard-mandated and every one of them is a surprise. There is no performance advantage — a padded value is not faster and is usually larger.</p>
-<p><strong>Use <code>text</code>.</strong> Use <code>varchar(n)</code> when a length limit is a genuine business rule you want the database to enforce, and know that changing <code>n</code> upward is a cheap catalogue change while changing it downward rewrites the table. <strong>Never use <code>char(n)</code>.</strong></p>
-<p>A <code>varchar</code> with no length is identical to <code>text</code>. Neither has a performance penalty over the other; the constraint is the only difference.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>char_concat</code> is <code>a|</code>. Joining <code>'a'::char(3)</code> to <code>'|'</code> dropped the spaces.</li>
+<li><code>char_length</code> is <code>1</code>: <code>length</code> ignores the padding, even though the stored value is three characters, <code>'a  '</code>.</li>
+<li><code>text_comparison</code> is <code>f</code>: as <code>text</code>, <code>'a '</code> (with a space) is not equal to <code>'a'</code>.</li>
+<li><code>char_comparison</code> is <code>t</code>: as <code>char(3)</code>, the very same two values are equal.</li>
+</ul>
+<p><strong><code>char(n)</code> blank-pads to <code>n</code> and then ignores the padding</strong>, so its <strong>character length</strong> is not what is stored. Picture a field printed with exactly three boxes. Write one letter, and the archivist fills the other two boxes with blanks. Then, whenever the card is read, the archivist pretends the blanks are not there. The SQL standard requires every one of those behaviours, and every one of them is a surprise. You get nothing in return either: a padded value is not faster, and it is usually bigger.</p>
+<p><strong>Use <code>text</code>.</strong></p>
+<p>Use <code>varchar(n)</code> only when a length limit is a real business rule that you want the database to enforce, such as a two-letter country code. And know how changing <code>n</code> later behaves:</p>
+<ul>
+<li>Raising <code>n</code> is cheap. PostgreSQL only updates its <em>catalogue</em>, the internal list of tables and columns (§1), and the data is not touched.</li>
+<li>Lowering <code>n</code> rewrites the whole table, because every existing value has to be checked against the new limit.</li>
+</ul>
+<p><strong>Never use <code>char(n)</code>.</strong></p>
+<p>A <code>varchar</code> with no length is identical to <code>text</code>. Neither is faster than the other; the length limit is the only difference.</p>
 <p>What to carry forward from this subsection: <strong>character varying</strong>, <strong>text type</strong> and <strong>character length</strong>.</p>
 <h2 id="section-2-36-the-four-date-and-time-types">3.6 The Four Date and Time Types</h2>
 <p>This is where more production bugs live than in the rest of the type system combined.</p>
+<p>Most of the trouble comes from one question: is a stored time a <em>moment</em>, or a <em>clock reading</em>?</p>
+<ul>
+<li>A <strong>moment</strong> is an event on the world's single timeline. "The order was paid" happened at one instant, everywhere at once, even though the clocks in London and Tokyo showed different times.</li>
+<li>A <strong>clock reading</strong> is just what a clock face says, like "12:00". It means nothing as a moment until you know <em>which</em> clock.</li>
+</ul>
+<p>Two words before the example. <em>UTC</em> is the world's reference time, the clock that time zones are measured from. Berlin in March is one hour ahead of it, written <code>+01</code>. And each session has a <code>timezone</code> setting: the zone it shows times in.</p>
+<p>Here is one stored moment, shown in two time zones, next to a plain clock reading:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SET</span><span class="w"> </span><span class="n">timezone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'UTC'</span><span class="p">;</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="n">timestamptz</span><span class="w"> </span><span class="s1">'2026-03-01 12:00:00+00'</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">in_utc</span><span class="p">;</span>
 <span class="k">SET</span><span class="w"> </span><span class="n">timezone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'Europe/Berlin'</span><span class="p">;</span>
@@ -2177,7 +2377,14 @@ SET
 SET
 </code></pre></div>
 
+<p>Read it line by line:</p>
+<ul>
+<li>With the session in UTC, the <code>timestamptz</code> value prints as <code>12:00:00+00</code>.</li>
+<li>The session switches to Berlin. The <em>same</em> value now prints as <code>13:00:00+01</code>. Nothing was stored again; only the display changed.</li>
+<li>The <code>timestamp</code> value prints <code>12:00:00</code> with no offset at all. It is a clock reading, and it does not change with the session.</li>
+</ul>
 <p><strong>The same stored value displayed as 12:00 UTC and 13:00+01.</strong> That is one instant, rendered in the reader's time zone.</p>
+<p>Picture writing the time on the card in world time. When you ask for the card, the archivist reads it out in your local time. Here are all four types side by side:</p>
 <div style="display:grid;grid-template-columns:12rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #10b981;padding-left:.6rem;font-weight:600"><code>timestamptz</code></div>
   <div style="border-left:4px solid #10b981;padding-left:.6rem">8 bytes, an absolute instant. Input is converted to UTC using the offset given or the session's <code>TimeZone</code>; output is rendered back into the session's zone. <strong>The default choice for "when did this happen".</strong></div>
@@ -2189,11 +2396,16 @@ SET
   <div style="border-left:4px solid #f59e0b;padding-left:.6rem">16 bytes. The <strong>interval type</strong> is a duration, and notably it stores months, days and microseconds <em>separately</em>, which is §3.8.</div>
 </div>
 
-<p><strong>The name <code>timestamptz</code> is misleading and it is worth being precise: the column stores no time zone.</strong> It stores a UTC instant. The zone is used on input to interpret and on output to render, and is never retained. If you need to know <em>where</em> something happened, that is a second column.</p>
-<p><code>timetz</code> also exists and is essentially useless — a time of day with an offset, with no date to say whether daylight saving applies.</p>
+<p><strong>The name <code>timestamptz</code> is misleading and it is worth being precise: the column stores no time zone.</strong> It stores one UTC instant, and that is all. The time zone is used twice and kept nowhere:</p>
+<ul>
+<li>on input, to work out which instant you meant;</li>
+<li>on output, to show that instant in the reader's zone.</li>
+</ul>
+<p>So if you need to know <em>where</em> something happened, that is a second column.</p>
+<p>There is also a type called <code>timetz</code>: a time of day with an offset, such as <code>09:00+01</code>. It is essentially useless. With no date attached, it cannot know whether daylight saving time applies, so the offset may simply be wrong.</p>
 <p>The terms above, gathered: <strong>timestamp without time zone</strong> and <strong>interval type</strong>.</p>
 <h2 id="section-2-37-at-time-zone">3.7 AT TIME ZONE</h2>
-<p>The operator converts in both directions, and which direction depends on the input type:</p>
+<p>You often need to turn one kind into the other: "it is this moment; what did the clock in Tokyo show?", or the reverse. The <code>AT TIME ZONE</code> operator does both. Which of the two it does depends on the type you give it:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SET</span><span class="w"> </span><span class="n">timezone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'UTC'</span><span class="p">;</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="n">timestamptz</span><span class="w"> </span><span class="s1">'2026-03-01 12:00:00+00'</span><span class="w"> </span><span class="k">AT</span><span class="w"> </span><span class="k">TIME</span><span class="w"> </span><span class="k">ZONE</span><span class="w"> </span><span class="s1">'Asia/Tokyo'</span><span class="w">   </span><span class="k">AS</span><span class="w"> </span><span class="n">wall_clock_in_tokyo</span><span class="p">,</span>
 <span class="w">       </span><span class="k">timestamp</span><span class="w">   </span><span class="s1">'2026-03-01 12:00:00'</span><span class="w">    </span><span class="k">AT</span><span class="w"> </span><span class="k">TIME</span><span class="w"> </span><span class="k">ZONE</span><span class="w"> </span><span class="s1">'Asia/Tokyo'</span><span class="w">   </span><span class="k">AS</span><span class="w"> </span><span class="n">instant_from_tokyo_clock</span><span class="p">;</span>
@@ -2206,11 +2418,31 @@ SET
 (1 row)
 </code></pre></div>
 
-<p><strong><code>timestamptz AT TIME ZONE zone</code> gives a <code>timestamp</code></strong> — "what did the clock in Tokyo read at that instant" — and <strong><code>timestamp AT TIME ZONE zone</code> gives a <code>timestamptz</code></strong> — "what instant was it when a Tokyo clock read that". Same operator, opposite directions, decided by the operand type. Reading it as "convert to this zone" is right only half the time.</p>
-<p><strong>Time zone handling</strong> starts with the zone name: always take one from the IANA database (<code>Asia/Tokyo</code>, <code>Europe/Berlin</code>) rather than an abbreviation. <code>EST</code> is a fixed offset that ignores daylight saving; <code>America/New_York</code> is a rule set that knows about it. <code>pg_timezone_names</code> lists them.</p>
+<p>Read it line by line:</p>
+<ul>
+<li>The first column starts from a moment, 12:00 UTC, and asks what a clock in Tokyo showed at that moment. Tokyo is nine hours ahead, so the answer is <code>21:00:00</code>. Notice there is no <code>+00</code> on it: the result is a plain clock reading.</li>
+<li>The second column starts from a clock reading, 12:00, and says "this is what a Tokyo clock showed". That pins down a moment: 03:00 UTC. The result has <code>+00</code>, so it is a moment.</li>
+</ul>
+<p>So:</p>
+<ul>
+<li><strong><code>timestamptz AT TIME ZONE zone</code> gives a <code>timestamp</code></strong>: "what did the clock in Tokyo read at that instant?"</li>
+<li><strong><code>timestamp AT TIME ZONE zone</code> gives a <code>timestamptz</code></strong>: "what instant was it when a Tokyo clock read that?"</li>
+</ul>
+<p>It is the same operator going in opposite directions, and the type of the value you give it decides which. If you read it as "convert to this zone", you are right only half the time.</p>
+<p><strong>Time zone handling</strong> starts with the zone name. Always take one from the IANA time zone database, the list of zone names that operating systems and databases share, such as <code>Asia/Tokyo</code> or <code>Europe/Berlin</code>. Do not use an abbreviation like <code>EST</code>:</p>
+<ul>
+<li><code>EST</code> is a fixed offset, five hours behind UTC, all year. It knows nothing about daylight saving time.</li>
+<li><code>America/New_York</code> is a set of rules. It knows that New York moves its clocks forward in March and back in November.</li>
+</ul>
+<p>The view <code>pg_timezone_names</code> lists every name the server knows.</p>
 <p>One line each, for reference: <strong>time zone handling</strong>.</p>
 <h2 id="section-2-38-interval-arithmetic">3.8 Interval Arithmetic</h2>
-<p>An <code>interval</code> keeps months, days and microseconds as three separate fields, and it does so because they are not interconvertible: a month is 28 to 31 days, and a day is 23 to 25 hours across a daylight-saving boundary.</p>
+<p>An <em>interval</em> is a length of time, such as "one month" or "36 hours". You would think it could be stored as a number of seconds. It cannot, because the calendar is not that regular:</p>
+<ul>
+<li>a month is 28 to 31 days long, depending on the month;</li>
+<li>a day is 23 to 25 hours long on the days the clocks change for daylight saving time.</li>
+</ul>
+<p>So an <code>interval</code> keeps three separate fields: months, days and microseconds. Picture "one month later" written on the card as a calendar instruction ("same day, next month"), not as a count of seconds. Here are five results that follow from that:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SET</span><span class="w"> </span><span class="n">timezone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'UTC'</span><span class="p">;</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="nb">date</span><span class="w"> </span><span class="s1">'2026-01-31'</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">interval</span><span class="w"> </span><span class="s1">'1 month'</span><span class="w">   </span><span class="k">AS</span><span class="w"> </span><span class="n">jan31_plus_month</span><span class="p">,</span>
 <span class="w">       </span><span class="nb">date</span><span class="w"> </span><span class="s1">'2026-03-31'</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">interval</span><span class="w"> </span><span class="s1">'1 month'</span><span class="w">   </span><span class="k">AS</span><span class="w"> </span><span class="n">mar31_plus_month</span><span class="p">,</span>
@@ -2226,10 +2458,29 @@ SET
 (1 row)
 </code></pre></div>
 
-<p>Three results worth pausing on. <strong>31 January plus one month is 28 February</strong> — the result is clamped to the end of the month rather than overflowing, which means the operation is <em>not</em> reversible: subtracting a month again gives 28 January.</p>
-<p><strong><code>interval '1 day' = interval '24 hours'</code> is true</strong>, because comparison normalises using nominal lengths. But adding them to a <code>timestamptz</code> across a daylight-saving transition gives <em>different</em> instants, because <code>+ 1 day</code> means "the same wall-clock time tomorrow" and <code>+ 24 hours</code> means "86,400 seconds later". Equal as values, different as operations — which is the single most useful thing to know about intervals.</p>
-<p><code>age(a, b)</code> gives a symbolic difference in years, months and days; plain subtraction gives days and time. <code>justify_interval</code> normalises 36 hours to 1 day 12 hours, and <code>justify_hours</code>/<code>justify_days</code> do half of it each.</p>
+<p>Read it line by line:</p>
+<ul>
+<li>31 January plus one month is 28 February. There is no 31 February, so the result is clamped to the last day of the month.</li>
+<li>31 March plus one month is 30 April, for the same reason.</li>
+<li><code>interval '1 day' = interval '24 hours'</code> is <code>t</code>, true.</li>
+<li><code>justify_interval</code> turned 36 hours into <code>1 day 12:00:00</code>.</li>
+<li><code>age()</code> between 2 November 2025 and 1 March 2026 is <code>3 mons 29 days</code>.</li>
+</ul>
+<p>Three results are worth pausing on.</p>
+<p><strong>31 January plus one month is 28 February</strong>. The result is clamped to the end of the month rather than spilling over into March. That means the operation cannot be undone: subtract a month from 28 February and you get 28 January, not the 31 January you started with.</p>
+<p><strong><code>interval '1 day' = interval '24 hours'</code> is true</strong>, because the comparison converts both to a nominal length, counting a day as 24 hours. But add each one to a <code>timestamptz</code> across a daylight-saving change and you get <em>different</em> moments:</p>
+<ul>
+<li><code>+ 1 day</code> means "the same clock time tomorrow";</li>
+<li><code>+ 24 hours</code> means "86,400 seconds later".</li>
+</ul>
+<p>On the night the clocks jump forward, those land an hour apart. Equal as values, different as operations: that is the single most useful thing to know about intervals.</p>
+<p>The two helper functions:</p>
+<ul>
+<li><code>age(a, b)</code> gives the difference as years, months and days, like a person's age. Plain subtraction of two timestamps gives days and time instead.</li>
+<li><code>justify_interval</code> rewrote 36 hours as 1 day 12 hours. <code>justify_hours</code> and <code>justify_days</code> each do one half of that job.</li>
+</ul>
 <h2 id="section-2-39-extracting-and-formatting">3.9 Extracting and Formatting</h2>
+<p>Often you need one piece of a date (the year, the day of the week), or a date cut down to the start of its month, or a date printed in a particular style. 15 March 2026 is a Sunday, which matters for the second column:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SET</span><span class="w"> </span><span class="n">timezone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'UTC'</span><span class="p">;</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="k">extract</span><span class="p">(</span><span class="k">year</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="nb">date</span><span class="w"> </span><span class="s1">'2026-03-15'</span><span class="p">)</span><span class="w">                               </span><span class="k">AS</span><span class="w"> </span><span class="n">yr</span><span class="p">,</span>
 <span class="w">       </span><span class="k">extract</span><span class="p">(</span><span class="n">dow</span><span class="w">  </span><span class="k">FROM</span><span class="w"> </span><span class="nb">date</span><span class="w"> </span><span class="s1">'2026-03-15'</span><span class="p">)</span><span class="w">                               </span><span class="k">AS</span><span class="w"> </span><span class="n">day_of_week</span><span class="p">,</span>
@@ -2246,13 +2497,29 @@ SET
 (1 row)
 </code></pre></div>
 
-<p><code>extract(dow ...)</code> is 0 for Sunday; <code>isodow</code> is 1 for Monday and 7 for Sunday, and mixing them up is a reliable off-by-one.</p>
-<p><strong><code>date_trunc</code> truncates in the session's time zone</strong>, which means the same query gives different month boundaries for a user in Auckland and one in Los Angeles. It takes an optional third argument naming the zone — <code>date_trunc('day', ts, 'Asia/Tokyo')</code> — and using it is how a report gets stable boundaries.</p>
-<p><code>date_bin</code> buckets into arbitrary intervals from an origin, which is what <code>date_trunc</code> cannot do: fifteen-minute buckets, five-day buckets.</p>
-<p><code>to_char</code> formats and <code>to_timestamp</code>/<code>to_date</code> parse. The <code>FM</code> prefix suppresses padding. Both are format-string-driven and are not the same as a cast — <code>to_date('2026-02-31', 'YYYY-MM-DD')</code> silently gives 3 March rather than erroring, so validating input with <code>to_date</code> is not validation.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>extract(year ...)</code> pulled out <code>2026</code>.</li>
+<li><code>extract(dow ...)</code> gave <code>0</code>. In <code>dow</code> ("day of week") numbering, Sunday is 0.</li>
+<li><code>date_trunc('month', ...)</code> cut the time down to the start of its month: <code>2026-03-01 00:00:00</code>.</li>
+<li><code>date_bin</code> put 12:34:56 into a 15-minute bucket counted from 12:00, and the bucket starts at <code>12:30:00</code>.</li>
+<li><code>to_char</code> printed the date as words: <code>Sunday, 15 March 2026</code>.</li>
+</ul>
+<p><code>extract(dow ...)</code> is 0 for Sunday. <code>isodow</code> (the ISO standard's numbering) is 1 for Monday and 7 for Sunday. Mixing them up is a reliable off-by-one bug.</p>
+<p><strong><code>date_trunc</code> truncates in the session's time zone</strong>. So the same query gives different month boundaries for a user in Auckland and a user in Los Angeles: their months start at different moments. <code>date_trunc</code> takes an optional third argument naming the zone, as in <code>date_trunc('day', ts, 'Asia/Tokyo')</code>. Passing it is how a report gets the same boundaries whoever runs it.</p>
+<p><code>date_bin</code> cuts time into buckets of any size you like, counted from a starting point you choose. <code>date_trunc</code> cannot do that: it only knows calendar units. So <code>date_bin</code> is how you get fifteen-minute buckets, or five-day buckets.</p>
+<p><code>to_char</code> turns a date into text. <code>to_timestamp</code> and <code>to_date</code> go the other way and read text into a date. The <code>FM</code> prefix in a format means "fill mode off": no padding spaces, so <code>FMDay</code> prints <code>Sunday</code>, not <code>Sunday</code> followed by blanks.</p>
+<p>These functions are driven by the format string you give them, and they are <em>not</em> the same as a cast. They are lenient: they read what fits the format and are quiet about the rest. Measured on PostgreSQL 18:</p>
+<ul>
+<li><code>to_date('2026-03-15 nonsense', 'YYYY-MM-DD')</code> returns 15 March and ignores the rest;</li>
+<li><code>to_date('2026-03', 'YYYY-MM-DD')</code> fills in the missing day as the 1st;</li>
+<li><code>to_date('26-03-15', 'YYYY-MM-DD')</code> returns a date in the year 26.</li>
+</ul>
+<p>The cast <code>'2026-03-15 nonsense'::date</code> refuses with an error instead. So checking input with <code>to_date</code> is not validation. To validate, cast.</p>
 <h2 id="section-2-310-boolean-uuid-and-enum">3.10 boolean, uuid and enum</h2>
-<p>The <strong>boolean type</strong> is one byte and three-valued: <code>true</code>, <code>false</code>, <code>NULL</code> (§1.12). Input accepts <code>t</code>, <code>true</code>, <code>yes</code>, <code>on</code>, <code>1</code> and their negatives. <code>bytea</code> is the binary counterpart — a byte string with no encoding, rendered in hex, and <code>bytea</code> is what a small blob belongs in when it must live in the row at all.</p>
-<p>The <strong>uuid type</strong> is 16 bytes, and PostgreSQL 18 added generators for two versions:</p>
+<p>The <strong>boolean type</strong> is one byte, and it has three possible values: <code>true</code>, <code>false</code>, and <code>NULL</code> for "unknown" (§1.12). On input it accepts <code>true</code>, and also <code>t</code>, <code>yes</code>, <code>on</code> and <code>1</code> for true, and their opposites for false.</p>
+<p><code>bytea</code> is its binary neighbour: a string of raw bytes with no text encoding, printed in hexadecimal. If a small binary file (an image thumbnail, say) really must live inside the row, <code>bytea</code> is where it belongs.</p>
+<p>A <em>UUID</em> is a 128-bit identifier, written as 36 characters of hexadecimal and dashes. It is designed so that two computers can each make one without asking each other, and still never make the same one. That makes it useful as a key when rows are created in many places. The <strong>uuid type</strong> is 16 bytes, and PostgreSQL 18 added functions that generate two versions of it:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="k">length</span><span class="p">(</span><span class="n">uuidv4</span><span class="p">()::</span><span class="nb">text</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">v4_text_length</span><span class="p">,</span>
 <span class="w">       </span><span class="k">length</span><span class="p">(</span><span class="n">uuidv7</span><span class="p">()::</span><span class="nb">text</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">v7_text_length</span><span class="p">,</span>
 <span class="w">       </span><span class="n">uuidv7</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">uuidv7</span><span class="p">()</span><span class="w">    </span><span class="k">AS</span><span class="w"> </span><span class="n">v7_is_not_monotonic_this_way</span><span class="p">;</span>
@@ -2264,8 +2531,20 @@ SET
 (1 row)
 </code></pre></div>
 
-<p><code>uuidv4()</code> is the random form and <code>uuidv7()</code> the time-ordered one. <strong><code>uuidv7()</code> is time-ordered</strong>, which matters enormously as a primary key: a v4 UUID is random, so consecutive inserts land on random index pages, the index does not fit in cache, and the <code>correlation</code> statistic of §13.10 is near zero. A v7 UUID increases with time, so inserts append and the index behaves like a <code>bigint</code> key. If you need globally unique keys, v7 is the one to use; before 18, <code>gen_random_uuid()</code> (v4) was the only built-in and this was a real argument for <code>bigint</code>.</p>
-<p>An <strong>enumerated type</strong> is a fixed ordered set of labels:</p>
+<p>Read it line by line:</p>
+<ul>
+<li>Both versions print as 36 characters of text.</li>
+<li>The third column compares two v7 values made a moment apart in the same row. It printed <code>f</code>. Which of the two calls ran first is up to the server (§2.7), so build nothing on that one comparison; what time order buys you is measured in Exercise 6.</li>
+</ul>
+<p><code>uuidv4()</code> is the random form and <code>uuidv7()</code> the time-ordered one. <strong><code>uuidv7()</code> is time-ordered</strong>, and that matters enormously when the UUID is the primary key.</p>
+<p>An index on the key keeps the values in sorted order, spread over <em>pages</em> (fixed-size 8 kB blocks of storage). With v4, each new value is random:</p>
+<ul>
+<li>consecutive inserts land on random pages all over the index;</li>
+<li>so the whole index has to sit in memory to stay fast, and a big one does not fit;</li>
+<li>and the <code>correlation</code> statistic of §13.10, which measures how well the table's physical order matches the index order, is near zero.</li>
+</ul>
+<p>A v7 value starts with the time it was made, so each new key is larger than the one before. Inserts all go to the end of the index, and it behaves like a <code>bigint</code> key. If you need keys that are unique across many machines, v7 is the one to use. Before PostgreSQL 18, the only built-in generator was <code>gen_random_uuid()</code>, which makes v4, and that was a real argument for <code>bigint</code>.</p>
+<p>An <strong>enumerated type</strong> (an <em>enum</em>) is a fixed, ordered list of allowed labels. Picture a field on the card with a printed list of choices to tick:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TYPE</span><span class="w"> </span><span class="n">mood</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">ENUM</span><span class="w"> </span><span class="p">(</span><span class="s1">'sad'</span><span class="p">,</span><span class="s1">'ok'</span><span class="p">,</span><span class="s1">'happy'</span><span class="p">);</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="s1">'ok'</span><span class="p">::</span><span class="n">mood</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="s1">'happy'</span><span class="p">::</span><span class="n">mood</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">ordering_follows_declaration</span><span class="p">,</span>
 <span class="w">       </span><span class="n">enum_range</span><span class="p">(</span><span class="k">NULL</span><span class="p">::</span><span class="n">mood</span><span class="p">)</span><span class="w">     </span><span class="k">AS</span><span class="w"> </span><span class="n">all_values</span><span class="p">;</span>
@@ -2278,12 +2557,29 @@ SET
 (1 row)
 </code></pre></div>
 
-<p>Sorting follows <strong>declaration order</strong>, not alphabetical, which is usually what you want for a status. <code>ALTER TYPE ... ADD VALUE</code> appends or inserts a label — and before PostgreSQL 12 it could not run inside a transaction block, which still catches migration tools. <strong>Removing</strong> a label is not supported at all; you rebuild the type.</p>
-<p>The alternative is a <code>text</code> column with a <code>CHECK</code> constraint, or a small lookup table with a foreign key. The lookup table is the most flexible (values can be added, renamed, and carry attributes), the check constraint is the simplest, and the enum is the most compact — four bytes and a real ordering.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>CREATE TYPE</code> made a type <code>mood</code> with three labels, in the order <code>sad</code>, <code>ok</code>, <code>happy</code>.</li>
+<li><code>'ok' &lt; 'happy'</code> is <code>t</code>. Alphabetically <code>happy</code> comes first, so the comparison followed the declared order instead.</li>
+<li><code>enum_range</code> listed all the labels, in declared order.</li>
+</ul>
+<p>Sorting follows <strong>declaration order</strong>, not alphabetical, which is usually what you want for something like an order status. You can add labels later:</p>
+<ul>
+<li><code>ALTER TYPE ... ADD VALUE</code> appends a label, or inserts one before or after an existing one.</li>
+<li>Before PostgreSQL 12 it could not run inside a transaction block, and that still catches migration tools (the programs that apply schema changes). Today it can, but the new label cannot be used until that transaction commits.</li>
+<li><strong>Removing</strong> a label is not supported at all. You rebuild the type.</li>
+</ul>
+<p>An enum is one of three ways to say "this column holds one of these values":</p>
+<ul>
+<li>an enum, the most compact: four bytes, and a real order;</li>
+<li>a <code>text</code> column with a <code>CHECK</code> constraint listing the allowed values (§4), the simplest;</li>
+<li>or a small <em>lookup table</em> of allowed values plus a foreign key to it, the most flexible: values can be added and renamed, and each can carry extra columns.</li>
+</ul>
 <p>Collected, because the rest of the course leans on them: <strong>boolean type</strong>, <strong>enumerated type</strong>, <strong>uuid type</strong> and <code>uuidv7()</code>.</p>
 <p>The pieces this subsection introduced, in one line: <code>uuidv4()</code>.</p>
 <h2 id="section-2-311-domains-and-composite-types">3.11 Domains and Composite Types</h2>
-<p>A <strong>domain type</strong> is a base type plus constraints, reusable across columns:</p>
+<p>Suppose many columns, in many tables, must hold a positive number. You could repeat the rule on each column. A <em>domain</em> lets you write it once. Picture a rubber stamp, "must be positive", that comes with that kind of field wherever it is printed.</p>
+<p>A <strong>domain type</strong> is a base type plus constraints, reusable across columns. Here <code>positive_int</code> is an <code>integer</code> that must be greater than zero, and the insert tries <code>-1</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">DOMAIN</span><span class="w"> </span><span class="n">positive_int</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="nb">integer</span><span class="w"> </span><span class="k">CHECK</span><span class="w"> </span><span class="p">(</span><span class="n">VALUE</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">);</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">dom_demo</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="w"> </span><span class="n">positive_int</span><span class="p">);</span>
 <span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
@@ -2295,8 +2591,13 @@ CREATE TABLE
 ERROR:  value for domain positive_int violates check constraint "positive_int_check"
 </code></pre></div>
 
-<p>Domains are underused. <code>CREATE DOMAIN email AS text CHECK (VALUE ~ '^[^@]+@[^@]+$')</code> names a rule once and applies it everywhere the type is used, and the error message names the domain rather than a per-table constraint. The limitation: a domain cannot reference other columns, so anything relational still needs a table constraint.</p>
-<p>A <strong>composite type</strong> is a row type:</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>CREATE DOMAIN</code> and <code>CREATE TABLE</code> succeeded.</li>
+<li>The <code>INSERT</code> of <code>-1</code> failed, and the error names the domain, <code>positive_int</code>, and its check.</li>
+</ul>
+<p>Domains are underused. For example, <code>CREATE DOMAIN email AS text CHECK (VALUE ~ '^[^@]+@[^@]+$')</code> (<code>~</code> tests a pattern: something, an <code>@</code>, something) names the rule once and applies it everywhere the type is used. The error then names the domain rather than some constraint on one table. The limit: a domain can only look at its own value. A rule that involves other columns ("end date after start date") still needs a table constraint.</p>
+<p>A <strong>composite type</strong> is a row type: one value made of several named fields. Picture a field on the card that is itself a small form, with its own blanks for street and city:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TYPE</span><span class="w"> </span><span class="n">addr</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="p">(</span><span class="n">street</span><span class="w"> </span><span class="nb">text</span><span class="p">,</span><span class="w"> </span><span class="n">city</span><span class="w"> </span><span class="nb">text</span><span class="p">);</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">comp_demo</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="nb">int</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">addr</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">comp_demo</span><span class="w"> </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="k">ROW</span><span class="p">(</span><span class="s1">'1 Main St'</span><span class="p">,</span><span class="s1">'Berlin'</span><span class="p">));</span>
@@ -2312,17 +2613,41 @@ INSERT 0 1
 (1 row)
 </code></pre></div>
 
-<p>The parentheses in <code>(a).city</code> are required — without them PostgreSQL reads <code>a.city</code> as a table reference. Composite <em>columns</em> are rarely the right design: you cannot constrain or index a field independently, and the whole thing is rewritten when any field changes. Composite <em>types</em> as function return values (§18.8) are genuinely useful, and every table automatically has one named after it.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>CREATE TYPE addr</code> made a type with two fields, <code>street</code> and <code>city</code>.</li>
+<li>The table's column <code>a</code> is of that type, and <code>ROW(...)</code> built one value for it.</li>
+<li><code>(a).city</code> read one field out of it: <code>Berlin</code>.</li>
+<li>Selecting <code>a</code> itself printed the whole value as <code>("1 Main St",Berlin)</code>. The street has quotes because it contains spaces.</li>
+</ul>
+<p>The parentheses in <code>(a).city</code> are required. Without them, PostgreSQL reads <code>a.city</code> as "column <code>city</code> of a table called <code>a</code>".</p>
+<p>Composite <em>columns</em> are rarely the right design:</p>
+<ul>
+<li>you cannot put a constraint or an index on one field by itself;</li>
+<li>and the whole value is rewritten whenever any field changes.</li>
+</ul>
+<p>Composite <em>types</em> as the return value of a function (§18.8) are genuinely useful. And every table automatically has a composite type with the same name, describing one of its rows.</p>
 <p>To have in hand before moving on: <strong>domain type</strong>.</p>
 <h2 id="section-2-312-network-bit-and-geometric-types">3.12 Network, Bit and Geometric Types</h2>
-<p>Three families worth knowing exist rather than knowing in detail.</p>
-<p><strong>The <code>inet</code> type and the <code>cidr</code> type</strong> hold IPv4 and IPv6 addresses with an optional netmask, in 7 or 19 bytes, with operators for containment (<code>&lt;&lt;=</code>), and a GiST index method. Storing an address as <code>text</code> loses all of that and admits <code>'not an address'</code>; the difference is the whole argument. <code>macaddr</code> and <code>macaddr8</code> do the same for hardware addresses.</p>
-<p><strong><code>bit(n)</code> and <code>bit varying(n)</code></strong> hold bit strings with shift and logical operators. For a set of boolean flags they are more compact than separate columns and much harder to read; a <code>boolean[]</code> or separate columns are usually better, and if you find yourself packing flags, ask why the flags are not rows.</p>
-<p><strong>The geometric types</strong> — <code>point</code>, <code>line</code>, <code>box</code>, <code>circle</code>, <code>polygon</code> — are built in and are <em>not</em> what you want for maps. PostGIS is the extension for geographic work, with a real spatial reference system, a projection library and vastly more functions. The built-ins are for abstract geometry.</p>
-<p>A <strong>pseudo-type</strong> such as <code>record</code>, <code>anyelement</code> or <code>void</code> is not a storable type at all — it exists only in function signatures (§18.8). And <code>xml</code> exists as a real type, with validation and XPath functions. If you are choosing today, <code>jsonb</code> (§17) is the better-supported document type.</p>
+<p>Here are three families worth knowing <em>exist</em>, rather than knowing in detail.</p>
+<p><strong>The <code>inet</code> type and the <code>cidr</code> type</strong> hold IPv4 and IPv6 addresses, optionally with a netmask (the part that says which network the address belongs to, as in <code>/24</code>). They take 7 or 19 bytes. They come with operators, such as <code>&lt;&lt;=</code> for "is this address inside that network?", and with a GiST index method so those questions are fast. Storing an address as <code>text</code> loses all of that, and it accepts <code>'not an address'</code>. That difference is the whole argument. <code>macaddr</code> and <code>macaddr8</code> do the same for hardware (MAC) addresses.</p>
+<p><strong><code>bit(n)</code> and <code>bit varying(n)</code></strong> hold strings of bits, with shift and logical operators. For a set of yes/no flags they are more compact than separate columns, and much harder to read. A <code>boolean[]</code> (an array of booleans, §17) or separate columns are usually better. If you find yourself packing flags into bits, ask why the flags are not rows.</p>
+<p><strong>The geometric types</strong> are <code>point</code>, <code>line</code>, <code>box</code>, <code>circle</code> and <code>polygon</code>. They are built in, and they are <em>not</em> what you want for maps. For geographic work, use PostGIS, an extension that adds a real spatial reference system (which says what the coordinates mean on the Earth), a library for map projections, and far more functions. The built-in types are for abstract geometry.</p>
+<p>Two more you will see named:</p>
+<ul>
+<li>A <strong>pseudo-type</strong> such as <code>record</code>, <code>anyelement</code> or <code>void</code> is not a type you can store at all. It exists only in function signatures, to say "any row" or "returns nothing" (§18.8).</li>
+<li><code>xml</code> is a real type, with validation and XPath functions for searching inside documents. If you are choosing today, <code>jsonb</code> (§17) is the better-supported document type.</li>
+</ul>
 <p>Named once more, since each is referred to later: <strong>inet type</strong>, <strong>cidr type</strong>, <strong>pseudo-type</strong> and <strong>gist index</strong>.</p>
 <h2 id="section-2-313-toast-and-large-values">3.13 TOAST and Large Values</h2>
-<p>A row must fit in an 8 kB page. Values too large are handled by <strong>TOAST</strong> — <em>The Oversized-Attribute Storage Technique</em> — which compresses a value and, if it is still too large, splits it into chunks in a side table.</p>
+<p>PostgreSQL stores rows in pages of 8 kB, and a row must fit in one page. So what happens to a value that is bigger, such as a long article or a large JSON document?</p>
+<p>It is handled by <strong>TOAST</strong>, <em>The Oversized-Attribute Storage Technique</em>:</p>
+<ul>
+<li>first it compresses the value;</li>
+<li>if the value is still too large, it cuts it into chunks and stores them in a side table, leaving a small pointer in the row.</li>
+</ul>
+<p>Picture big attachments kept in a side cabinet, with a note on the card saying where to find them.</p>
+<p>Before the large values, the small ones. <code>pg_column_size</code> reports how many bytes a value takes:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SELECT</span><span class="w"> </span><span class="n">pg_column_size</span><span class="p">(</span><span class="mi">1</span><span class="p">::</span><span class="n">int2</span><span class="p">)</span><span class="w">               </span><span class="k">AS</span><span class="w"> </span><span class="nb">smallint</span><span class="p">,</span>
 <span class="w">       </span><span class="n">pg_column_size</span><span class="p">(</span><span class="mi">1</span><span class="p">::</span><span class="n">int4</span><span class="p">)</span><span class="w">               </span><span class="k">AS</span><span class="w"> </span><span class="nb">integer</span><span class="p">,</span>
 <span class="w">       </span><span class="n">pg_column_size</span><span class="p">(</span><span class="mi">1</span><span class="p">::</span><span class="nb">int8</span><span class="p">)</span><span class="w">               </span><span class="k">AS</span><span class="w"> </span><span class="nb">bigint</span><span class="p">,</span>
@@ -2337,8 +2662,14 @@ INSERT 0 1
 (1 row)
 </code></pre></div>
 
-<p><code>'abc'</code> costs 7 bytes: three characters plus a 4-byte length header, which is what a variable-length type carries. (Short values use a 1-byte header, so the accounting is not always this simple.)</p>
-<p>Four values of the <strong>storage strategy</strong>, set per column with <code>ALTER TABLE ... ALTER COLUMN ... SET STORAGE</code>:</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>smallint</code>, <code>integer</code> and <code>bigint</code> take 2, 4 and 8 bytes, as §3.1 said.</li>
+<li>A <code>boolean</code> takes 1 byte, and a <code>timestamptz</code> takes 8.</li>
+<li>The text <code>'abc'</code> takes 7 bytes, not 3.</li>
+</ul>
+<p>Why 7? Three characters, plus a 4-byte <em>length header</em>: a variable-length value has to carry its own length, so it can be read back. (Short values stored in a table use a 1-byte header instead, so the accounting is not always this simple.)</p>
+<p>How a column's values may be compressed or moved out of the row is its <strong>storage strategy</strong>. There are four, set per column with <code>ALTER TABLE ... ALTER COLUMN ... SET STORAGE</code>:</p>
 <div style="display:grid;grid-template-columns:9rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #64748b;padding-left:.6rem;font-weight:600"><code>plain</code></div>
   <div style="border-left:4px solid #64748b;padding-left:.6rem">No compression, no out-of-line. The only option for fixed-length types.</div>
@@ -2350,10 +2681,13 @@ INSERT 0 1
   <div style="border-left:4px solid #64748b;padding-left:.6rem">Compress, and avoid moving out of line if at all possible.</div>
 </div>
 
-<p>Two consequences matter in practice. <strong>Reading a TOASTed column costs a second lookup and a decompression</strong>, so <code>SELECT *</code> on a table with a large <code>jsonb</code> column is much more expensive than selecting the three columns you need. And <strong>updating any column of a row rewrites the row</strong> (§14.7) — but <em>not</em> its TOASTed values, if those did not change, which is one of the few places PostgreSQL avoids rewriting everything.</p>
+<p>Two consequences matter in practice.</p>
+<p><strong>Reading a TOASTed column costs a second lookup and a decompression</strong>. So <code>SELECT *</code> on a table with a large <code>jsonb</code> column is much more expensive than selecting only the three columns you need. The <code>*</code> makes the archivist fetch every attachment from the side cabinet, even the ones you will not read.</p>
+<p>And <strong>updating any column of a row rewrites the row</strong> (§14.7), but <em>not</em> its TOASTed values, if those did not change. The note on the card is copied; the attachment stays where it is. That is one of the few places PostgreSQL avoids rewriting everything.</p>
 <p>In summary, the vocabulary here is <strong>storage strategy</strong>.</p>
 <h2 id="section-2-314-column-order-is-not-free">3.14 Column Order Is Not Free</h2>
-<p>Fixed-width types must start at an aligned offset, so a badly ordered column list wastes bytes on padding. This is measurable:</p>
+<p>One last cost, and it surprises people. A fixed-width value must start at an <em>aligned</em> position in the row. For example, an 8-byte <code>int8</code> must start at a position that is a multiple of 8. If a 2-byte <code>int2</code> comes just before it, PostgreSQL skips six bytes to reach the next multiple of 8. Those skipped bytes are <em>padding</em>: wasted space.</p>
+<p>Picture a card whose fields must start at ruler marks. Put a short field before a long one, and there is a blank gap before the long one can start. A badly ordered column list wastes bytes on padding, and the waste can be measured. Here are two tables with the same four columns in two different orders, each filled with 20,000 identical rows:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">pad_bad</span><span class="w">  </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="n">int2</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="nb">int8</span><span class="p">,</span><span class="w"> </span><span class="k">c</span><span class="w"> </span><span class="n">int2</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="nb">int8</span><span class="p">);</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">pad_good</span><span class="w"> </span><span class="p">(</span><span class="n">b</span><span class="w"> </span><span class="nb">int8</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="nb">int8</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">int2</span><span class="p">,</span><span class="w"> </span><span class="k">c</span><span class="w"> </span><span class="n">int2</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">pad_bad</span><span class="w">  </span><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">generate_series</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">20000</span><span class="p">);</span>
@@ -2372,10 +2706,23 @@ INSERT 0 20000
 (1 row)
 </code></pre></div>
 
-<p><strong>Same four columns, same data, 16% more disk</strong> — because each <code>int2</code> before an <code>int8</code> forces six bytes of padding, twice per row.</p>
-<p>The rule about <strong>column order and alignment</strong>, when it matters: <strong>declare fixed-width columns widest first, then narrow ones, then variable-length ones.</strong> It matters on wide tables with many rows and not at all on a table of a thousand. It is worth knowing mostly so that the number is not a mystery when you meet it, and because <code>ALTER TABLE ADD COLUMN</code> appends — so a table's physical order drifts from its logical one as it evolves.</p>
+<p>Read it line by line:</p>
+<ul>
+<li>Both tables were created and got 20,000 rows each.</li>
+<li><code>pad_bad</code>, with <code>int2, int8, int2, int8</code>, takes <code>1184 kB</code>.</li>
+<li><code>pad_good</code>, with the two <code>int8</code> columns first, takes <code>1024 kB</code>.</li>
+</ul>
+<p><strong>Same four columns, same data, 16% more disk</strong>. The reason: each <code>int2</code> placed before an <code>int8</code> forces six bytes of padding, and that happens twice per row.</p>
+<p>The rule about <strong>column order and alignment</strong>, when it matters: <strong>declare fixed-width columns widest first, then narrow ones, then variable-length ones.</strong></p>
+<p>How much does it matter?</p>
+<ul>
+<li>On a wide table with many millions of rows, a lot.</li>
+<li>On a table of a thousand rows, not at all.</li>
+</ul>
+<p>It is worth knowing mostly so that the number is not a mystery when you meet it. And there is a trap: <code>ALTER TABLE ADD COLUMN</code> always adds the column at the end. So as a table grows new columns over the years, its physical order drifts away from the one you would have chosen.</p>
 <p>What to carry forward from this subsection: <strong>column order and alignment</strong>.</p>
 <h2 id="section-2-what-this-section-established">What This Section Established</h2>
+<p>The picture: every card in the archive has printed fields, and the shape of each field decides what you may write there and what the archivist does with it. Digit boxes that refuse a number too big for them; an amount written exactly in ink, or measured on a tape whose marks never land on 0.1; a ticket machine that never gives a number back; times written in world time and read out in your local time; calendar instructions that are not counts of seconds; big attachments in a side cabinet; and fields that must start at ruler marks.</p>
 <p>The type is the cheapest constraint available, checked on every write by every client.</p>
 <p><code>bigint</code> for surrogate keys, always — converting later rewrites the table, its indexes and every referencing foreign key under <code>ACCESS EXCLUSIVE</code>. Integer overflow raises rather than wrapping.</p>
 <p><strong><code>numeric</code> is exact and <code>float8</code> is not</strong> — measured, <code>0.1 + 0.2 = 0.3</code> true and false respectively, with the float sum printing <code>0.30000000000000004</code>. And they round differently: <code>round(2.5)</code> is <strong>3</strong> on numeric, <strong>2</strong> on float. For money: <code>numeric(12,2)</code> or integer minor units; never <code>money</code>.</p>
