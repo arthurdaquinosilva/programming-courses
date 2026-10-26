@@ -2818,9 +2818,126 @@ INSERT 0 1
 </details>
 <div class="section-footer"><button class="btn-prev" data-prev="section-1">← Back</button><button class="btn-next" data-next="section-3">Next: Defining Schema: Tables, Constraints and Integrity →</button></div>
 </section>
-<section class="course-section" id="section-3" data-section-id="section-3"><div class="section-header-meta">  <span class="section-tag">SECTION 4</span>  <button class="btn-complete" data-complete="section-3"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Defining Schema: Tables, Constraints and Integrity</h1><p>Data definition is where you decide what the database will refuse. Every constraint you declare is a rule enforced on every write by every client forever, including the one written next year by someone who never read your documentation — and every rule you leave to the application is one that will eventually be broken by a code path, a migration script, or a person with a psql prompt.</p>
-<p>That is the argument this section makes, and it is worth stating as a position rather than a preference: <strong>put integrity rules in the database.</strong> Not because applications are careless, but because a database outlives its applications and is usually written to by more than one.</p>
+<section class="course-section" id="section-3" data-section-id="section-3"><div class="section-header-meta">  <span class="section-tag">SECTION 4</span>  <button class="btn-complete" data-complete="section-3"><span class="check">○</span> Mark complete</button></div><h1 class="section-title">Defining Schema: Tables, Constraints and Integrity</h1><p>Start with a puzzle. A table holds one row, and its number is <code>-5</code>. You add a rule to the table: <code>CHECK (n &gt; 0)</code>, "every number must be positive". After the rule you write two more words, <code>NOT VALID</code>. Then you insert a new row with <code>-9</code>.</p>
+<p>Is <code>-9</code> stored? Guess before reading on.</p>
+<p>Most people guess yes, because "not valid" sounds like "switched off". The real answer is no: the <code>-9</code> is refused, and the old <code>-5</code> stays where it is. §4.9 runs exactly that, and the server's real output is printed there. §4.10 then shows a second rule, <code>NOT ENFORCED</code>, which sounds almost the same and gives the opposite answer.</p>
+<p>That puzzle is a small piece of this section's subject. So far you have read and written rows. This section is about <em>data definition</em>: the statements that create tables and change their shape (<code>CREATE</code>, <code>ALTER</code>, <code>DROP</code>), often called <em>DDL</em>, for data definition language. Most of it is about <em>constraints</em>. A constraint is a rule the database checks for you, every time a row is written. You met the first one in §3: a column's type.</p>
+<p>Here is why this matters so much. Every constraint you declare is checked on every write, by every program that talks to the database, forever. That includes the program someone writes next year without reading your documentation. Every rule you leave to the application instead will one day be broken by something:</p>
+<ul>
+<li>a code path that forgot to check;</li>
+<li>a <em>migration</em> script (a one-off program that changes the schema or fixes up data);</li>
+<li>or a person typing at a psql prompt.</li>
+</ul>
+<p>So this section takes a position, not just a preference: <strong>put integrity rules in the database.</strong> <em>Integrity</em> means the data stays correct and consistent. The reason is not that applications are careless. It is that a database usually outlives the applications around it, and it is usually written to by more than one of them.</p>
+<p>The archive from §1 still works as the picture. Each box of index cards is a table, and each card is a row. This section is about <strong>the archive's rule book</strong>: the rules the archivist checks before accepting a card, and how to change the shape of a box without closing the archive.</p>
+<table>
+<thead>
+<tr>
+<th>In the archive</th>
+<th>In PostgreSQL</th>
+<th>Section</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A new box, with its printed form for every card</td>
+<td><code>CREATE TABLE</code></td>
+<td>§4.1</td>
+</tr>
+<tr>
+<td>A scratch box on your desk, thrown away when you leave</td>
+<td>a temporary table</td>
+<td>§4.1</td>
+</tr>
+<tr>
+<td>A box with no copy in the logbook, emptied after a fire</td>
+<td>an unlogged table</td>
+<td>§4.1</td>
+</tr>
+<tr>
+<td>A field that is already filled in if you leave it blank</td>
+<td><code>DEFAULT</code></td>
+<td>§4.2</td>
+</tr>
+<tr>
+<td>A field the archivist fills in from the other fields</td>
+<td>a generated column</td>
+<td>§4.3</td>
+</tr>
+<tr>
+<td>"This field must be filled in"</td>
+<td><code>NOT NULL</code></td>
+<td>§4.4</td>
+</tr>
+<tr>
+<td>"This number must not be negative", checked on each card alone</td>
+<td><code>CHECK</code></td>
+<td>§4.4</td>
+</tr>
+<tr>
+<td>"No two cards may have the same code"</td>
+<td><code>UNIQUE</code></td>
+<td>§4.4</td>
+</tr>
+<tr>
+<td>The card number that names each card</td>
+<td><code>PRIMARY KEY</code></td>
+<td>§4.4</td>
+</tr>
+<tr>
+<td>A field saying "see card 7 in the customers box"</td>
+<td>a foreign key</td>
+<td>§4.5</td>
+</tr>
+<tr>
+<td>Throwing out a customer card and every card that points at it</td>
+<td><code>ON DELETE CASCADE</code></td>
+<td>§4.5</td>
+</tr>
+<tr>
+<td>"Check this at the end of the day, not card by card"</td>
+<td>a deferrable constraint</td>
+<td>§4.7</td>
+</tr>
+<tr>
+<td>"No two bookings for the same room may overlap"</td>
+<td>an exclusion constraint</td>
+<td>§4.8</td>
+</tr>
+<tr>
+<td>A new rule for new cards; old cards inspected later</td>
+<td><code>NOT VALID</code></td>
+<td>§4.9</td>
+</tr>
+<tr>
+<td>A rule written in the book that nobody checks</td>
+<td><code>NOT ENFORCED</code></td>
+<td>§4.10</td>
+</tr>
+<tr>
+<td>Reprinting every card because one field changed shape</td>
+<td>a table rewrite</td>
+<td>§4.12</td>
+</tr>
+<tr>
+<td>"Other things depend on this box"</td>
+<td>dependency tracking</td>
+<td>§4.13</td>
+</tr>
+<tr>
+<td>The rooms of the archive, and the order you look in them</td>
+<td>schemas and <code>search_path</code></td>
+<td>§4.14</td>
+</tr>
+<tr>
+<td>A box whose cards really live in another building</td>
+<td>a foreign table</td>
+<td>§4.15</td>
+</tr>
+</tbody>
+</table>
 <h2 id="section-3-41-create-table">4.1 CREATE TABLE</h2>
+<p><code>CREATE TABLE</code> makes a new, empty table. You give it a name, and then, inside brackets, one line per column: the column's name, its type, and any rules for it. Here is a small table that already uses most of what this section teaches:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">ddl_demo</span><span class="w"> </span><span class="p">(</span>
 <span class="w">  </span><span class="n">id</span><span class="w">         </span><span class="nb">bigint</span><span class="w"> </span><span class="k">GENERATED</span><span class="w"> </span><span class="n">ALWAYS</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="k">IDENTITY</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
 <span class="w">  </span><span class="n">code</span><span class="w">       </span><span class="nb">text</span><span class="w">        </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">UNIQUE</span><span class="p">,</span>
@@ -2832,15 +2949,37 @@ INSERT 0 1
 <div class="highlight" data-lang="text"><pre><span></span><code>CREATE TABLE
 </code></pre></div>
 
-<p>Four columns, and already five constraints: a primary key, a not-null and a uniqueness rule on <code>code</code>, a not-null and a range check on <code>qty</code>, plus two defaults. Each is enforced by the server and none can be bypassed.</p>
-<p><code>IF NOT EXISTS</code> makes the statement idempotent, which matters for a migration you may run twice — though it also silently succeeds when the existing table has a <em>different</em> shape, so it is not a substitute for tracking which migrations have run.</p>
-<p><strong>Table inheritance</strong> — <code>CREATE TABLE child () INHERITS (parent)</code> — predates declarative partitioning (§19.1) and is what it replaced; it survives for the rare case where children genuinely differ in shape.</p>
-<p><strong>A temporary table</strong> exists for the session and is dropped at its end (or at commit, with <code>ON COMMIT DROP</code>). It lives in a per-session schema that precedes everything on the <code>search_path</code>, so a temporary table named <code>orders</code> <strong>shadows</strong> the real one for that session — occasionally useful and a genuinely confusing way to break a function.</p>
-<p><strong>An unlogged table</strong> writes no WAL: much faster, not replicated, and <strong>truncated after a crash</strong>. It is right for a staging table you load and process, a materialised cache you can rebuild, or a session store you can afford to lose. Converting a table to <code>LOGGED</code> afterwards writes the whole thing to WAL, so the trick of "load unlogged, then switch" is not free.</p>
-<p><code>CREATE TABLE AS SELECT</code> builds a table from a query — a real table, unlike a view — and <code>CREATE TABLE ... (LIKE other INCLUDING ALL)</code> copies a structure with its defaults, constraints and indexes.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY</code>. The identity column from §3.4: the database hands out 1, 2, 3, and so on. <code>PRIMARY KEY</code> makes it the column that names each row.</li>
+<li><code>code text NOT NULL UNIQUE</code>. Every row must have a code, and no two rows may have the same one.</li>
+<li><code>qty integer NOT NULL DEFAULT 0 CHECK (qty &gt;= 0)</code>. A quantity must be present. If you leave it out, it is <code>0</code>. And it may never be negative.</li>
+<li><code>created_at timestamptz NOT NULL DEFAULT now()</code>. The moment the row was inserted, filled in for you.</li>
+</ul>
+<p>Four columns, and already five constraints: a primary key, a not-null and a uniqueness rule on <code>code</code>, a not-null and a range check on <code>qty</code>, plus two defaults. Each is enforced by the server and none can be bypassed. The rest of this section takes them one at a time.</p>
+<p>A few variations on <code>CREATE TABLE</code> are worth knowing now.</p>
+<p><strong><code>IF NOT EXISTS</code>.</strong> <code>CREATE TABLE IF NOT EXISTS ddl_demo (...)</code> does nothing when the table already exists. That makes the statement <em>idempotent</em>: running it twice has the same effect as running it once. That matters for a migration you might run twice. But there is a catch. It only checks the <em>name</em>. If the existing table has a completely different shape, the statement still succeeds. All you get is a notice, <code>relation "ddl_demo" already exists, skipping</code>, which nobody reads in a migration log. So it is not a substitute for keeping track of which migrations have run.</p>
+<p><strong>Table inheritance</strong> — <code>CREATE TABLE child () INHERITS (parent)</code> — predates declarative partitioning (§19.1) and is what it replaced; it survives for the rare case where children genuinely differ in shape. Think of it as a child box whose cards also count as cards of the parent box: a query on the parent sees the child's rows too.</p>
+<p><strong>A temporary table</strong> exists for the session and is dropped at its end (or at commit, with <code>ON COMMIT DROP</code>). A <em>session</em> is one connection, from the moment it opens until it closes. In the archive, it is a scratch box on your own desk, thrown away when you leave.</p>
+<p>There is a trap here. A temporary table lives in a special per-session schema, and that schema is searched before everything else on the <code>search_path</code> (§4.14). So a temporary table named <code>orders</code> <strong>shadows</strong> the real one for that session: every query that says <code>orders</code> now reads your scratch box. That is occasionally useful, and it is a genuinely confusing way to break a function.</p>
+<p><strong>An unlogged table</strong> writes no WAL. The <em>WAL</em>, or write-ahead log (§16.10), is the journal where PostgreSQL records every change before making it. The journal is how the server recovers after a crash, and how it sends changes to <em>replicas</em> (copies of the database on other servers, §16.16). Skipping it has three effects:</p>
+<ul>
+<li>writes are much faster;</li>
+<li>the table is not replicated;</li>
+<li>and it is <strong>truncated after a crash</strong>: after an unclean shutdown, PostgreSQL cannot prove the table's files are intact, so it empties it.</li>
+</ul>
+<p>That makes it right for data you can lose or rebuild: a staging table you load and process, a materialised cache, a session store. In the archive, it is a box with no copy in the logbook, emptied after a fire.</p>
+<p>People sometimes try to "load it unlogged, then switch it on". Converting a table to <code>LOGGED</code> afterwards writes the whole table to the WAL, so that trick is not free.</p>
+<p>Two more ways to make a table:</p>
+<ul>
+<li><code>CREATE TABLE AS SELECT</code> builds a table from a query's result. It is a real table holding copies of the rows, unlike a view (§18), which runs its query every time you read it.</li>
+<li><code>CREATE TABLE ... (LIKE other INCLUDING ALL)</code> copies another table's structure, with its defaults, constraints and indexes. One thing is never copied: foreign keys (§4.5). Measured on PostgreSQL 18, the copy of a table with a primary key, a check, an index and a foreign key had the first three and no foreign key. Add those yourself.</li>
+</ul>
 <p>The terms above, gathered: <strong>unlogged table</strong>, <strong>create table as</strong> and <strong>table inheritance</strong>.</p>
 <h2 id="section-3-42-defaults">4.2 Defaults</h2>
-<p>The <strong><code>DEFAULT</code> keyword</strong> introduces an expression evaluated at insert time when the column is not supplied. It may be a literal, a function call, or anything volatile — <code>now()</code>, <code>gen_random_uuid()</code>.</p>
+<p>A default is the value a column gets when an insert does not mention it. In the archive, it is a field already filled in on the blank card.</p>
+<p>The <strong><code>DEFAULT</code> keyword</strong> introduces an expression evaluated at insert time when the column is not supplied. It may be a literal, a function call, or anything volatile — <code>now()</code>, <code>gen_random_uuid()</code>. <em>Volatile</em> means the function can return something different each time it is called: <code>now()</code> gives the current time, and <code>gen_random_uuid()</code> a fresh random id.</p>
+<p>Here are three columns with three different defaults, and an insert that supplies nothing at all:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">def_col</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="n">timestamptz</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">now</span><span class="p">(),</span><span class="w"> </span><span class="k">c</span><span class="w"> </span><span class="nb">text</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">def_col</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="k">VALUES</span><span class="p">;</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">b_was_set</span><span class="p">,</span><span class="w"> </span><span class="k">c</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">c_is_null</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">def_col</span><span class="p">;</span>
@@ -2854,11 +2993,25 @@ INSERT 0 1
 (1 row)
 </code></pre></div>
 
-<p><code>DEFAULT VALUES</code> inserts a row of nothing but defaults. A column with no default defaults to <code>NULL</code>, which is why <code>c</code> is null and not an error.</p>
-<p><strong>Adding a column with a default no longer rewrites the table.</strong> Since PostgreSQL 11 the default is stored in the catalogue and applied on read to rows that predate it, so <code>ALTER TABLE ... ADD COLUMN x int NOT NULL DEFAULT 0</code> is instant on a billion-row table. Before 11 it rewrote every row under an <code>ACCESS EXCLUSIVE</code> lock, which is why so much migration advice still says to avoid it. A <em>volatile</em> default — <code>now()</code>, a random value — still rewrites, because each row needs a different value.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>INSERT INTO def_col DEFAULT VALUES</code> inserts one row. <code>DEFAULT VALUES</code> inserts a row of nothing but defaults. It is the way to write "insert a row, and I am not giving you any values".</li>
+<li><code>a</code> is <code>1</code>, its literal default.</li>
+<li><code>b_was_set</code> is <code>t</code>: <code>now()</code> ran at insert time and filled in <code>b</code>. The query prints <code>b IS NOT NULL</code> rather than <code>b</code> itself, because the time changes on every run.</li>
+<li><code>c_is_null</code> is <code>t</code>. A column with no default defaults to <code>NULL</code>, which is why <code>c</code> is null and not an error.</li>
+</ul>
+<p><strong>Adding a column with a default no longer rewrites the table.</strong> Since PostgreSQL 11 the default is stored in the catalogue and applied on read to rows that predate it, so <code>ALTER TABLE ... ADD COLUMN x int NOT NULL DEFAULT 0</code> is instant on a billion-row table.</p>
+<p>That sentence needs some unpacking:</p>
+<ul>
+<li>The <em>catalogue</em> is the database's own register of its tables and columns (§1.9).</li>
+<li>Old rows on disk simply do not have the new column. When PostgreSQL reads one of them, it sees the column is missing and hands back the stored default instead. No row on disk has to change.</li>
+<li>Before 11 it rewrote every row under an <code>ACCESS EXCLUSIVE</code> lock, which is why so much migration advice still says to avoid it. A <em>table rewrite</em> (§3.1) copies the whole table into new files. An <code>ACCESS EXCLUSIVE</code> lock (§15.2) stops every other query, even a read, until it finishes. On a big table, that is an outage.</li>
+</ul>
+<p>There is one exception. A <em>volatile</em> default — <code>now()</code>, a random value — still rewrites, because each row needs a different value, and that value has to be written into every row now.</p>
 <p>One line each, for reference: <strong>default keyword</strong>.</p>
 <h2 id="section-3-43-generated-columns-and-what-changed-in-18">4.3 Generated Columns, and What Changed in 18</h2>
-<p>A generated column is computed from other columns of the same row and cannot be written directly.</p>
+<p>A generated column is computed from other columns of the same row and cannot be written directly. In the archive, it is a field the archivist fills in for you from the other fields on the card: you write the price and the quantity, and the total appears by itself.</p>
+<p>Here are two generated columns: one written with no keyword and one with <code>STORED</code>. The second query asks the catalogue <code>pg_attribute</code>, which holds one row per column, how each column was declared:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">gen_demo</span><span class="w"> </span><span class="p">(</span>
 <span class="w">  </span><span class="n">a</span><span class="w">    </span><span class="nb">int</span><span class="p">,</span>
 <span class="w">  </span><span class="n">virt</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">GENERATED</span><span class="w"> </span><span class="n">ALWAYS</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">),</span>
@@ -2885,7 +3038,13 @@ INSERT 0 1
 (3 rows)
 </code></pre></div>
 
-<p><strong><code>attgenerated = 'v'</code> — the column with no keyword is VIRTUAL.</strong> PostgreSQL 18 added virtual generated columns and made them the default; in 12 through 17, <code>STORED</code> was mandatory and writing the bare form was a syntax error. That is a currency trap in both directions: advice written before 18 says <code>STORED</code> is required, and code written for 18 and run on 17 fails.</p>
+<p>Read it line by line:</p>
+<ul>
+<li>The insert supplied only <code>a = 5</code>. The table computed <code>virt = 10</code> and <code>stor = 15</code> from it.</li>
+<li>In <code>pg_attribute</code>, the plain column <code>a</code> has an empty <code>attgenerated</code>. <code>virt</code> has <code>v</code>, and <code>stor</code> has <code>s</code>.</li>
+</ul>
+<p><strong><code>attgenerated = 'v'</code> — the column with no keyword is VIRTUAL.</strong> PostgreSQL 18 added virtual generated columns and made them the default; in 12 through 17, <code>STORED</code> was mandatory and writing the bare form was a syntax error. Measured on PostgreSQL 15, the bare form fails with <code>syntax error at or near ")"</code>.</p>
+<p>That is a currency trap in both directions: advice written before 18 says <code>STORED</code> is required, and code written for 18 and run on 17 fails.</p>
 <p>The two differ in more than storage:</p>
 <div style="display:grid;grid-template-columns:8rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem;font-weight:600">VIRTUAL</div>
@@ -2894,7 +3053,7 @@ INSERT 0 1
   <div style="border-left:4px solid #10b981;padding-left:.6rem">A <strong>stored generated column</strong> is computed on write and stored. Costs disk and write time; can be indexed, and is what a searchable <code>tsvector</code> column needs (§17.17).</div>
 </div>
 
-<p>The restriction is worth demonstrating, because it decides which one you want:</p>
+<p>The restriction is worth demonstrating, because it decides which one you want. Here is an attempt to put an index (§12, a lookup structure that makes searches fast) on the virtual column:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">gen_demo</span><span class="w"> </span><span class="p">(</span><span class="n">virt</span><span class="p">);</span>
 </code></pre></div>
@@ -2903,9 +3062,25 @@ INSERT 0 1
 </code></pre></div>
 
 <p><strong>So the new default is the one you cannot index.</strong> If the column exists to be searched, say <code>STORED</code>.</p>
-<p>The expression must be <code>IMMUTABLE</code> and may reference only columns of the same row — no subqueries, no other tables, no <code>now()</code>. For anything that rule excludes, a trigger (§18.18) is the tool, with all of §18.20's caveats.</p>
+<p>There are rules about what the expression may use. It must be <code>IMMUTABLE</code>, which means it always gives the same result for the same inputs. And it may reference only columns of the same row. So:</p>
+<ul>
+<li>no subqueries;</li>
+<li>no other tables;</li>
+<li>no <code>now()</code>, which changes from one moment to the next.</li>
+</ul>
+<p>A virtual column adds one more rule in PostgreSQL 18: its expression may not call a function you wrote yourself. Measured: <code>GENERATED ALWAYS AS (dbl(a))</code>, with <code>dbl</code> an <code>IMMUTABLE</code> SQL function, fails with <code>Virtual generated columns that make use of user-defined functions are not yet supported</code>, and the same expression with <code>STORED</code> is accepted.</p>
+<p>For anything those rules exclude, a trigger (§18.18) is the tool, with all of §18.20's caveats. A trigger is a function the database runs automatically whenever a row is written.</p>
 <p>Collected, because the rest of the course leans on them: <strong>stored generated column</strong>.</p>
 <h2 id="section-3-44-the-five-kinds-of-constraint">4.4 The Five Kinds of Constraint</h2>
+<p>You have now seen every kind of constraint at least once. Here they are side by side, each with its line from the archive's rule book:</p>
+<ul>
+<li><code>NOT NULL</code>: "this field must be filled in".</li>
+<li><code>CHECK</code>: "this field must pass this test", looking at one card alone.</li>
+<li><code>UNIQUE</code>: "no two cards may have the same value here".</li>
+<li><code>PRIMARY KEY</code>: "this is the card's number".</li>
+<li><code>FOREIGN KEY</code>: "this field names a card in another box, and that card must exist".</li>
+</ul>
+<p>The details:</p>
 <div style="display:grid;grid-template-columns:11rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem;font-weight:600">NOT NULL</div>
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem">A <strong>not-null constraint</strong> is the cheapest and most under-used. A column that should always have a value should say so.</div>
@@ -2920,10 +3095,14 @@ INSERT 0 1
 </div>
 
 <p>Plus <strong>exclusion constraints</strong> (§4.8), which generalise <code>UNIQUE</code> to any operator.</p>
-<p><strong>That <code>NULL</code> passes every <code>CHECK</code></strong> is the rule people forget. <code>CHECK (qty &gt;= 0)</code> does not stop a <code>NULL</code> <code>qty</code>; <code>NOT NULL</code> is a separate declaration and both are usually wanted.</p>
-<p>Name your constraints. An unnamed one gets a generated name like <code>ddl_demo_qty_check</code>, which appears in every error message and in every migration that needs to drop it — and the generated name changes if the column is renamed. <code>CONSTRAINT qty_non_negative CHECK (qty &gt;= 0)</code> produces a message a user could almost read.</p>
+<p><strong>That <code>NULL</code> passes every <code>CHECK</code></strong> is the rule people forget. Why does it pass? Remember three-valued logic from §1.12. A comparison with <code>NULL</code> is neither true nor false but <em>unknown</em>. <code>NULL &gt;= 0</code> is unknown, and a check only refuses a row whose test is <em>false</em>. So <code>CHECK (qty &gt;= 0)</code> does not stop a <code>NULL</code> <code>qty</code>. <code>NOT NULL</code> is a separate declaration, and you usually want both.</p>
+<p><strong>Name your constraints.</strong> If you do not, PostgreSQL makes up a name like <code>ddl_demo_qty_check</code>. That name appears in every error message, and in every migration that needs to drop the constraint later.</p>
+<p>The made-up name also goes stale. It is chosen once, when the constraint is created, and renaming the column does not change it. Measured on PostgreSQL 18: a check created on <code>qty</code> was still called <code>r_qty_check</code> after the column was renamed to <code>quantity</code>. So the name in the error message now points at a column that no longer exists.</p>
+<p>Compare a name you chose. <code>CONSTRAINT qty_non_negative CHECK (qty &gt;= 0)</code> produces a message a user could almost read.</p>
 <p>The pieces this subsection introduced, in one line: <strong>not-null constraint</strong> and <strong>any operator</strong>.</p>
 <h2 id="section-3-45-foreign-keys-and-referential-actions">4.5 Foreign Keys and Referential Actions</h2>
+<p>A <em>foreign key</em> is a column that names a row in another table: an order's <code>customer_id</code> names a customer. In the archive, it is a field that says "see card 7 in the customers box". The rule is that card 7 must exist. The <em>referenced</em> table is the one being pointed at (the parent), and the <em>referencing</em> table is the one doing the pointing (the child).</p>
+<p>The interesting question is what happens to the children when a parent goes away. Here is a parent with two ids, three children, and a delete of the parent that has two children:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">fk_parent</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">);</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">fk_child</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">fk_parent</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">fk_parent</span><span class="w"> </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
@@ -2943,7 +3122,15 @@ DELETE 1
 (1 row)
 </code></pre></div>
 
-<p>Deleting one parent removed two children. The actions available on <code>DELETE</code> and on <code>UPDATE</code>:</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>p int REFERENCES fk_parent ON DELETE CASCADE</code> makes <code>p</code> a foreign key to <code>fk_parent</code>. It also says what to do when a parent row is deleted: delete the children too. <em>Cascade</em> means the delete flows down to them.</li>
+<li>Children <code>10</code> and <code>11</code> point at parent <code>1</code>, and child <code>12</code> points at parent <code>2</code>.</li>
+<li><code>DELETE FROM fk_parent WHERE id = 1</code> reports <code>DELETE 1</code>, one parent row.</li>
+<li>But the final query shows that only child <code>12</code> is left. Children <code>10</code> and <code>11</code> went with their parent, and the <code>DELETE 1</code> count never mentioned them.</li>
+</ul>
+<p>Deleting one parent removed two children. In the archive, you threw out one customer card, and every order card pointing at it went in the bin too.</p>
+<p><code>CASCADE</code> is one of several <em>referential actions</em>: what to do with the children when a parent is deleted, or when a parent's key is changed. You choose one for <code>ON DELETE</code> and one for <code>ON UPDATE</code>. The actions available on <code>DELETE</code> and on <code>UPDATE</code>:</p>
 <div style="display:grid;grid-template-columns:12rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #64748b;padding-left:.6rem;font-weight:600">NO ACTION</div>
   <div style="border-left:4px solid #64748b;padding-left:.6rem">The default. Raise, but only at the <em>end of the statement</em> — so a statement that deletes a parent and its children in one go is allowed.</div>
@@ -2955,10 +3142,15 @@ DELETE 1
   <div style="border-left:4px solid #3b82f6;padding-left:.6rem">Blank the referencing column. Since PostgreSQL 15 you may name <em>which</em> columns of a composite key to set.</div>
 </div>
 
-<p><strong>Index your foreign keys.</strong> PostgreSQL creates an index for the <em>referenced</em> side automatically — it must, to enforce uniqueness — and creates nothing on the referencing side. So a <code>DELETE</code> on the parent scans the whole child table looking for references, once per deleted row, and a cascade delete on an unindexed child is one of the most common unexplained slow deletes in production (§12.18).</p>
+<p>A <em>composite key</em> in that last row is a key made of more than one column, such as <code>(tenant_id, id)</code>. With one, you can now blank just <code>id</code> and keep <code>tenant_id</code>.</p>
+<p><strong>Index your foreign keys.</strong> This is the most useful sentence in this subsection, and it needs the whole story.</p>
+<p>A foreign key may only point at columns that carry a primary key or a unique constraint. Those constraints come with an index of their own (§4.4), so the <em>referenced</em> side, the parent, is always indexed. PostgreSQL creates nothing on the <em>referencing</em> side, the child.</p>
+<p>Now think about what a parent <code>DELETE</code> must do. For each deleted parent row, PostgreSQL has to find the children that point at it: to delete them, to blank them, or to refuse. Without an index on the child's foreign key column, the only way to find them is to read the whole child table. Once per deleted parent row.</p>
+<p>So a cascade delete on an unindexed child is one of the most common unexplained slow deletes in production (§12.18). In the archive, it is the archivist reading every order card in the building to find the ones for customer 7, because nobody ever sorted them by customer.</p>
 <p>To have in hand before moving on: <strong>on delete set null</strong>, <strong>on update cascade</strong> and <strong>composite key</strong>.</p>
 <h2 id="section-3-46-nulls-not-distinct">4.6 NULLS NOT DISTINCT</h2>
-<p>A unique constraint treats nulls as distinct, so any number of null rows are allowed. PostgreSQL 15 added the alternative:</p>
+<p>A unique constraint says "no two rows have the same value". But what about <code>NULL</code>? Two nulls are not equal to each other: each one means "unknown", and two unknowns are not known to be the same. So by default a unique constraint treats nulls as distinct, and any number of null rows are allowed.</p>
+<p>PostgreSQL 15 added the alternative. Here is a unique index written with <code>NULLS NOT DISTINCT</code>, and two inserts of <code>NULL</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">nnd</span><span class="w"> </span><span class="p">(</span><span class="n">e</span><span class="w"> </span><span class="nb">text</span><span class="p">);</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">UNIQUE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">nnd_u</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">nnd</span><span class="w"> </span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="n">NULLS</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">DISTINCT</span><span class="p">;</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">nnd</span><span class="w"> </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="k">NULL</span><span class="p">);</span>
@@ -2973,10 +3165,22 @@ ERROR:  duplicate key value violates unique constraint "nnd_u"
 DETAIL:  Key (e)=(null) already exists.
 </code></pre></div>
 
-<p>Which you want depends on what <code>NULL</code> means in that column. "Not applicable" — several rows may legitimately have none, and the default is right. "Not yet assigned, and there can be only one unassigned row" — <code>NULLS NOT DISTINCT</code>.</p>
-<p>A <strong>partial unique index</strong> (§12.6) is the third option and often the best: <code>CREATE UNIQUE INDEX ON accounts (email) WHERE deleted_at IS NULL</code> enforces uniqueness among live rows and lets a deleted account's address be reused.</p>
+<p>Read it line by line:</p>
+<ul>
+<li>The first <code>NULL</code> is accepted.</li>
+<li>The second is refused with <code>duplicate key value</code>. Under <code>NULLS NOT DISTINCT</code>, two nulls count as the same value.</li>
+<li>The <code>DETAIL</code> line prints the clash as <code>(e)=(null)</code>.</li>
+</ul>
+<p>Which one you want depends on what <code>NULL</code> means in that column:</p>
+<ul>
+<li>"Not applicable." Several rows may legitimately have no value. The default (nulls are distinct) is right.</li>
+<li>"Not yet assigned, and there can be only one unassigned row." Use <code>NULLS NOT DISTINCT</code>.</li>
+</ul>
+<p>A <strong>partial unique index</strong> (§12.6) is the third option and often the best: <code>CREATE UNIQUE INDEX ON accounts (email) WHERE deleted_at IS NULL</code> enforces uniqueness among live rows and lets a deleted account's address be reused. <em>Partial</em> means the index covers only the rows that match its <code>WHERE</code>. So the uniqueness rule applies only to live accounts, and a deleted account's row no longer takes part in it.</p>
 <h2 id="section-3-47-deferrable-constraints">4.7 Deferrable Constraints</h2>
-<p>A constraint is normally checked at the end of each <em>statement</em>. <code>DEFERRABLE INITIALLY DEFERRED</code> postpones it to the end of the <em>transaction</em>, which is what makes a circular reference insertable at all:</p>
+<p>A constraint is normally checked at the end of each <em>statement</em>. Sometimes that is too early. Picture two people who each list the other as their emergency contact. Whichever you file first points at a card that does not exist yet.</p>
+<p><code>DEFERRABLE INITIALLY DEFERRED</code> postpones the check to the end of the <em>transaction</em>, which is what makes such a circular reference insertable at all. A <em>transaction</em> is a group of statements that succeed or fail together, from <code>BEGIN</code> to <code>COMMIT</code> (§14). In the archive, the archivist stops checking card by card and checks the whole pile once, at the end of the day.</p>
+<p>Here is a table whose rows point at other rows of the same table, with that deferred foreign key, and two rows that point at each other:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">circ</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="nb">int</span><span class="p">);</span>
 <span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">circ</span><span class="w"> </span><span class="k">ADD</span><span class="w"> </span><span class="k">CONSTRAINT</span><span class="w"> </span><span class="n">circ_fk</span><span class="w"> </span><span class="k">FOREIGN</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="p">(</span><span class="n">p</span><span class="p">)</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">circ</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
 <span class="w">  </span><span class="k">DEFERRABLE</span><span class="w"> </span><span class="k">INITIALLY</span><span class="w"> </span><span class="k">DEFERRED</span><span class="p">;</span>
@@ -3000,11 +3204,25 @@ COMMIT
 (2 rows)
 </code></pre></div>
 
-<p>Neither insert is valid on its own; both are valid together. <code>SET CONSTRAINTS ALL DEFERRED</code> defers everything deferrable for the current transaction, which is the standard way to load a set of mutually-referencing tables.</p>
-<p>The costs are real: deferred violations are reported at <code>COMMIT</code>, so the error arrives detached from the statement that caused it, and PostgreSQL must remember every pending check, which uses memory proportional to the rows touched. Defer where the semantics require it, not by default.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>INSERT INTO circ VALUES (1, 2)</code> is accepted, even though row <code>2</code> does not exist yet. The check has been put off.</li>
+<li><code>INSERT INTO circ VALUES (2, 1)</code> adds row <code>2</code>, which points back at row <code>1</code>.</li>
+<li>At <code>COMMIT</code> the deferred check runs. Both rows exist now, both references are good, and the commit succeeds.</li>
+</ul>
+<p>The first row is not valid on its own; the pair is valid together.</p>
+<p><code>SET CONSTRAINTS ALL DEFERRED</code> defers everything deferrable for the current transaction, which is the standard way to load a set of mutually-referencing tables. It works only on constraints declared <code>DEFERRABLE</code>. A plain constraint stays immediate whatever you set.</p>
+<p>The costs are real:</p>
+<ul>
+<li>Deferred violations are reported at <code>COMMIT</code>. The error arrives detached from the statement that caused it, so you have to work out which insert was wrong.</li>
+<li>PostgreSQL must remember every pending check until the end, which uses memory proportional to the rows touched.</li>
+</ul>
+<p>Defer where the semantics require it, not by default.</p>
 <p>Named once more, since each is referred to later: <strong>set constraints</strong>.</p>
 <h2 id="section-3-48-exclusion-constraints">4.8 Exclusion Constraints</h2>
 <p><code>UNIQUE</code> says "no two rows have equal values here". An <strong>exclusion constraint</strong> generalises that to any operator, which is how you say "no two bookings for the same room overlap in time" — something no <code>CHECK</code> can express, because a check sees one row.</p>
+<p>In other words, a unique constraint compares a new row with the existing ones using <code>=</code>. An exclusion constraint lets you choose the comparison. <code>EXCLUDE ... (room WITH =, during WITH &amp;&amp;)</code> reads as: "refuse a new row if some existing row has an equal <code>room</code> <em>and</em> an overlapping <code>during</code>". The <code>&amp;&amp;</code> operator means "overlaps", and <code>tstzrange</code> is a range of <code>timestamptz</code> values (§17.12).</p>
+<p>Here is a booking table with that rule, two bookings that touch at 10:00, and a third that overlaps the first:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="n">EXTENSION</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">btree_gist</span><span class="p">;</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">room_bookings</span><span class="w"> </span><span class="p">(</span>
 <span class="w">  </span><span class="n">room</span><span class="w">   </span><span class="nb">text</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
@@ -3025,12 +3243,21 @@ ERROR:  conflicting key value violates exclusion constraint "room_bookings_room_
 DETAIL:  Key (room, during)=(A, ["2026-03-01 09:30:00+00","2026-03-01 10:30:00+00")) conflicts with existing key (room, during)=(A, ["2026-03-01 09:00:00+00","2026-03-01 10:00:00+00")).
 </code></pre></div>
 
-<p>The adjacent booking was accepted — <code>[)</code> bounds mean 10:00 belongs only to the second — and the overlapping one was refused. <code>btree_gist</code> is needed because the constraint mixes an equality test on <code>text</code> with an overlap test on a range, and plain GiST has no operator class for <code>text</code> equality.</p>
-<p><strong>This is enforced by an index at insert time, so it holds under concurrency</strong>, which the application-level "check then insert" does not (§14.13).</p>
-<p>PostgreSQL 18 adds <strong>temporal keys</strong> built on the same machinery: <code>PRIMARY KEY (room, during WITHOUT OVERLAPS)</code> and the <strong>PERIOD foreign key</strong>, <code>FOREIGN KEY (..., PERIOD during)</code>. A <code>WITHOUT OVERLAPS</code> primary key is implemented as an exclusion constraint — a violation reports as <code>violates exclusion constraint "..._pkey"</code>, which is startling the first time — and it also requires <code>btree_gist</code>.</p>
+<p>Read it line by line:</p>
+<ul>
+<li>The 09:00–10:00 booking is accepted.</li>
+<li>The 10:00–11:00 booking is accepted too. The adjacent booking was accepted — <code>[)</code> bounds mean 10:00 belongs only to the second. The <code>[</code> means the start is included, and the <code>)</code> that the end is not.</li>
+<li>The 09:30–10:30 booking overlaps the first one and is refused. The <code>DETAIL</code> line names both clashing bookings.</li>
+</ul>
+<p><code>btree_gist</code> is needed because the constraint mixes an equality test on <code>text</code> with an overlap test on a range, and plain GiST has no operator class for <code>text</code> equality. GiST is the kind of index that handles "overlaps" (§12). An <em>operator class</em> tells an index how to compare one type. <code>btree_gist</code> is an extension that ships with PostgreSQL and teaches GiST to compare ordinary values like <code>text</code> with <code>=</code>.</p>
+<p><strong>This is enforced by an index at insert time, so it holds under concurrency</strong>, which the application-level "check then insert" does not (§14.13). Why does that matter? Picture two people booking room A at the same moment. With an application check, each program asks "is the room free?", each gets "yes", and each inserts. You now have a double booking. The index sees both inserts, so one of them waits for the other and then fails.</p>
+<p>PostgreSQL 18 adds <strong>temporal keys</strong> built on the same machinery: <code>PRIMARY KEY (room, during WITHOUT OVERLAPS)</code> and the <strong>PERIOD foreign key</strong>, <code>FOREIGN KEY (..., PERIOD during)</code>. A <em>temporal</em> key is one that is unique over time: room A can appear many times, as long as its time ranges never overlap. A PERIOD foreign key says the child's time range must be covered by the parent's.</p>
+<p>A <code>WITHOUT OVERLAPS</code> primary key is implemented as an exclusion constraint — a violation reports as <code>violates exclusion constraint "..._pkey"</code>, which is startling the first time — and it also requires <code>btree_gist</code>. Measured on PostgreSQL 18 with the same three bookings: the overlap was refused as <code>conflicting key value violates exclusion constraint "wo_pkey"</code>, and <code>\d</code> listed <code>PRIMARY KEY (room, during WITHOUT OVERLAPS)</code>. Without <code>btree_gist</code>, creating the table failed, because <code>text</code> had no GiST operator class.</p>
 <p>In summary, the vocabulary here is <strong>period foreign key</strong>.</p>
 <h2 id="section-3-49-adding-a-constraint-without-an-outage">4.9 Adding a Constraint Without an Outage</h2>
-<p>Adding a <code>CHECK</code> or a foreign key to a large table normally scans every row under a lock that blocks writes. <code>NOT VALID</code> splits that into two steps:</p>
+<p>So far, every constraint was declared on a new, empty table. Adding one to a table that already holds data is a different job. PostgreSQL must check every existing row, and on a large table that is slow.</p>
+<p>Adding a <code>CHECK</code> or a foreign key to a large table normally scans every row under a lock that blocks writes. For the whole scan, no program can insert or update. In the archive, the door is closed while the archivist re-reads every card in the box.</p>
+<p><code>NOT VALID</code> splits that into two steps. Here is the puzzle from the start of this section: a table that holds <code>-5</code>, the rule <code>n &gt; 0</code> added as <code>NOT VALID</code>, and a new insert of <code>-9</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">nv</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="w"> </span><span class="nb">int</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">nv</span><span class="w"> </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">);</span>
 <span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">nv</span><span class="w"> </span><span class="k">ADD</span><span class="w"> </span><span class="k">CONSTRAINT</span><span class="w"> </span><span class="n">nv_pos</span><span class="w"> </span><span class="k">CHECK</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">VALID</span><span class="p">;</span>
@@ -3045,8 +3272,13 @@ ERROR:  new row for relation "nv" violates check constraint "nv_pos"
 DETAIL:  Failing row contains (-9).
 </code></pre></div>
 
-<p><strong><code>NOT VALID</code> means "do not check the rows already here" — new rows are still checked.</strong> That is the whole point and it is frequently misstated: the existing <code>-5</code> survives, and the new <code>-9</code> is rejected. So the constraint is enforced from the moment it is added, and the expensive verification of history is deferred.</p>
-<p>The second step scans the table with a weaker lock that permits reads and writes:</p>
+<p>Read it line by line:</p>
+<ul>
+<li>The <code>ALTER TABLE</code> succeeds, even though <code>-5</code> breaks the rule. The existing row was not checked.</li>
+<li>The insert of <code>-9</code> fails with <code>violates check constraint "nv_pos"</code>.</li>
+</ul>
+<p>That answers the puzzle. <strong><code>NOT VALID</code> means "do not check the rows already here" — new rows are still checked.</strong> That is the whole point and it is frequently misstated: the existing <code>-5</code> survives, and the new <code>-9</code> is rejected. So the constraint is enforced from the moment it is added, and the expensive verification of history is deferred. In the archive, the rule applies to every new card from today, and the old cards will be inspected later.</p>
+<p>The second step inspects the old rows. It scans the table with a weaker lock that permits reads and writes, so the archive stays open while it runs:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
 <span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">nv</span><span class="w"> </span><span class="n">VALIDATE</span><span class="w"> </span><span class="k">CONSTRAINT</span><span class="w"> </span><span class="n">nv_pos</span><span class="p">;</span>
 </code></pre></div>
@@ -3054,11 +3286,18 @@ DETAIL:  Failing row contains (-9).
 <div class="highlight" data-lang="text"><pre><span></span><code>ERROR:  check constraint "nv_pos" of relation "nv" is violated by some row
 </code></pre></div>
 
-<p>It refuses, because the <code>-5</code> is still there. The production procedure is therefore: add <code>NOT VALID</code>, fix or remove the offending historical rows, then <code>VALIDATE</code>.</p>
-<p>Note also that an unvalidated constraint <strong>is not used by the planner</strong> for proofs like partition pruning or redundant-predicate elimination, so leaving it unvalidated forever costs more than tidiness.</p>
+<p>It refuses, because the <code>-5</code> is still there. The production procedure is therefore:</p>
+<ol>
+<li>add the constraint <code>NOT VALID</code>;</li>
+<li>fix or remove the offending historical rows;</li>
+<li>then <code>VALIDATE</code>.</li>
+</ol>
+<p>Do not leave a constraint unvalidated forever. Note also that an unvalidated constraint <strong>is not used by the planner</strong> for proofs like partition pruning or redundant-predicate elimination, so leaving it unvalidated forever costs more than tidiness.</p>
+<p>The <em>planner</em> (§13) is the part of PostgreSQL that decides how to run a query. A validated check is a fact it can use. If a check says <code>n &gt; 0</code>, a query asking for <code>n &lt; 0</code> cannot match anything, and the planner can skip the work. For a partitioned table (§19.3), it can skip a whole partition. An unvalidated check proves nothing, because old rows might break it, so the planner ignores it.</p>
 <p>What to carry forward from this subsection: <strong>VALIDATE CONSTRAINT</strong>.</p>
 <h2 id="section-3-410-not-enforced">4.10 NOT ENFORCED</h2>
-<p>PostgreSQL 18 adds a stronger form of "do not check": a <strong><code>NOT ENFORCED</code> constraint</strong> is recorded and <strong>not applied at all</strong>.</p>
+<p>PostgreSQL 18 adds a stronger form of "do not check": a <strong><code>NOT ENFORCED</code> constraint</strong> is recorded and <strong>not applied at all</strong>. In the archive, it is a rule written in the book that nobody checks.</p>
+<p>Here is a check declared <code>NOT ENFORCED</code>, an insert that breaks it, and a look at the constraint's row in <code>pg_constraint</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">ne</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="nb">int</span><span class="p">,</span><span class="w"> </span><span class="k">CONSTRAINT</span><span class="w"> </span><span class="n">ne_chk</span><span class="w"> </span><span class="k">CHECK</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="n">ENFORCED</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">ne</span><span class="w"> </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">);</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="n">conname</span><span class="p">,</span><span class="w"> </span><span class="n">convalidated</span><span class="p">,</span><span class="w"> </span><span class="n">conenforced</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">pg_constraint</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">conname</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'ne_chk'</span><span class="p">;</span>
@@ -3072,11 +3311,44 @@ INSERT 0 1
 (1 row)
 </code></pre></div>
 
+<p>Read it line by line:</p>
+<ul>
+<li><code>-1</code> is accepted. The rule was not applied.</li>
+<li><code>convalidated</code> is <code>f</code>: PostgreSQL does not claim the existing rows obey the rule.</li>
+<li><code>conenforced</code> is <code>f</code>: it will not check new rows either.</li>
+</ul>
 <p><code>-1</code> was accepted, where §4.9's <code>NOT VALID</code> constraint rejected <code>-9</code>. <strong><code>NOT VALID</code> still enforces; <code>NOT ENFORCED</code> does not.</strong> The two words sound similar and mean opposite things about new data.</p>
-<p>Its purpose is documentation and tooling: recording a relationship the data warehouse or the ORM should know about, where enforcing it would cost too much or where another system already guarantees it. <code>ALTER TABLE ... ALTER CONSTRAINT ... ENFORCED</code> turns it on later, with a validation scan.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Existing rows checked?</th>
+<th>New rows checked?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a normal constraint</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>NOT VALID</code></td>
+<td>not yet</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>NOT ENFORCED</code></td>
+<td>no</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
+<p>Why would you want a rule nobody checks? Its purpose is documentation and tooling: recording a relationship the data warehouse or the ORM should know about, where enforcing it would cost too much or where another system already guarantees it. An <em>ORM</em> is a library that maps tables to objects in a programming language, and it reads constraints to learn how tables relate. A <em>data warehouse</em> is a database built for analysis, where the data is often loaded from a source that already guaranteed it.</p>
+<p>Turning one on later depends on its kind. For a foreign key, <code>ALTER TABLE ... ALTER CONSTRAINT ... ENFORCED</code> turns it on, with a validation scan. Measured on PostgreSQL 18: with a row that broke the foreign key, the statement failed with <code>violates foreign key constraint</code>; with the row removed, it succeeded and the constraint showed <code>conenforced</code> and <code>convalidated</code> both <code>t</code>. A <code>CHECK</code> cannot be switched on that way: the same statement on <code>ne_chk</code> fails with <code>cannot alter enforceability of constraint "ne_chk"</code>. Drop it and add it again, <code>NOT VALID</code> first if the table is large.</p>
 <p>The terms above, gathered: <strong>not enforced constraint</strong> and <strong>not valid constraint</strong>.</p>
 <h2 id="section-3-411-system-columns">4.11 System Columns</h2>
-<p>Every table has hidden columns:</p>
+<p>Every table has hidden columns. <code>SELECT *</code> never shows them, but you can ask for them by name. Here are two of them, next to the row's own <code>id</code>:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">sysc</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">sysc</span><span class="w"> </span><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="n">tableoid</span><span class="p">::</span><span class="n">regclass</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">which_table</span><span class="p">,</span><span class="w"> </span><span class="n">ctid</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">sysc</span><span class="p">;</span>
@@ -3090,9 +3362,16 @@ INSERT 0 1
 (1 row)
 </code></pre></div>
 
-<p><code>ctid</code> is the physical <code>(page, item)</code> address — useful within one statement (§10.9's deduplication) and <strong>never</strong> to be stored, since it changes on every update (§14.7). <code>tableoid</code> identifies which table a row came from, which is how you tell which partition produced a row (§19.4) or which branch of an inheritance hierarchy. <code>xmin</code> and <code>xmax</code> are the MVCC fields of §14.8.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>which_table</code> is <code>sysc</code>. <code>tableoid</code> is the id of the table the row is stored in, and the cast <code>::regclass</code> (§1.9) turns that number into the table's name.</li>
+<li><code>ctid</code> is <code>(0,1)</code>: page 0 of the table's file, item 1 on that page.</li>
+</ul>
+<p><code>ctid</code> is the physical <code>(page, item)</code> address — useful within one statement (§10.9's deduplication) and <strong>never</strong> to be stored, since it changes on every update (§14.7). An update in PostgreSQL writes a new copy of the row somewhere else, so the address of "the same row" moves. In the archive, it is the shelf and slot where a card happens to sit today, not its card number.</p>
+<p><code>tableoid</code> identifies which table a row came from, which is how you tell which partition produced a row (§19.4) or which branch of an inheritance hierarchy. <code>xmin</code> and <code>xmax</code> are the MVCC fields of §14.8: they record which transaction created the row and which one deleted it.</p>
 <p><code>oid</code> as a hidden row identifier was removed in PostgreSQL 12; only system catalogues have one now.</p>
 <h2 id="section-3-412-alter-table-and-which-forms-rewrite">4.12 ALTER TABLE, and Which Forms Rewrite</h2>
+<p><code>ALTER TABLE</code> changes an existing table: add a column, change a type, rename something, add a constraint. On an empty table every form is instant. On a large table, some forms are still instant and some take hours. Here are three changes, made one after the other on a five-row table:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">at_demo</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="nb">int</span><span class="p">);</span>
 <span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">at_demo</span><span class="w"> </span><span class="k">SELECT</span><span class="w"> </span><span class="k">g</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">generate_series</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="k">g</span><span class="p">;</span>
 <span class="k">ALTER</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">at_demo</span><span class="w"> </span><span class="k">ADD</span><span class="w"> </span><span class="k">COLUMN</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="nb">text</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="s1">'x'</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">;</span>
@@ -3113,7 +3392,14 @@ ALTER TABLE
  b      | text   |           | not null | 'x'::text
 </code></pre></div>
 
-<p>The three statements have completely different costs, and knowing which is which is the whole of safe migration work.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>ADD COLUMN b text DEFAULT 'x' NOT NULL</code> gave all five old rows a <code>b</code> of <code>'x'</code>. <code>\d</code> shows it as <code>not null</code> with default <code>'x'::text</code>.</li>
+<li><code>ALTER COLUMN a TYPE bigint</code> changed <code>a</code> from <code>integer</code> to <code>bigint</code>.</li>
+<li><code>RENAME COLUMN a TO n</code> renamed it. <code>\d</code> lists <code>n</code> as <code>bigint</code>.</li>
+</ul>
+<p>The three statements have completely different costs, and knowing which is which is the whole of safe migration work. In the archive, some changes are a note in the register ("this field is now called <em>n</em>"), and some mean reprinting every card in the box.</p>
+<p>There are three cost classes:</p>
 <div style="display:grid;grid-template-columns:13rem 1fr;gap:.5rem .9rem;margin:1.2rem 0;align-items:start">
   <div style="border-left:4px solid #10b981;padding-left:.6rem;font-weight:600">Catalogue only</div>
   <div style="border-left:4px solid #10b981;padding-left:.6rem"><code>RENAME</code>, <code>SET/DROP DEFAULT</code>, <code>DROP NOT NULL</code>, <code>ADD COLUMN</code> with a constant default, and widening <code>varchar(n)</code>. Instant at any size — but still take <code>ACCESS EXCLUSIVE</code> briefly, so they still queue behind a long query (§15.2).</div>
@@ -3123,12 +3409,33 @@ ALTER TABLE
   <div style="border-left:4px solid #ef4444;padding-left:.6rem"><code>ALTER COLUMN TYPE</code> (except a few binary-compatible cases), <code>ADD COLUMN</code> with a volatile default, <code>SET LOGGED/UNLOGGED</code>. Rewrites the table <em>and every index</em>, under <code>ACCESS EXCLUSIVE</code>, needing room for a second copy.</div>
 </div>
 
-<p><code>ALTER COLUMN a TYPE bigint</code> above was a rewrite — invisible on five rows and a multi-hour outage on a large table. <code>varchar(50)</code> to <code>varchar(100)</code> is <em>not</em>, because the representation is unchanged; <code>varchar(100)</code> to <code>varchar(50)</code> is, because values must be re-checked.</p>
-<p><strong><code>ALTER TABLE ... SET NOT NULL</code> gained a shortcut in PostgreSQL 12</strong>: if an equivalent validated <code>CHECK (col IS NOT NULL)</code> exists, the scan is skipped. So the zero-downtime recipe is add the check <code>NOT VALID</code>, <code>VALIDATE</code> it with a weak lock, then <code>SET NOT NULL</code> instantly, then drop the check.</p>
-<p><code>DROP COLUMN</code> does <em>not</em> rewrite: the column is marked dropped and its data stays until the rows are next updated. That makes it instant, and it also means the space is not returned until a <code>VACUUM FULL</code> or a rewrite.</p>
+<p>Read the classes as:</p>
+<ul>
+<li><em>Catalogue only</em>: only the register changes. Instant at any size. But even these take an <code>ACCESS EXCLUSIVE</code> lock for a moment, and a lock request waits behind any long query already using the table. Every query that arrives after it then waits behind the lock request. §15.2 shows how a one-millisecond rename can freeze a busy table that way.</li>
+<li><em>Scan, no rewrite</em>: PostgreSQL reads every row to check something, but writes nothing new. The time grows with the table's size.</li>
+<li><em>Full rewrite</em>: a new copy of the table and of every index is written, while everyone waits. You also need free disk space for the second copy.</li>
+</ul>
+<p><code>ALTER COLUMN a TYPE bigint</code> above was a rewrite — invisible on five rows and a multi-hour outage on a large table. Why a rewrite? An <code>integer</code> takes 4 bytes on disk and a <code>bigint</code> takes 8, so every row has to be written again in the new shape.</p>
+<p><code>varchar(50)</code> to <code>varchar(100)</code> is <em>not</em>, because the representation is unchanged; <code>varchar(100)</code> to <code>varchar(50)</code> is, because values must be re-checked. Raising the limit cannot make any stored value wrong. Lowering it could, so every value has to be looked at.</p>
+<p><strong><code>ALTER TABLE ... SET NOT NULL</code> gained a shortcut in PostgreSQL 12</strong>: if an equivalent validated <code>CHECK (col IS NOT NULL)</code> exists, the scan is skipped. So the zero-downtime recipe is:</p>
+<ol>
+<li>add the check <code>NOT VALID</code> (a moment's lock, no scan);</li>
+<li><code>VALIDATE</code> it with a weak lock, while reads and writes go on;</li>
+<li>then <code>SET NOT NULL</code> instantly, because the validated check already proves it;</li>
+<li>then drop the check.</li>
+</ol>
+<p>PostgreSQL 18 makes that shorter. A not-null constraint can now be added as <code>NOT VALID</code> itself, as <code>ALTER TABLE t ADD CONSTRAINT t_a_nn NOT NULL a NOT VALID</code>. Measured on PostgreSQL 18, on a table holding one <code>NULL</code>:</p>
+<ul>
+<li>the <code>ADD CONSTRAINT</code> succeeded;</li>
+<li>a new <code>NULL</code> was then refused with <code>violates not-null constraint</code>;</li>
+<li><code>VALIDATE CONSTRAINT</code> failed with <code>column "a" of relation "nn" contains null values</code>;</li>
+<li>after the old <code>NULL</code> was deleted, <code>VALIDATE</code> succeeded, and <code>\d</code> showed the column as <code>not null</code>.</li>
+</ul>
+<p>So on 18 the recipe is three steps (add <code>NOT VALID</code>, fix the old rows, <code>VALIDATE</code>), with no helper check to drop. The four-step recipe is still the one that works on 12 to 17.</p>
+<p><code>DROP COLUMN</code> does <em>not</em> rewrite: the column is marked dropped and its data stays until the rows are next updated. That makes it instant, and it also means the space is not returned until a <code>VACUUM FULL</code> or a rewrite. In the archive, the field is crossed out in the register, and the ink stays on each card until that card is next rewritten. <code>VACUUM FULL</code> (§16) rewrites the whole table and gives the space back.</p>
 <p>One line each, for reference: <strong>DROP COLUMN</strong> and <strong>ALTER COLUMN TYPE</strong>.</p>
 <h2 id="section-3-413-dropping-things-and-dependency-tracking">4.13 Dropping Things, and Dependency Tracking</h2>
-<p>PostgreSQL records what depends on what, and refuses to break it:</p>
+<p><code>DROP TABLE</code> deletes a table: its rows, its indexes, its constraints, everything. Before it does, PostgreSQL checks what else would break. It records what depends on what, and refuses to break it. Here is a table, a view built on it, and an attempt to drop the table:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">dep_base</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="nb">int</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">);</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">VIEW</span><span class="w"> </span><span class="n">dep_view</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="k">SELECT</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">dep_base</span><span class="p">;</span>
 <span class="err">\</span><span class="k">set</span><span class="w"> </span><span class="n">ON_ERROR_STOP</span><span class="w"> </span><span class="k">off</span>
@@ -3142,11 +3449,24 @@ DETAIL:  view dep_view depends on table dep_base
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 </code></pre></div>
 
-<p><code>CASCADE</code> does what the hint says and <strong>drops the dependent objects without listing them for confirmation</strong>. On a schema with several layers of views that is how a view nobody remembered disappears. The safe habit: run the <code>DROP</code> without <code>CASCADE</code> first, read the <code>DETAIL</code>, and only then decide.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>ERROR: cannot drop table dep_base because other objects depend on it</code>. Nothing was dropped.</li>
+<li><code>DETAIL</code> lists what depends on it: the view <code>dep_view</code>.</li>
+<li><code>HINT</code> names the way to force it: <code>CASCADE</code>.</li>
+</ul>
+<p><code>CASCADE</code> does what the hint says and <strong>drops the dependent objects without listing them for confirmation</strong>. On a schema with several layers of views that is how a view nobody remembered disappears. In the archive, you asked to throw out one box, and the archivist also threw out every index that mentioned it, without telling you which.</p>
+<p>The safe habit:</p>
+<ol>
+<li>run the <code>DROP</code> without <code>CASCADE</code> first;</li>
+<li>read the <code>DETAIL</code>, which lists what would go;</li>
+<li>and only then decide.</li>
+</ol>
 <p>The <strong><code>RESTRICT</code> keyword</strong> is the default and can be written explicitly for clarity in a migration script; the <strong><code>CASCADE</code> keyword</strong> is the opposite instruction.</p>
 <p>Collected, because the rest of the course leans on them: <strong>cascade keyword</strong> and <strong>restrict keyword</strong>.</p>
 <h2 id="section-3-414-schemas-and-search-path">4.14 Schemas and search_path</h2>
-<p>A <strong>schema</strong> is a namespace inside a database. Every table lives in one, and the fully qualified name is <code>schema.table</code>.</p>
+<p>A <strong>schema</strong> is a namespace inside a database. Every table lives in one, and the fully qualified name is <code>schema.table</code>. A <em>namespace</em> is a space in which names must be unique. Two schemas may each have a table called <code>thing</code>, just as two rooms of the archive may each have a box labelled "thing". You have been using one schema all along without naming it: <code>public</code>.</p>
+<p>When you write a name without a schema, PostgreSQL has to decide which room to look in. Here is a new schema with a table in it, the current search order, and an unqualified query:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">SCHEMA</span><span class="w"> </span><span class="n">app</span><span class="p">;</span>
 <span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">app</span><span class="p">.</span><span class="n">thing</span><span class="w"> </span><span class="p">(</span><span class="n">id</span><span class="w"> </span><span class="nb">int</span><span class="p">);</span>
 <span class="k">SHOW</span><span class="w"> </span><span class="n">search_path</span><span class="p">;</span>
@@ -3166,7 +3486,12 @@ LINE 1: SELECT * FROM thing;
                       ^
 </code></pre></div>
 
-<p>The table exists and the unqualified name does not resolve, because <code>app</code> is not on the <strong>schema search path</strong>. Adding it fixes that:</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>SHOW search_path</code> prints <code>"$user", public</code>: the list of schemas PostgreSQL looks in, in order, for a name written without a schema.</li>
+<li><code>SELECT * FROM thing</code> fails with <code>relation "thing" does not exist</code>, and the caret points at <code>thing</code>.</li>
+</ul>
+<p>The table exists and the unqualified name does not resolve, because <code>app</code> is not on the <strong>schema search path</strong>. In the archive, the box is in a room you never look in. Adding it fixes that:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">SET</span><span class="w"> </span><span class="n">search_path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">app</span><span class="p">,</span><span class="w"> </span><span class="k">public</span><span class="p">;</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="k">found</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">thing</span><span class="p">;</span>
 <span class="k">SET</span><span class="w"> </span><span class="n">search_path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ss">"$user"</span><span class="p">,</span><span class="w"> </span><span class="k">public</span><span class="p">;</span>
@@ -3181,12 +3506,35 @@ LINE 1: SELECT * FROM thing;
 SET
 </code></pre></div>
 
-<p><code>"$user"</code> expands to the current role's name, so a per-user schema shadows shared objects automatically. An unqualified <code>CREATE</code> goes into the <strong>first existing</strong> schema on the path.</p>
-<p><strong><code>search_path</code> is a security boundary, and this is not a small point.</strong> A <code>SECURITY DEFINER</code> function (§20.4) that calls <code>lower(x)</code> unqualified can be made to call an attacker's <code>lower</code> if they can create one in a schema earlier on the path. The mitigations are standard practice: <code>ALTER FUNCTION ... SET search_path = pg_catalog, pg_temp</code> on every <code>SECURITY DEFINER</code> function, and — since PostgreSQL 15 — the changed default where <code>public</code> is no longer writable by everyone.</p>
-<p>Schemas are the right tool for organising an application: one per bounded context, or one per tenant where the tenant count is modest. They are not a substitute for databases at very large numbers — thousands of schemas each with hundreds of tables makes the catalogue itself a bottleneck, and <code>pg_dump</code> slow.</p>
+<p>Read it line by line:</p>
+<ul>
+<li><code>SET search_path = app, public</code> puts <code>app</code> first.</li>
+<li><code>count(*)</code> now finds <code>thing</code>, and its <code>0</code> means the table is empty but found.</li>
+<li>The last <code>SET</code> restores the original path, so later examples are not affected.</li>
+</ul>
+<p><code>"$user"</code> expands to the current role's name, so a per-user schema shadows shared objects automatically. If you connect as <code>alice</code> and a schema called <code>alice</code> exists, it is searched before <code>public</code>. An unqualified <code>CREATE</code> goes into the <strong>first existing</strong> schema on the path.</p>
+<p><strong><code>search_path</code> is a security boundary, and this is not a small point.</strong> Here is why.</p>
+<p>A <code>SECURITY DEFINER</code> function (§20.4) runs with the rights of the role that created it, not the role that calls it. If it uses an unqualified name, that name is looked up on the <em>caller's</em> path, unless the function sets its own. So an attacker who can create objects in a schema earlier on that path can sometimes make your privileged function run their code.</p>
+<p>Take a privileged function that calls <code>lower(x)</code> unqualified. Can an attacker's own <code>lower</code> take its place? Exactly which names they can hijack is subtle:</p>
+<ul>
+<li><code>pg_catalog</code>, which holds the built-in functions, is searched <em>first</em> unless the path names it somewhere else. So a copy of <code>lower(text)</code> in another schema loses to the built-in one.</li>
+<li>But function lookup prefers an exact match on argument types. Measured on PostgreSQL 18, with the path set to <code>evil, public</code>: a function <code>evil.lower(text)</code> was ignored, while <code>evil.lower(varchar)</code> won for <code>lower('ABC'::varchar)</code> and returned the attacker's text, because the built-in needs a conversion from <code>varchar</code> and the attacker's does not.</li>
+<li>Names that are not in <code>pg_catalog</code> at all, such as your own tables and helper functions, are found purely by path order.</li>
+<li>And the temporary schema of §4.1 is searched before everything for tables, so a caller can shadow a table name with a temporary table.</li>
+</ul>
+<p>The mitigations are standard practice: <code>ALTER FUNCTION ... SET search_path = pg_catalog, pg_temp</code> on every <code>SECURITY DEFINER</code> function, and — since PostgreSQL 15 — the changed default where <code>public</code> is no longer writable by everyone. Pinning the path that way puts the built-ins first and the temporary schema last.</p>
+<p>Schemas are the right tool for organising an application: one per bounded context, or one per tenant where the tenant count is modest. A <em>bounded context</em> is one area of the business with its own model, such as billing or shipping. A <em>tenant</em> is one customer organisation in an application shared by many.</p>
+<p>They are not a substitute for databases at very large numbers — thousands of schemas each with hundreds of tables makes the catalogue itself a bottleneck, and <code>pg_dump</code> slow. <code>pg_dump</code> is the standard backup tool (§16), and it has to read every one of those tables' definitions.</p>
 <p>The pieces this subsection introduced, in one line: <strong>schema search path</strong>.</p>
 <h2 id="section-3-415-foreign-tables">4.15 Foreign Tables</h2>
-<p>A <strong>foreign table</strong> looks like a table and reads from somewhere else, through a <strong>foreign data wrapper</strong>. <code>postgres_fdw</code> reaches another PostgreSQL server; <code>file_fdw</code> reads a file; other wrappers reach other databases entirely.</p>
+<p>A <strong>foreign table</strong> looks like a table and reads from somewhere else, through a <strong>foreign data wrapper</strong>. In the archive, it is a box on your shelf whose cards really live in another building: when you ask for a card, someone phones the other building and reads it out to you.</p>
+<p>The wrapper is the piece that knows how to talk to the other place:</p>
+<ul>
+<li><code>postgres_fdw</code> reaches another PostgreSQL server;</li>
+<li><code>file_fdw</code> reads a file;</li>
+<li>other wrappers reach other databases entirely.</li>
+</ul>
+<p><code>postgres_fdw</code> ships with PostgreSQL as an extension. Here it is installed, and the catalogue confirms it:</p>
 <div class="highlight" data-lang="sql"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="n">EXTENSION</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">postgres_fdw</span><span class="p">;</span>
 <span class="k">SELECT</span><span class="w"> </span><span class="n">extname</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">pg_extension</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">extname</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'postgres_fdw'</span><span class="p">;</span>
 </code></pre></div>
@@ -3198,22 +3546,31 @@ SET
 (1 row)
 </code></pre></div>
 
-<p>The pieces are a server (<code>CREATE SERVER</code>), a credential mapping (<code>CREATE USER MAPPING</code>), and then either individual foreign tables or <code>IMPORT FOREIGN SCHEMA</code> to create them all at once.</p>
-<p>The one thing to know before relying on it: <strong>how much of your query gets pushed to the remote side</strong> decides whether it is usable. <code>postgres_fdw</code> pushes <code>WHERE</code> clauses, joins between two foreign tables on the same server, and some aggregates — and everything it cannot push means transferring rows across the network to filter locally. <code>EXPLAIN (VERBOSE)</code> shows the remote SQL, and reading it is the only way to know which you have.</p>
+<p>Read it line by line: <code>CREATE EXTENSION</code> installed it, and <code>pg_extension</code>, the catalogue of installed extensions, now lists <code>postgres_fdw</code>.</p>
+<p>Using it takes three pieces, in this order:</p>
+<ol>
+<li>a server (<code>CREATE SERVER</code>): where the other database is;</li>
+<li>a credential mapping (<code>CREATE USER MAPPING</code>): which user and password to log in with there;</li>
+<li>then either individual foreign tables (<code>CREATE FOREIGN TABLE</code>) or <code>IMPORT FOREIGN SCHEMA</code> to create them all at once.</li>
+</ol>
+<p>The one thing to know before relying on it: <strong>how much of your query gets pushed to the remote side</strong> decides whether it is usable. <em>Pushed down</em> means sent to the other server to run there.</p>
+<p><code>postgres_fdw</code> pushes <code>WHERE</code> clauses, joins between two foreign tables on the same server, and some aggregates — and everything it cannot push means transferring rows across the network to filter locally. Picture asking the other building for the three cards about Brazil. If the request is pushed down, they read you three cards. If it is not, they read you every card in the box, and you pick out the three yourself.</p>
+<p><code>EXPLAIN (VERBOSE)</code> shows the remote SQL, and reading it is the only way to know which you have. <code>EXPLAIN</code> (§13) shows how PostgreSQL will run a query without running it.</p>
 <p>To have in hand before moving on: <strong>foreign data wrapper</strong>.</p>
 <h2 id="section-3-what-this-section-established">What This Section Established</h2>
+<p>The picture: the archive now has a rule book. The archivist checks every card against it before filing: fields that must be filled, values that must pass a test, codes that must be unique, and pointers that must lead to real cards. Changing the shape of a box is sometimes a note in the register and sometimes a reprint of every card, and the difference decides whether the archive stays open.</p>
 <p>Every rule you declare is enforced on every write by every client forever. Put integrity in the database.</p>
-<p>Temporary tables shadow real ones on the <code>search_path</code>; unlogged tables are fast, unreplicated, and emptied by a crash.</p>
+<p>Temporary tables shadow real ones on the <code>search_path</code>; unlogged tables are fast, unreplicated, and emptied by a crash. <code>LIKE ... INCLUDING ALL</code> copies everything but foreign keys.</p>
 <p><strong>Adding a column with a constant default has been instant since PostgreSQL 11</strong>; a volatile default still rewrites.</p>
-<p><strong>Generated columns default to VIRTUAL in PostgreSQL 18</strong> — measured as <code>attgenerated = 'v'</code> — and <strong>virtual columns cannot be indexed</strong>, so a searchable one must say <code>STORED</code>. Before 18 the keyword was mandatory.</p>
-<p>Five constraint kinds, plus exclusion. <strong>A <code>NULL</code> passes every <code>CHECK</code></strong>, so <code>NOT NULL</code> is a separate and usually necessary declaration. Name your constraints.</p>
+<p><strong>Generated columns default to VIRTUAL in PostgreSQL 18</strong> — measured as <code>attgenerated = 'v'</code> — and <strong>virtual columns cannot be indexed</strong>, so a searchable one must say <code>STORED</code>. Before 18 the keyword was mandatory. A virtual column also cannot call a user-defined function.</p>
+<p>Five constraint kinds, plus exclusion. <strong>A <code>NULL</code> passes every <code>CHECK</code></strong>, so <code>NOT NULL</code> is a separate and usually necessary declaration. Name your constraints: a generated name keeps the old column name after a rename.</p>
 <p>Foreign keys: <code>NO ACTION</code> defers to end of statement, <code>RESTRICT</code> does not, <code>CASCADE</code> can delete far more than the statement suggests. <strong>PostgreSQL indexes the referenced side only</strong> — index the referencing side yourself or every parent delete scans the child table.</p>
 <p>Unique constraints treat nulls as distinct unless declared <code>NULLS NOT DISTINCT</code>; a partial unique index is often the better third option.</p>
 <p><code>DEFERRABLE INITIALLY DEFERRED</code> makes circular references insertable, at the cost of errors arriving at <code>COMMIT</code> and memory proportional to rows touched.</p>
 <p>Exclusion constraints say "no two rows overlap", are enforced by an index and therefore hold under concurrency, and need <code>btree_gist</code> when they mix equality with overlap. PostgreSQL 18's <code>WITHOUT OVERLAPS</code> primary keys are built on them.</p>
-<p><strong><code>NOT VALID</code> skips only the existing rows — new rows are still checked</strong> (measured: <code>-5</code> survived, <code>-9</code> was rejected). <code>VALIDATE CONSTRAINT</code> then scans with a weak lock. <strong><code>NOT ENFORCED</code> (PostgreSQL 18) does not check at all</strong> — measured, <code>-1</code> accepted. The two names sound alike and mean opposite things.</p>
+<p><strong><code>NOT VALID</code> skips only the existing rows — new rows are still checked</strong> (measured: <code>-5</code> survived, <code>-9</code> was rejected). <code>VALIDATE CONSTRAINT</code> then scans with a weak lock. <strong><code>NOT ENFORCED</code> (PostgreSQL 18) does not check at all</strong> — measured, <code>-1</code> accepted. The two names sound alike and mean opposite things. A <code>NOT ENFORCED</code> foreign key can be switched on with <code>ALTER CONSTRAINT ... ENFORCED</code>; a <code>CHECK</code> cannot.</p>
 <p><code>ctid</code> is a physical address that changes on update and must never be stored; <code>tableoid</code> says which table or partition a row came from.</p>
-<p><code>ALTER TABLE</code> forms divide into catalogue-only, scan, and full rewrite. <code>ALTER COLUMN TYPE</code> rewrites the table and every index; widening a <code>varchar</code> does not. <code>SET NOT NULL</code> can skip its scan if a validated <code>CHECK (col IS NOT NULL)</code> exists.</p>
+<p><code>ALTER TABLE</code> forms divide into catalogue-only, scan, and full rewrite. <code>ALTER COLUMN TYPE</code> rewrites the table and every index; widening a <code>varchar</code> does not. <code>SET NOT NULL</code> can skip its scan if a validated <code>CHECK (col IS NOT NULL)</code> exists, and on PostgreSQL 18 a not-null constraint can itself be added <code>NOT VALID</code>.</p>
 <p><code>DROP ... CASCADE</code> removes dependents without listing them. Run it without <code>CASCADE</code> first and read the <code>DETAIL</code>.</p>
 <p><code>search_path</code> resolves unqualified names and <strong>is a security boundary</strong> — pin it on every <code>SECURITY DEFINER</code> function.</p>
 <p>Foreign tables are only as good as what gets pushed down; read the remote SQL in <code>EXPLAIN (VERBOSE)</code>.</p>
